@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Alfred Core - AI operating partner and executive command centre."
+    />
+    <title>Alfred Core</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Alfred home">
+          <span class="brand-mark">A</span>
+          <span>
+            <strong>ALFRED</strong>
+            <small>OPERATING SYSTEM</small>
+          </span>
+        </a>
+
+        <nav class="nav" aria-label="Primary navigation">
+          <button class="nav-item active" data-view="command">
+            <span class="nav-icon">⌁</span> Command
+          </button>
+          <button class="nav-item" data-view="companies">
+            <span class="nav-icon">◇</span> Companies
+          </button>
+          <button class="nav-item" data-view="memory">
+            <span class="nav-icon">◎</span> Memory
+          </button>
+          <button class="nav-item" data-view="agents">
+            <span class="nav-icon">△</span> Agents
+          </button>
+          <button class="nav-item" data-view="integrations">
+            <span class="nav-icon">⌘</span> Integrations
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="system-status">
+            <span class="status-dot"></span>
+            <div>
+              <strong>Core online</strong>
+              <small>Local operating mode</small>
+            </div>
+          </div>
+          <div class="chairman-card">
+            <span class="avatar">PK</span>
+            <div>
+              <strong>Patrick King</strong>
+              <small>Founder / Chairman</small>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI OPERATING PARTNER</p>
+            <h1 id="view-title">Executive Command</h1>
+          </div>
+          <div class="top-actions">
+            <div class="date-block">
+              <strong id="current-date"></strong>
+              <small id="current-time"></small>
+            </div>
+            <button class="icon-button" id="reset-data" title="Reset demo data">↻</button>
+            <button class="primary-button" id="brief-button">
+              <span>Generate briefing</span>
+              <kbd>B</kbd>
+            </button>
+          </div>
+        </header>
+
+        <section class="view active" id="command-view">
+          <div class="command-grid">
+            <section class="core-panel panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">ALFRED CORE</p>
+                  <h2>Good <span id="day-period">morning</span>, Patrick.</h2>
+                </div>
+                <span class="live-label"><i></i> LIVE</span>
+              </div>
+
+              <div class="core-stage">
+                <div class="orbit orbit-three"></div>
+                <div class="orbit orbit-two"></div>
+                <div class="orbit orbit-one"></div>
+                <button class="alfred-core" id="core-button" aria-label="Generate morning brief">
+                  <span class="core-glow"></span>
+                  <span class="core-letter">A</span>
+                </button>
+                <span class="orbit-label label-strategy">STRATEGY</span>
+                <span class="orbit-label label-memory">MEMORY</span>
+                <span class="orbit-label label-operations">OPERATIONS</span>
+              </div>
+
+              <div class="core-state">
+                <span class="state-line"></span>
+                <strong id="core-state">READY</strong>
+                <span class="state-line"></span>
+              </div>
+              <p class="core-message" id="core-message">
+                Core systems ready. Generate your executive briefing when you are ready.
+              </p>
+
+              <form class="command-bar" id="command-form">
+                <span class="prompt-mark">›</span>
+                <input
+                  id="command-input"
+                  autocomplete="off"
+                  placeholder='Try “Alfred, brief me” or “show risks”'
+                />
+                <button type="submit">Run</button>
+              </form>
+            </section>
+
+            <section class="attention-panel panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">EXECUTIVE ATTENTION</p>
+                  <h3>Requires your focus</h3>
+                </div>
+                <span class="count-badge" id="attention-count">0</span>
+              </div>
+              <div class="attention-list" id="attention-list"></div>
+              <button class="text-button" data-view-target="companies">Open operating register →</button>
+            </section>
+          </div>
+
+          <section class="metric-grid" id="metric-grid"></section>
+
+          <section class="company-status panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">GROUP OPERATIONS</p>
+                <h3>Company status</h3>
+              </div>
+              <button class="text-button" data-view-target="companies">View all companies →</button>
+            </div>
+            <div class="company-strip" id="company-strip"></div>
+          </section>
+        </section>
+
+        <section class="view" id="companies-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">COMPANY OPERATING LAYER</p>
+              <h2>Group portfolio</h2>
+              <p>Persistent operating context for every business, product, client and opportunity.</p>
+            </div>
+            <button class="secondary-button" id="add-operating-item">+ Add operating item</button>
+          </div>
+          <div class="portfolio-grid" id="portfolio-grid"></div>
+        </section>
+
+        <section class="view" id="memory-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">INTELLIGENCE LAYER</p>
+              <h2>Institutional memory</h2>
+              <p>Decisions, meetings, lessons and ideas retained across the group.</p>
+            </div>
+            <button class="secondary-button" id="add-memory">+ Add memory</button>
+          </div>
+          <div class="memory-toolbar">
+            <input id="memory-search" placeholder='Search memory, e.g. “Westminster”' />
+            <div class="filter-row" id="memory-filters"></div>
+          </div>
+          <div class="memory-list" id="memory-list"></div>
+        </section>
+
+        <section class="view" id="agents-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">AGENT MANAGEMENT LAYER</p>
+              <h2>AI executive team</h2>
+              <p>Role definitions and accountability records. No agent is shown as active without an execution runtime.</p>
+            </div>
+            <button class="secondary-button" id="add-agent">+ Define agent</button>
+          </div>
+          <div class="agent-hierarchy">
+            <div class="hierarchy-node chairman">
+              <span>PK</span>
+              <strong>Patrick King</strong>
+              <small>Founder / Chairman</small>
+            </div>
+            <i></i>
+            <div class="hierarchy-node alfred">
+              <span>A</span>
+              <strong>Alfred</strong>
+              <small>AI Operating Partner</small>
+            </div>
+          </div>
+          <div class="agent-grid" id="agent-grid"></div>
+        </section>
+
+        <section class="view" id="integrations-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">TOOL EXECUTION LAYER</p>
+              <h2>Business systems</h2>
+              <p>Connection architecture for Alfred's execution capabilities.</p>
+            </div>
+          </div>
+          <div class="integration-notice">
+            <strong>Local operating mode</strong>
+            <span>No external credentials are configured. Alfred will not claim to have read or changed external systems.</span>
+          </div>
+          <div class="integration-grid" id="integration-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="brief-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">CEO MORNING BRIEF</p>
+          <h2>Executive briefing</h2>
+          <small id="brief-timestamp"></small>
+        </div>
+        <button class="icon-button close-dialog" aria-label="Close">×</button>
+      </div>
+      <div id="brief-content"></div>
+      <div class="dialog-footer">
+        <button class="secondary-button" id="copy-brief">Copy briefing</button>
+        <button class="primary-button close-dialog">Done</button>
+      </div>
+    </dialog>
+
+    <dialog id="form-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow" id="form-eyebrow">NEW RECORD</p>
+          <h2 id="form-title">Add item</h2>
+        </div>
+        <button class="icon-button close-form" aria-label="Close">×</button>
+      </div>
+      <form id="record-form"></form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
