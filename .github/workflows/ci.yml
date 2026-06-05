@@ -33,5 +33,8 @@ jobs:
       - name: Check database syntax
         run: node --check db.js
 
+      - name: Check Microsoft integration syntax
+        run: node --check microsoft.js
+
       - name: Check frontend syntax
         run: node --check app.js

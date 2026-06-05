@@ -197,9 +197,9 @@ const AGENT_SEEDS = [
 ];
 
 const INTEGRATION_SEEDS = [
-  ["outlook", "Microsoft Outlook", "O", "Email reading, attachment analysis, action extraction and draft replies.", "Not connected"],
-  ["calendar", "Outlook Calendar", "C", "Meeting context, daily schedules, preparation and briefing inputs.", "Not connected"],
-  ["sharepoint", "OneDrive / SharePoint", "S", "Read and create Word, Excel, PDF and PowerPoint documents.", "Planned"],
+  ["outlook", "Microsoft Outlook", "O", "Read and search Outlook email for briefings. Sending and drafting are disabled.", "Not connected"],
+  ["calendar", "Outlook Calendar", "C", "Read upcoming meetings for preparation and briefings. Calendar changes are disabled.", "Not connected"],
+  ["sharepoint", "OneDrive (SharePoint planned)", "S", "List and search the signed-in user's OneDrive files. File changes are disabled; SharePoint-wide search is planned.", "Planned"],
   ["monday", "Monday.com", "M", "Boards, projects, tasks, updates and operating reports.", "Planned"],
   ["krisp", "Krisp", "K", "Meeting summaries, actions, risks and follow-up extraction.", "Planned"],
   ["elevenlabs", "ElevenLabs", "E", "Natural voice output for executive briefings and alerts.", "Planned"],
@@ -253,7 +253,10 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
 
 export function seedDatabase(db) {
   const companyCount = db.prepare("SELECT COUNT(*) AS count FROM companies").get().count;
-  if (companyCount > 0) return;
+  if (companyCount > 0) {
+    updateIntegrationDefinitions(db);
+    return;
+  }
 
   db.exec("BEGIN");
   try {
@@ -311,16 +314,28 @@ export function seedDatabase(db) {
     insertMemory.run("client", "Westminster City Council", "Registered as an active Digitize Consultants client. Delivery context requires connection to live project systems.", "digitize", "2026-06-05");
     insertMemory.run("idea", "Council Construction Assurance Platform", "Initial Product Studio SaaS concept focused on council construction assurance.", "product", "2026-06-05");
 
-    const insertIntegration = db.prepare(`
-      INSERT INTO integrations (id, name, symbol, description, status)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    for (const integration of INTEGRATION_SEEDS) insertIntegration.run(...integration);
+    updateIntegrationDefinitions(db);
 
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
+  }
+}
+
+function updateIntegrationDefinitions(db) {
+  const insertIntegration = db.prepare(`
+    INSERT OR IGNORE INTO integrations (id, name, symbol, description, status)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const updateIntegration = db.prepare(`
+    UPDATE integrations
+    SET name = ?, symbol = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const [id, name, symbol, description, status] of INTEGRATION_SEEDS) {
+    insertIntegration.run(id, name, symbol, description, status);
+    updateIntegration.run(name, symbol, description, id);
   }
 }
 
@@ -455,4 +470,15 @@ export function getMorningBrief(db) {
     agents: agents.map(({ id, name, role, status }) => ({ id, name, role, status })),
     source: "backend",
   };
+}
+
+export function setIntegrationStatus(db, id, status) {
+  if (!["Not connected", "Planned", "Connected"].includes(status)) {
+    throw new Error(`Unsupported integration status: ${status}`);
+  }
+  db.prepare(`
+    UPDATE integrations
+    SET status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(status, id);
 }
