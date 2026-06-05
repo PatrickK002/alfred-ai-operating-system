@@ -190,6 +190,35 @@ const SCHEMA = `
     note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS approval_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_type TEXT NOT NULL,
+    target_system TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    risk_level TEXT NOT NULL DEFAULT 'medium' CHECK(risk_level IN ('low', 'medium', 'high')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired')),
+    requested_by TEXT NOT NULL DEFAULT 'Alfred',
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by TEXT,
+    reviewed_at TEXT,
+    review_note TEXT NOT NULL DEFAULT '',
+    expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS approval_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id INTEGER NOT NULL REFERENCES approval_requests(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK(event_type IN ('requested', 'approved', 'rejected', 'cancelled', 'expired')),
+    actor TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
 const COMPANY_SEEDS = [
@@ -449,6 +478,8 @@ export function getDashboardData(db) {
       date: memory.recordedAt.slice(0, 10),
     })),
     integrations: listResource(db, "integrations"),
+    approvals: listApprovalRequests(db),
+    approvalSummary: getApprovalSummary(db),
   };
 }
 
@@ -588,5 +619,179 @@ export function saveBriefingFeedback(db, briefingId, { rating, note = "" }) {
     briefingId: Number(briefingId),
     rating,
     note: String(note).slice(0, 2000),
+  };
+}
+
+function mapApprovalRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    actionType: row.action_type,
+    targetSystem: row.target_system,
+    title: row.title,
+    description: row.description,
+    payload: JSON.parse(row.payload || "{}"),
+    riskLevel: row.risk_level,
+    status: row.status,
+    requestedBy: row.requested_by,
+    requestedAt: toIsoTimestamp(row.requested_at),
+    reviewedBy: row.reviewed_by,
+    reviewedAt: toIsoTimestamp(row.reviewed_at),
+    reviewNote: row.review_note,
+    expiresAt: toIsoTimestamp(row.expires_at),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+function toIsoTimestamp(value) {
+  if (!value || value.includes("T")) return value;
+  return `${value.replace(" ", "T")}Z`;
+}
+
+function mapApprovalEvent(row) {
+  return {
+    id: row.id,
+    approvalId: row.approval_id,
+    eventType: row.event_type,
+    actor: row.actor,
+    note: row.note,
+    metadata: JSON.parse(row.metadata || "{}"),
+    createdAt: toIsoTimestamp(row.created_at),
+  };
+}
+
+export function createApprovalRequest(db, payload) {
+  const actionType = String(payload.actionType || "").trim();
+  const targetSystem = String(payload.targetSystem || "").trim();
+  const title = String(payload.title || "").trim();
+  const description = String(payload.description || "").trim();
+  const riskLevel = String(payload.riskLevel || "medium").toLowerCase();
+  const requestedBy = String(payload.requestedBy || "Alfred").trim();
+
+  if (!actionType || !targetSystem || !title || !description) {
+    const error = new Error("actionType, targetSystem, title and description are required");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!["low", "medium", "high"].includes(riskLevel)) {
+    const error = new Error("riskLevel must be low, medium or high");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  db.exec("BEGIN");
+  try {
+    const result = db.prepare(`
+      INSERT INTO approval_requests (
+        action_type, target_system, title, description, payload, risk_level,
+        requested_by, expires_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      actionType,
+      targetSystem,
+      title,
+      description,
+      JSON.stringify(payload.payload || {}),
+      riskLevel,
+      requestedBy || "Alfred",
+      payload.expiresAt || null,
+    );
+    const id = Number(result.lastInsertRowid);
+    db.prepare(`
+      INSERT INTO approval_events (approval_id, event_type, actor, note, metadata)
+      VALUES (?, 'requested', ?, ?, ?)
+    `).run(id, requestedBy || "Alfred", "Approval requested; no external action executed.", "{}");
+    db.exec("COMMIT");
+    return getApprovalRequest(db, id);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function listApprovalRequests(db, status = "") {
+  const rows = status
+    ? db.prepare("SELECT * FROM approval_requests WHERE status = ? ORDER BY requested_at DESC, id DESC").all(status)
+    : db.prepare("SELECT * FROM approval_requests ORDER BY requested_at DESC, id DESC").all();
+  return rows.map(mapApprovalRow);
+}
+
+export function getApprovalRequest(db, id) {
+  const request = mapApprovalRow(db.prepare("SELECT * FROM approval_requests WHERE id = ?").get(id));
+  if (!request) return null;
+  return {
+    ...request,
+    events: db
+      .prepare("SELECT * FROM approval_events WHERE approval_id = ? ORDER BY created_at ASC, id ASC")
+      .all(id)
+      .map(mapApprovalEvent),
+    execution: {
+      available: false,
+      message: "Approval records authorization only. External execution is disabled.",
+    },
+  };
+}
+
+export function reviewApprovalRequest(db, id, decision, { actor = "Patrick King", note = "" } = {}) {
+  if (!["approved", "rejected", "cancelled"].includes(decision)) {
+    const error = new Error("Decision must be approved, rejected or cancelled");
+    error.statusCode = 400;
+    throw error;
+  }
+  const current = db.prepare("SELECT * FROM approval_requests WHERE id = ?").get(id);
+  if (!current) {
+    const error = new Error("Approval request not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (current.status !== "pending") {
+    const error = new Error(`Approval request is already ${current.status}`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const reviewer = String(actor || "Patrick King").trim() || "Patrick King";
+  const reviewNote = String(note || "").slice(0, 2000);
+  db.exec("BEGIN");
+  try {
+    db.prepare(`
+      UPDATE approval_requests
+      SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
+          review_note = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(decision, reviewer, reviewNote, id);
+    db.prepare(`
+      INSERT INTO approval_events (approval_id, event_type, actor, note, metadata)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      id,
+      decision,
+      reviewer,
+      reviewNote || `${decision[0].toUpperCase()}${decision.slice(1)} without external execution.`,
+      JSON.stringify({ executionAvailable: false }),
+    );
+    db.exec("COMMIT");
+    return getApprovalRequest(db, id);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function getApprovalSummary(db) {
+  const counts = Object.fromEntries(
+    db.prepare("SELECT status, COUNT(*) AS count FROM approval_requests GROUP BY status")
+      .all()
+      .map((row) => [row.status, row.count]),
+  );
+  return {
+    pending: counts.pending || 0,
+    approved: counts.approved || 0,
+    rejected: counts.rejected || 0,
+    cancelled: counts.cancelled || 0,
+    expired: counts.expired || 0,
+    executionEnabled: false,
   };
 }

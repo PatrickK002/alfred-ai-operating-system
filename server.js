@@ -4,14 +4,19 @@ import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   RESOURCE_CONFIG,
+  createApprovalRequest,
   createDatabase,
   createResource,
   deleteResource,
+  getApprovalRequest,
+  getApprovalSummary,
   getDashboardData,
   getBriefing,
   getMorningBrief,
+  listApprovalRequests,
   listBriefings,
   listResource,
+  reviewApprovalRequest,
   saveBriefing,
   saveBriefingFeedback,
   setIntegrationStatus,
@@ -77,6 +82,36 @@ async function handleApi(request, response, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/briefings") {
     return sendJson(response, 200, listBriefings(db, url.searchParams.get("limit") || 20));
+  }
+  if (url.pathname === "/api/approvals") {
+    if (request.method === "GET") {
+      return sendJson(response, 200, {
+        items: listApprovalRequests(db, url.searchParams.get("status") || ""),
+        summary: getApprovalSummary(db),
+      });
+    }
+    if (request.method === "POST") {
+      return sendJson(response, 201, createApprovalRequest(db, await readJson(request)));
+    }
+  }
+  const approvalMatch = url.pathname.match(/^\/api\/approvals\/(\d+)(?:\/(approve|reject|cancel))?$/);
+  if (approvalMatch) {
+    const approvalId = Number(approvalMatch[1]);
+    const action = approvalMatch[2];
+    if (request.method === "GET" && !action) {
+      const approval = getApprovalRequest(db, approvalId);
+      return approval
+        ? sendJson(response, 200, approval)
+        : sendJson(response, 404, { error: "Approval request not found" });
+    }
+    if (request.method === "POST" && action) {
+      const decisions = { approve: "approved", reject: "rejected", cancel: "cancelled" };
+      return sendJson(
+        response,
+        200,
+        reviewApprovalRequest(db, approvalId, decisions[action], await readJson(request)),
+      );
+    }
   }
   const briefingMatch = url.pathname.match(/^\/api\/briefings\/(\d+)(?:\/feedback)?$/);
   if (briefingMatch) {

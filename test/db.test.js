@@ -4,8 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  createApprovalRequest,
   createDatabase,
   createResource,
+  getApprovalRequest,
+  getApprovalSummary,
   getBriefing,
   getDashboardData,
   getMorningBrief,
@@ -13,6 +16,7 @@ import {
   listBriefings,
   saveBriefing,
   saveBriefingFeedback,
+  reviewApprovalRequest,
   updateResource,
 } from "../db.js";
 
@@ -108,5 +112,54 @@ test("stores briefing history and feedback", () => {
     assert.equal(history.length, 1);
     assert.equal(history[0].feedback.useful, 1);
     assert.equal(briefing.snapshot.summary.priorityEmails, 2);
+  });
+});
+
+test("records explicit approval decisions without enabling execution", () => {
+  withDatabase((db) => {
+    const request = createApprovalRequest(db, {
+      actionType: "send_email",
+      targetSystem: "Microsoft Outlook",
+      title: "Send Westminster follow-up",
+      description: "Send the reviewed project follow-up to the client.",
+      riskLevel: "high",
+      requestedBy: "Alfred",
+      payload: { recipient: "client@example.com" },
+    });
+
+    assert.equal(request.status, "pending");
+    assert.equal(request.events[0].eventType, "requested");
+    assert.equal(request.execution.available, false);
+    assert.match(request.requestedAt, /T.*Z$/);
+
+    const approved = reviewApprovalRequest(db, request.id, "approved", {
+      actor: "Patrick King",
+      note: "Content reviewed.",
+    });
+
+    assert.equal(approved.status, "approved");
+    assert.equal(approved.reviewedBy, "Patrick King");
+    assert.equal(approved.events.length, 2);
+    assert.equal(approved.events[1].eventType, "approved");
+    assert.equal(approved.execution.available, false);
+    assert.equal(getApprovalSummary(db).approved, 1);
+    assert.equal(getApprovalRequest(db, request.id).payload.recipient, "client@example.com");
+  });
+});
+
+test("prevents an approval request from being decided twice", () => {
+  withDatabase((db) => {
+    const request = createApprovalRequest(db, {
+      actionType: "calendar_change",
+      targetSystem: "Outlook Calendar",
+      title: "Move client review",
+      description: "Move the review meeting by 30 minutes.",
+    });
+    reviewApprovalRequest(db, request.id, "rejected", { actor: "Patrick King" });
+
+    assert.throws(
+      () => reviewApprovalRequest(db, request.id, "approved", { actor: "Patrick King" }),
+      (error) => error.statusCode === 409 && /already rejected/.test(error.message),
+    );
   });
 });
