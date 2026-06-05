@@ -983,7 +983,8 @@ h3 {
 }
 
 .approval-review,
-.approval-hold {
+.approval-hold,
+.preflight-result {
   margin-top: 14px;
   padding: 10px 12px;
   border-radius: 8px;
@@ -999,6 +1000,49 @@ h3 {
 .approval-hold {
   color: var(--amber);
   background: var(--amber-soft);
+}
+
+.approval-safeguards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+}
+
+.approval-safeguards span {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 8px;
+}
+
+.approval-safeguards .passed {
+  color: var(--accent);
+  border-color: rgba(98, 234, 213, 0.18);
+  background: var(--accent-soft);
+}
+
+.approval-safeguards .failed {
+  color: var(--amber);
+  border-color: rgba(226, 180, 107, 0.18);
+  background: var(--amber-soft);
+}
+
+.preflight-result {
+  display: grid;
+  gap: 4px;
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.preflight-result strong {
+  text-transform: uppercase;
+}
+
+.preflight-result span {
+  color: #bda77f;
 }
 
 .approval-empty {
