@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Node checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check Node.js version
+        run: node --version
+
+      - name: Run tests
+        run: npm test
+
+      - name: Check server syntax
+        run: node --check server.js
+
+      - name: Check database syntax
+        run: node --check db.js
+
+      - name: Check frontend syntax
+        run: node --check app.js
