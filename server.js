@@ -17,6 +17,7 @@ import {
   listBriefings,
   listResource,
   reviewApprovalRequest,
+  runApprovalPreflight,
   saveBriefing,
   saveBriefingFeedback,
   setIntegrationStatus,
@@ -94,7 +95,7 @@ async function handleApi(request, response, url) {
       return sendJson(response, 201, createApprovalRequest(db, await readJson(request)));
     }
   }
-  const approvalMatch = url.pathname.match(/^\/api\/approvals\/(\d+)(?:\/(approve|reject|cancel))?$/);
+  const approvalMatch = url.pathname.match(/^\/api\/approvals\/(\d+)(?:\/(approve|reject|cancel|preflight))?$/);
   if (approvalMatch) {
     const approvalId = Number(approvalMatch[1]);
     const action = approvalMatch[2];
@@ -105,6 +106,9 @@ async function handleApi(request, response, url) {
         : sendJson(response, 404, { error: "Approval request not found" });
     }
     if (request.method === "POST" && action) {
+      if (action === "preflight") {
+        return sendJson(response, 201, runApprovalPreflight(db, approvalId, await readJson(request)));
+      }
       const decisions = { approve: "approved", reject: "rejected", cancel: "cancelled" };
       return sendJson(
         response,

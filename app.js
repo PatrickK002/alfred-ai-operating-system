@@ -185,6 +185,8 @@ const seedData = {
     rejected: 0,
     cancelled: 0,
     expired: 0,
+    preflightChecks: 0,
+    releaseReady: 0,
     executionEnabled: false,
   },
 };
@@ -201,6 +203,10 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function createIdempotencyKey() {
+  return window.crypto?.randomUUID?.() || `approval-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function loadState() {
@@ -507,7 +513,7 @@ function renderApprovals() {
   $("#approval-metrics").innerHTML = [
     ["PENDING", summary.pending || 0],
     ["APPROVED", summary.approved || 0],
-    ["REJECTED", summary.rejected || 0],
+    ["EXPIRED", summary.expired || 0],
     ["EXECUTION", summary.executionEnabled ? "Enabled" : "Disabled"],
   ].map(([label, value]) => `
     <article>
@@ -531,14 +537,30 @@ function renderApprovals() {
             <div><dt>Action</dt><dd>${escapeHTML(approval.actionType.replaceAll("_", " "))}</dd></div>
             <div><dt>Risk</dt><dd>${escapeHTML(approval.riskLevel)}</dd></div>
             <div><dt>Requested by</dt><dd>${escapeHTML(approval.requestedBy)}</dd></div>
-            <div><dt>Requested</dt><dd>${new Date(approval.requestedAt).toLocaleString("en-GB")}</dd></div>
+            <div><dt>Expires</dt><dd>${approval.expiresAt ? new Date(approval.expiresAt).toLocaleString("en-GB") : "Not set"}</dd></div>
           </dl>
+          <div class="approval-safeguards">
+            <span class="${approval.payloadHash ? "passed" : "failed"}">Action fingerprint</span>
+            <span class="${approval.idempotencyKey ? "passed" : "failed"}">Idempotency key</span>
+            <span class="failed">Re-auth unavailable</span>
+            <span class="failed">Executor unavailable</span>
+          </div>
           ${approval.reviewedBy ? `<div class="approval-review"><strong>${escapeHTML(approval.reviewedBy)}</strong> ${escapeHTML(approval.status)} this request.${approval.reviewNote ? ` ${escapeHTML(approval.reviewNote)}` : ""}</div>` : ""}
           ${approval.status === "approved" ? '<div class="approval-hold">Authorised, but held. No executor is installed.</div>' : ""}
+          ${approval.latestPreflight ? `
+            <div class="preflight-result">
+              <strong>Latest preflight: ${approval.latestPreflight.result.ready ? "ready" : "blocked"}</strong>
+              <span>${escapeHTML(approval.latestPreflight.result.checks.identityReauthentication.message)} ${escapeHTML(approval.latestPreflight.result.checks.executor.message)}</span>
+            </div>
+          ` : ""}
           ${approval.status === "pending" ? `
             <div class="approval-actions">
               <button class="secondary-button approval-decision" data-approval-id="${approval.id}" data-decision="reject">Reject</button>
               <button class="primary-button approval-decision" data-approval-id="${approval.id}" data-decision="approve">Approve</button>
+            </div>
+          ` : approval.status === "approved" ? `
+            <div class="approval-actions">
+              <button class="secondary-button approval-preflight" data-approval-id="${approval.id}">Run execution preflight</button>
             </div>
           ` : ""}
         </article>
@@ -792,6 +814,27 @@ async function reviewApproval(id, decision) {
   }
 }
 
+async function runApprovalPreflight(id) {
+  if (!backendAvailable) {
+    showToast("Execution preflight requires the backend");
+    return;
+  }
+  try {
+    const preflight = await apiRequest(`/api/approvals/${id}/preflight`, {
+      method: "POST",
+      body: JSON.stringify({ actor: "Patrick King" }),
+    });
+    state = await apiRequest("/api/dashboard");
+    persist();
+    renderAll();
+    showToast(preflight.result.ready
+      ? "Execution preflight passed"
+      : "Preflight blocked. Re-authentication and executor are unavailable.");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function openRecordForm(kind) {
   const form = $("#record-form");
   const companies = state.companies
@@ -846,6 +889,10 @@ function openRecordForm(kind) {
       <div class="field"><label for="record-risk">Risk level</label><select id="record-risk" name="riskLevel">
         <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
       </select></div>
+      <div class="field"><label for="record-expiry">Approval validity</label><select id="record-expiry" name="expiryHours">
+        <option value="1">1 hour</option><option value="8">8 hours</option>
+        <option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option>
+      </select></div>
       <div class="form-actions"><button type="button" class="secondary-button close-form">Cancel</button><button class="primary-button" type="submit">Request approval</button></div>
     `;
   } else {
@@ -895,9 +942,16 @@ async function submitRecord(event) {
         });
         showToast("Agent definition saved");
       } else if (form.dataset.kind === "approval") {
+        const expiresAt = new Date(Date.now() + Number(values.expiryHours || 24) * 60 * 60 * 1000).toISOString();
+        delete values.expiryHours;
         await apiRequest("/api/approvals", {
           method: "POST",
-          body: JSON.stringify({ ...values, requestedBy: "Alfred" }),
+          body: JSON.stringify({
+            ...values,
+            requestedBy: "Alfred",
+            expiresAt,
+            idempotencyKey: createIdempotencyKey(),
+          }),
         });
         showToast("Approval request created. Nothing was executed.");
       } else {
@@ -996,6 +1050,8 @@ document.addEventListener("click", (event) => {
   if (event.target.closest(".connect-microsoft")) connectMicrosoft();
   const approvalButton = event.target.closest(".approval-decision");
   if (approvalButton) reviewApproval(approvalButton.dataset.approvalId, approvalButton.dataset.decision);
+  const preflightButton = event.target.closest(".approval-preflight");
+  if (preflightButton) runApprovalPreflight(preflightButton.dataset.approvalId);
   if (event.target.closest(".close-microsoft")) {
     clearTimeout(microsoftPollTimer);
     $("#microsoft-dialog").close();

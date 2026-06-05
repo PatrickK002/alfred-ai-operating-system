@@ -62,6 +62,8 @@ The database is seeded only when the company registry is empty. Seed data includ
 
 Database files are excluded from Git.
 
+Approval records include SHA-256 action fingerprints, retry-safe idempotency keys, expiry timestamps, audit events and persisted execution preflight reports.
+
 ## API
 
 Health and aggregate workflows:
@@ -77,6 +79,7 @@ Health and aggregate workflows:
 | `POST` | `/api/approvals/{id}/approve` | Record explicit approval |
 | `POST` | `/api/approvals/{id}/reject` | Record explicit rejection |
 | `POST` | `/api/approvals/{id}/cancel` | Cancel a pending request |
+| `POST` | `/api/approvals/{id}/preflight` | Record execution-safeguard checks without executing |
 
 Resource collections:
 
@@ -263,7 +266,25 @@ Alfred can now create proposed external actions for Patrick to review. Approval 
 
 Requests move from `pending` to `approved`, `rejected` or `cancelled`. A decided request cannot be reviewed again.
 
-Approval does **not** execute an action. There is deliberately no execution endpoint, Microsoft write method or write permission in this phase. Approved requests remain held until a separately reviewed executor, permission model, idempotency policy and re-authentication control are implemented.
+Approval does **not** execute an action. There is deliberately no execution endpoint, Microsoft write method or write permission in this phase. Approved requests remain held until a separately reviewed executor, permission model and identity re-authentication control are implemented.
+
+### Execution Safeguards
+
+Approval requests now have:
+
+- A caller-supplied or server-generated idempotency key so network retries do not create duplicate requests
+- A SHA-256 fingerprint covering the target, action, description and structured payload
+- A validity window of up to seven days, defaulting to 24 hours
+- Automatic transition to `expired` when the validity window closes
+- Integrity verification before approval
+- A persisted execution preflight report
+
+The preflight checks explicit approval, expiry, payload integrity and idempotency. It also reports two deliberate blockers:
+
+- Identity re-authentication is not implemented
+- No external action executor is installed
+
+Therefore every preflight currently returns `ready: false` and `executionAvailable: false`. This is intentional: the safeguards are observable and testable before any Microsoft write permission is requested.
 
 ## Executive Briefing V2
 

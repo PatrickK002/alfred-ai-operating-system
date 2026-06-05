@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -198,6 +199,8 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}',
+    payload_hash TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL,
     risk_level TEXT NOT NULL DEFAULT 'medium' CHECK(risk_level IN ('low', 'medium', 'high')),
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired')),
     requested_by TEXT NOT NULL DEFAULT 'Alfred',
@@ -217,6 +220,14 @@ const SCHEMA = `
     actor TEXT NOT NULL,
     note TEXT NOT NULL DEFAULT '',
     metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS approval_preflight_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id INTEGER NOT NULL REFERENCES approval_requests(id) ON DELETE CASCADE,
+    checked_by TEXT NOT NULL,
+    result TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `;
@@ -293,8 +304,66 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+  migrateApprovalSchema(db);
   seedDatabase(db);
   return db;
+}
+
+function migrateApprovalSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  const actionFingerprintV2 = db.prepare(`
+    SELECT id FROM schema_migrations WHERE id = 'approval_action_fingerprint_v2'
+  `).get();
+  const columns = new Set(db.prepare("PRAGMA table_info(approval_requests)").all().map((column) => column.name));
+  if (!columns.has("payload_hash")) {
+    db.exec("ALTER TABLE approval_requests ADD COLUMN payload_hash TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columns.has("idempotency_key")) {
+    db.exec("ALTER TABLE approval_requests ADD COLUMN idempotency_key TEXT");
+  }
+
+  const requests = db.prepare(`
+    SELECT id, action_type, target_system, title, description, payload, payload_hash, idempotency_key
+    FROM approval_requests
+  `).all();
+  const update = db.prepare(`
+    UPDATE approval_requests
+    SET payload_hash = ?, idempotency_key = ?
+    WHERE id = ?
+  `);
+  for (const request of requests) {
+    const parsedPayload = JSON.parse(request.payload || "{}");
+    const fingerprint = requestFingerprint({
+      actionType: request.action_type,
+      targetSystem: request.target_system,
+      title: request.title,
+      description: request.description,
+      payload: parsedPayload,
+    });
+    const payloadHash = !actionFingerprintV2 || !request.payload_hash ? fingerprint : request.payload_hash;
+    const idempotencyKey = request.idempotency_key || `legacy-${request.id}-${fingerprint.slice(0, 24)}`;
+    update.run(payloadHash, idempotencyKey, request.id);
+  }
+  if (!actionFingerprintV2) {
+    db.prepare("INSERT INTO schema_migrations (id) VALUES ('approval_action_fingerprint_v2')").run();
+  }
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS approval_requests_idempotency_key
+    ON approval_requests(idempotency_key);
+    CREATE TABLE IF NOT EXISTS approval_preflight_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      approval_id INTEGER NOT NULL REFERENCES approval_requests(id) ON DELETE CASCADE,
+      checked_by TEXT NOT NULL,
+      result TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 export function seedDatabase(db) {
@@ -631,6 +700,8 @@ function mapApprovalRow(row) {
     title: row.title,
     description: row.description,
     payload: JSON.parse(row.payload || "{}"),
+    payloadHash: row.payload_hash,
+    idempotencyKey: row.idempotency_key,
     riskLevel: row.risk_level,
     status: row.status,
     requestedBy: row.requested_by,
@@ -642,6 +713,18 @@ function mapApprovalRow(row) {
     createdAt: toIsoTimestamp(row.created_at),
     updatedAt: toIsoTimestamp(row.updated_at),
   };
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function requestFingerprint(payload) {
+  return createHash("sha256").update(stableJson(payload)).digest("hex");
 }
 
 function toIsoTimestamp(value) {
@@ -661,6 +744,67 @@ function mapApprovalEvent(row) {
   };
 }
 
+function normalizeExpiry(value) {
+  const now = Date.now();
+  const parsed = value ? Date.parse(value) : now + 24 * 60 * 60 * 1000;
+  if (!Number.isFinite(parsed) || parsed <= now) {
+    const error = new Error("expiresAt must be a future date");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (parsed > now + 7 * 24 * 60 * 60 * 1000) {
+    const error = new Error("expiresAt cannot be more than seven days in the future");
+    error.statusCode = 400;
+    throw error;
+  }
+  return new Date(parsed).toISOString();
+}
+
+function verifyApprovalIntegrity(row) {
+  return requestFingerprint({
+    actionType: row.action_type,
+    targetSystem: row.target_system,
+    title: row.title,
+    description: row.description,
+    payload: JSON.parse(row.payload || "{}"),
+  }) === row.payload_hash;
+}
+
+export function expireApprovalRequests(db, now = new Date()) {
+  const expired = db.prepare(`
+    SELECT id
+    FROM approval_requests
+    WHERE status IN ('pending', 'approved')
+      AND expires_at IS NOT NULL
+      AND datetime(expires_at) <= datetime(?)
+  `).all(now.toISOString());
+  if (!expired.length) return 0;
+
+  db.exec("BEGIN");
+  try {
+    const update = db.prepare(`
+      UPDATE approval_requests
+      SET status = 'expired', reviewed_at = COALESCE(reviewed_at, ?),
+          review_note = CASE WHEN review_note = '' THEN 'Approval expired before execution.' ELSE review_note END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status IN ('pending', 'approved')
+    `);
+    const event = db.prepare(`
+      INSERT INTO approval_events (approval_id, event_type, actor, note, metadata)
+      VALUES (?, 'expired', 'Alfred', 'Approval validity window expired. No external action executed.', ?)
+    `);
+    for (const request of expired) {
+      const result = update.run(now.toISOString(), request.id);
+      if (result.changes) event.run(request.id, JSON.stringify({ executionAvailable: false }));
+    }
+    db.exec("COMMIT");
+    return expired.length;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export function createApprovalRequest(db, payload) {
   const actionType = String(payload.actionType || "").trim();
   const targetSystem = String(payload.targetSystem || "").trim();
@@ -668,6 +812,16 @@ export function createApprovalRequest(db, payload) {
   const description = String(payload.description || "").trim();
   const riskLevel = String(payload.riskLevel || "medium").toLowerCase();
   const requestedBy = String(payload.requestedBy || "Alfred").trim();
+  const requestPayload = payload.payload || {};
+  const payloadHash = requestFingerprint({
+    actionType,
+    targetSystem,
+    title,
+    description,
+    payload: requestPayload,
+  });
+  const idempotencyKey = String(payload.idempotencyKey || randomUUID()).trim();
+  const expiresAt = normalizeExpiry(payload.expiresAt);
 
   if (!actionType || !targetSystem || !title || !description) {
     const error = new Error("actionType, targetSystem, title and description are required");
@@ -679,24 +833,42 @@ export function createApprovalRequest(db, payload) {
     error.statusCode = 400;
     throw error;
   }
+  if (!idempotencyKey || idempotencyKey.length > 200) {
+    const error = new Error("idempotencyKey must be between 1 and 200 characters");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existing = db.prepare("SELECT id, payload_hash FROM approval_requests WHERE idempotency_key = ?").get(idempotencyKey);
+  if (existing) {
+    if (existing.payload_hash !== payloadHash) {
+      const error = new Error("Idempotency key is already associated with a different approval request");
+      error.statusCode = 409;
+      throw error;
+    }
+    return getApprovalRequest(db, existing.id);
+  }
 
   db.exec("BEGIN");
   try {
     const result = db.prepare(`
       INSERT INTO approval_requests (
-        action_type, target_system, title, description, payload, risk_level,
+        action_type, target_system, title, description, payload, payload_hash,
+        idempotency_key, risk_level,
         requested_by, expires_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       actionType,
       targetSystem,
       title,
       description,
-      JSON.stringify(payload.payload || {}),
+      JSON.stringify(requestPayload),
+      payloadHash,
+      idempotencyKey,
       riskLevel,
       requestedBy || "Alfred",
-      payload.expiresAt || null,
+      expiresAt,
     );
     const id = Number(result.lastInsertRowid);
     db.prepare(`
@@ -712,13 +884,18 @@ export function createApprovalRequest(db, payload) {
 }
 
 export function listApprovalRequests(db, status = "") {
+  expireApprovalRequests(db);
   const rows = status
     ? db.prepare("SELECT * FROM approval_requests WHERE status = ? ORDER BY requested_at DESC, id DESC").all(status)
     : db.prepare("SELECT * FROM approval_requests ORDER BY requested_at DESC, id DESC").all();
-  return rows.map(mapApprovalRow);
+  return rows.map((row) => ({
+    ...mapApprovalRow(row),
+    latestPreflight: getLatestApprovalPreflight(db, row.id),
+  }));
 }
 
 export function getApprovalRequest(db, id) {
+  expireApprovalRequests(db);
   const request = mapApprovalRow(db.prepare("SELECT * FROM approval_requests WHERE id = ?").get(id));
   if (!request) return null;
   return {
@@ -727,6 +904,14 @@ export function getApprovalRequest(db, id) {
       .prepare("SELECT * FROM approval_events WHERE approval_id = ? ORDER BY created_at ASC, id ASC")
       .all(id)
       .map(mapApprovalEvent),
+    integrityVerified: requestFingerprint({
+      actionType: request.actionType,
+      targetSystem: request.targetSystem,
+      title: request.title,
+      description: request.description,
+      payload: request.payload,
+    }) === request.payloadHash,
+    latestPreflight: getLatestApprovalPreflight(db, id),
     execution: {
       available: false,
       message: "Approval records authorization only. External execution is disabled.",
@@ -740,6 +925,7 @@ export function reviewApprovalRequest(db, id, decision, { actor = "Patrick King"
     error.statusCode = 400;
     throw error;
   }
+  expireApprovalRequests(db);
   const current = db.prepare("SELECT * FROM approval_requests WHERE id = ?").get(id);
   if (!current) {
     const error = new Error("Approval request not found");
@@ -748,6 +934,11 @@ export function reviewApprovalRequest(db, id, decision, { actor = "Patrick King"
   }
   if (current.status !== "pending") {
     const error = new Error(`Approval request is already ${current.status}`);
+    error.statusCode = 409;
+    throw error;
+  }
+  if (!verifyApprovalIntegrity(current)) {
+    const error = new Error("Approval payload integrity check failed");
     error.statusCode = 409;
     throw error;
   }
@@ -781,6 +972,7 @@ export function reviewApprovalRequest(db, id, decision, { actor = "Patrick King"
 }
 
 export function getApprovalSummary(db) {
+  expireApprovalRequests(db);
   const counts = Object.fromEntries(
     db.prepare("SELECT status, COUNT(*) AS count FROM approval_requests GROUP BY status")
       .all()
@@ -792,6 +984,83 @@ export function getApprovalSummary(db) {
     rejected: counts.rejected || 0,
     cancelled: counts.cancelled || 0,
     expired: counts.expired || 0,
+    preflightChecks: db.prepare("SELECT COUNT(*) AS count FROM approval_preflight_checks").get().count,
+    releaseReady: 0,
     executionEnabled: false,
+  };
+}
+
+function getLatestApprovalPreflight(db, id) {
+  const row = db.prepare(`
+    SELECT *
+    FROM approval_preflight_checks
+    WHERE approval_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `).get(id);
+  if (!row) return null;
+  return {
+    id: row.id,
+    approvalId: row.approval_id,
+    checkedBy: row.checked_by,
+    result: JSON.parse(row.result),
+    createdAt: toIsoTimestamp(row.created_at),
+  };
+}
+
+export function runApprovalPreflight(db, id, { actor = "Patrick King" } = {}) {
+  expireApprovalRequests(db);
+  const row = db.prepare("SELECT * FROM approval_requests WHERE id = ?").get(id);
+  if (!row) {
+    const error = new Error("Approval request not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const expiresAt = row.expires_at ? Date.parse(toIsoTimestamp(row.expires_at)) : null;
+  const checks = {
+    approved: {
+      passed: row.status === "approved",
+      message: row.status === "approved" ? "Explicit approval is recorded." : `Request status is ${row.status}.`,
+    },
+    notExpired: {
+      passed: row.status !== "expired" && (!expiresAt || expiresAt > Date.now()),
+      message: row.status === "expired" ? "Approval has expired." : "Approval is within its validity window.",
+    },
+    payloadIntegrity: {
+      passed: verifyApprovalIntegrity(row),
+      message: verifyApprovalIntegrity(row) ? "Stored action matches its SHA-256 fingerprint." : "Stored action has changed.",
+    },
+    idempotency: {
+      passed: Boolean(row.idempotency_key),
+      message: row.idempotency_key ? "A retry-safe idempotency key is present." : "No idempotency key is present.",
+    },
+    identityReauthentication: {
+      passed: false,
+      available: false,
+      message: "Identity re-authentication is not implemented.",
+    },
+    executor: {
+      passed: false,
+      available: false,
+      message: "No external action executor is installed.",
+    },
+  };
+  const result = {
+    ready: Object.values(checks).every((check) => check.passed),
+    checks,
+    executionAvailable: false,
+    checkedAt: new Date().toISOString(),
+  };
+  const checkedBy = String(actor || "Patrick King").trim() || "Patrick King";
+  const insert = db.prepare(`
+    INSERT INTO approval_preflight_checks (approval_id, checked_by, result)
+    VALUES (?, ?, ?)
+  `).run(id, checkedBy, JSON.stringify(result));
+  return {
+    id: Number(insert.lastInsertRowid),
+    approvalId: Number(id),
+    checkedBy,
+    result,
   };
 }

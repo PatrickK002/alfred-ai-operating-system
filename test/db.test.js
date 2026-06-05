@@ -7,6 +7,7 @@ import {
   createApprovalRequest,
   createDatabase,
   createResource,
+  expireApprovalRequests,
   getApprovalRequest,
   getApprovalSummary,
   getBriefing,
@@ -17,6 +18,7 @@ import {
   saveBriefing,
   saveBriefingFeedback,
   reviewApprovalRequest,
+  runApprovalPreflight,
   updateResource,
 } from "../db.js";
 
@@ -161,5 +163,89 @@ test("prevents an approval request from being decided twice", () => {
       () => reviewApprovalRequest(db, request.id, "approved", { actor: "Patrick King" }),
       (error) => error.statusCode === 409 && /already rejected/.test(error.message),
     );
+  });
+});
+
+test("uses idempotency keys to prevent duplicate approval requests", () => {
+  withDatabase((db) => {
+    const payload = {
+      actionType: "send_email",
+      targetSystem: "Microsoft Outlook",
+      title: "Send delivery summary",
+      description: "Send the reviewed delivery summary.",
+      idempotencyKey: "email-delivery-summary-v1",
+    };
+    const first = createApprovalRequest(db, payload);
+    const retry = createApprovalRequest(db, payload);
+
+    assert.equal(retry.id, first.id);
+    assert.equal(getApprovalSummary(db).pending, 1);
+    assert.equal(first.payloadHash.length, 64);
+    assert.throws(
+      () => createApprovalRequest(db, { ...payload, description: "A different action using the same key." }),
+      (error) => error.statusCode === 409 && /different approval request/.test(error.message),
+    );
+  });
+});
+
+test("blocks approval when the stored payload fingerprint no longer matches", () => {
+  withDatabase((db) => {
+    const request = createApprovalRequest(db, {
+      actionType: "send_email",
+      targetSystem: "Microsoft Outlook",
+      title: "Send client note",
+      description: "Send the approved client note.",
+      payload: { recipient: "approved@example.com" },
+    });
+    db.prepare("UPDATE approval_requests SET payload = ? WHERE id = ?")
+      .run(JSON.stringify({ recipient: "changed@example.com" }), request.id);
+
+    assert.throws(
+      () => reviewApprovalRequest(db, request.id, "approved", { actor: "Patrick King" }),
+      (error) => error.statusCode === 409 && /integrity/.test(error.message),
+    );
+  });
+});
+
+test("expires approvals and records that no execution occurred", () => {
+  withDatabase((db) => {
+    const now = Date.now();
+    const request = createApprovalRequest(db, {
+      actionType: "calendar_change",
+      targetSystem: "Outlook Calendar",
+      title: "Move client review",
+      description: "Move the review meeting.",
+      expiresAt: new Date(now + 60 * 60 * 1000).toISOString(),
+    });
+
+    assert.equal(expireApprovalRequests(db, new Date(now + 2 * 60 * 60 * 1000)), 1);
+    const expired = getApprovalRequest(db, request.id);
+    assert.equal(expired.status, "expired");
+    assert.equal(expired.events.at(-1).eventType, "expired");
+    assert.match(expired.events.at(-1).note, /No external action executed/);
+  });
+});
+
+test("records a blocked execution preflight for an approved request", () => {
+  withDatabase((db) => {
+    const request = createApprovalRequest(db, {
+      actionType: "file_change",
+      targetSystem: "OneDrive / SharePoint",
+      title: "Update delivery report",
+      description: "Replace the reviewed delivery report.",
+    });
+    reviewApprovalRequest(db, request.id, "approved", { actor: "Patrick King" });
+
+    const preflight = runApprovalPreflight(db, request.id, { actor: "Patrick King" });
+    const saved = getApprovalRequest(db, request.id);
+
+    assert.equal(preflight.result.checks.approved.passed, true);
+    assert.equal(preflight.result.checks.payloadIntegrity.passed, true);
+    assert.equal(preflight.result.checks.idempotency.passed, true);
+    assert.equal(preflight.result.checks.identityReauthentication.passed, false);
+    assert.equal(preflight.result.checks.executor.passed, false);
+    assert.equal(preflight.result.ready, false);
+    assert.equal(preflight.result.executionAvailable, false);
+    assert.equal(saved.latestPreflight.id, preflight.id);
   });
 });
