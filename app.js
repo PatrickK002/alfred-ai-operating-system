@@ -168,18 +168,20 @@ const seedData = {
     },
   ],
   integrations: [
-    { name: "Microsoft Outlook", symbol: "O", description: "Email reading, attachment analysis, action extraction and draft replies." },
-    { name: "Outlook Calendar", symbol: "C", description: "Meeting context, daily schedules, preparation and briefing inputs." },
-    { name: "OneDrive / SharePoint", symbol: "S", description: "Read and create Word, Excel, PDF and PowerPoint documents." },
-    { name: "Monday.com", symbol: "M", description: "Boards, projects, tasks, updates and operating reports." },
-    { name: "Krisp Transcripts", symbol: "K", description: "Meeting summaries, actions, risks and follow-up extraction." },
-    { name: "Voyage AI", symbol: "V", description: "Semantic long-term memory and retrieval across operating records." },
-    { name: "ElevenLabs", symbol: "E", description: "Natural voice output for executive briefings and alerts." },
-    { name: "Deepgram", symbol: "D", description: "Speech-to-text input for voice commands and conversations." },
+    { id: "outlook", name: "Microsoft Outlook", symbol: "O", description: "Email reading, attachment analysis, action extraction and draft replies.", status: "Not connected" },
+    { id: "calendar", name: "Outlook Calendar", symbol: "C", description: "Meeting context, daily schedules, preparation and briefing inputs.", status: "Not connected" },
+    { id: "sharepoint", name: "OneDrive / SharePoint", symbol: "S", description: "Read and create Word, Excel, PDF and PowerPoint documents.", status: "Planned" },
+    { id: "monday", name: "Monday.com", symbol: "M", description: "Boards, projects, tasks, updates and operating reports.", status: "Planned" },
+    { id: "krisp", name: "Krisp", symbol: "K", description: "Meeting summaries, actions, risks and follow-up extraction.", status: "Planned" },
+    { id: "voyage", name: "Voyage AI", symbol: "V", description: "Semantic long-term memory and retrieval across operating records.", status: "Planned" },
+    { id: "elevenlabs", name: "ElevenLabs", symbol: "E", description: "Natural voice output for executive briefings and alerts.", status: "Planned" },
+    { id: "deepgram", name: "Deepgram", symbol: "D", description: "Speech-to-text input for voice commands and conversations.", status: "Planned" },
+    { id: "anthropic", name: "Anthropic", symbol: "A", description: "Reasoning and language-model execution for Alfred intelligence workflows.", status: "Planned" },
   ],
 };
 
 let state = loadState();
+let backendAvailable = false;
 let memoryFilter = "all";
 let toastTimer;
 
@@ -201,6 +203,39 @@ function loadState() {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...options.headers },
+    ...options,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `API request failed with status ${response.status}`);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+function setBackendStatus(available) {
+  backendAvailable = available;
+  $("#system-status-title").textContent = available ? "Core online" : "Fallback mode";
+  $("#system-status-detail").textContent = available ? "SQLite API connected" : "Using browser storage";
+  document.body.dataset.backend = available ? "connected" : "fallback";
+}
+
+async function loadDashboard() {
+  try {
+    state = await apiRequest("/api/dashboard");
+    persist();
+    setBackendStatus(true);
+  } catch (error) {
+    console.warn("Alfred API unavailable; using local fallback.", error);
+    state = loadState();
+    setBackendStatus(false);
+    showToast("Backend unavailable. Using browser fallback.");
+  }
+  renderAll();
 }
 
 function escapeHTML(value = "") {
@@ -437,8 +472,8 @@ function renderIntegrations() {
           </header>
           <p>${escapeHTML(integration.description)}</p>
           <div class="connection-state">
-            <span>Credential required</span>
-            <strong>NOT CONNECTED</strong>
+            <span>${integration.status === "Connected" ? "Available to Alfred" : integration.status === "Planned" ? "Foundation prepared" : "Credential required"}</span>
+            <strong class="integration-state integration-state-${integration.status.toLowerCase().replaceAll(" ", "-")}">${escapeHTML(integration.status.toUpperCase())}</strong>
           </div>
         </article>
       `,
@@ -468,15 +503,7 @@ function navigate(view) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function buildBrief() {
-  const items = openItems();
-  const groups = {
-    action: items.filter((item) => item.type === "action"),
-    risk: items.filter((item) => item.type === "risk"),
-    opportunity: items.filter((item) => item.type === "opportunity"),
-    decision: items.filter((item) => item.type === "decision"),
-  };
-  const meetingsAvailable = false;
+function buildBrief(brief) {
   const section = (title, records, empty) => `
     <section class="brief-section">
       <h4>${title}</h4>
@@ -488,7 +515,7 @@ function buildBrief() {
     </section>
   `;
 
-  $("#brief-timestamp").textContent = new Date().toLocaleString("en-GB", {
+  $("#brief-timestamp").textContent = new Date(brief.generatedAt).toLocaleString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -497,34 +524,67 @@ function buildBrief() {
   });
   $("#brief-content").innerHTML = `
     <div class="brief-opening">
-      Good ${$("#day-period").textContent}, Patrick. I reviewed the ${items.length} open records currently stored in Alfred Core.
-      I found ${groups.risk.length} known risk${groups.risk.length === 1 ? "" : "s"},
-      ${groups.opportunity.length} opportunit${groups.opportunity.length === 1 ? "y" : "ies"} and
-      ${groups.decision.length} decision${groups.decision.length === 1 ? "" : "s"} requiring your attention.
-      External email, calendar and task systems are not yet connected, so they are not included.
+      Good ${$("#day-period").textContent}, Patrick. I reviewed the ${brief.summary.totalOpen} open records currently stored in Alfred Core.
+      I found ${brief.summary.risks} known risk${brief.summary.risks === 1 ? "" : "s"},
+      ${brief.summary.opportunities} opportunit${brief.summary.opportunities === 1 ? "y" : "ies"} and
+      ${brief.summary.decisions} decision${brief.summary.decisions === 1 ? "" : "s"} requiring your attention.
+      ${brief.summary.agentsPlanned} executive agent definition${brief.summary.agentsPlanned === 1 ? " is" : "s are"} planned; none are presented as executing without a connected runtime.
     </div>
-    ${section("1. PRIORITY ACTIONS", groups.action, "No actions are currently recorded.")}
-    ${section("2. CLIENT RISKS", groups.risk, "No known risks are currently recorded.")}
-    ${section("3. MEETINGS", [], meetingsAvailable ? "" : "Calendar is not connected. No meeting data was reviewed.")}
-    ${section("4. REVENUE OPPORTUNITIES", groups.opportunity, "No opportunities are currently recorded.")}
-    ${section("5. DECISIONS REQUIRED", groups.decision, "No decisions are currently recorded.")}
+    ${section("1. PRIORITY ACTIONS", brief.actions, "No actions are currently recorded.")}
+    ${section("2. CLIENT RISKS", brief.risks, "No known risks are currently recorded.")}
+    ${section("3. MEETINGS", brief.meetings.items, brief.meetings.message)}
+    ${section("4. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
+    ${section("5. DECISIONS REQUIRED", brief.decisions, "No decisions are currently recorded.")}
+    ${section("6. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
-function generateBrief() {
+async function generateBrief() {
   const core = $("#core-button");
   const coreState = $("#core-state");
   const coreMessage = $("#core-message");
   core.classList.add("working");
   coreState.textContent = "REVIEWING";
   coreMessage.textContent = "Reviewing companies, open operating records and stored memory.";
-  setTimeout(() => {
-    buildBrief();
+  try {
+    const brief = backendAvailable
+      ? await apiRequest("/api/morning-brief")
+      : buildFallbackBrief();
+    buildBrief(brief);
     core.classList.remove("working");
     coreState.textContent = "BRIEF READY";
-    coreMessage.textContent = "Briefing compiled from the records currently available to Alfred Core.";
+    coreMessage.textContent = `Briefing compiled from ${backendAvailable ? "the SQLite operating database" : "browser fallback data"}.`;
     $("#brief-dialog").showModal();
-  }, 700);
+  } catch (error) {
+    core.classList.remove("working");
+    coreState.textContent = "ALERT";
+    coreMessage.textContent = error.message;
+    showToast("Briefing could not be generated");
+  }
+}
+
+function buildFallbackBrief() {
+  const items = openItems();
+  const byType = (type) => items.filter((item) => item.type === type);
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalOpen: items.length,
+      actions: byType("action").length,
+      risks: byType("risk").length,
+      opportunities: byType("opportunity").length,
+      decisions: byType("decision").length,
+      agentsPlanned: state.agents.length,
+      agentsConnected: 0,
+    },
+    actions: byType("action"),
+    risks: byType("risk"),
+    meetings: { items: [], message: "Calendar is not connected. No meeting data was reviewed." },
+    opportunities: byType("opportunity"),
+    decisions: byType("decision"),
+    agents: state.agents,
+    source: "localStorage",
+  };
 }
 
 function briefAsText() {
@@ -582,38 +642,55 @@ function openRecordForm(kind) {
   $("#form-dialog").showModal();
 }
 
-function submitRecord(event) {
+async function submitRecord(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form));
 
-  if (form.dataset.kind === "memory") {
-    state.memories.push({
-      id: Date.now(),
-      ...values,
-      date: new Date().toISOString().slice(0, 10),
-    });
-    showToast("Memory stored");
-  } else if (form.dataset.kind === "agent") {
-    state.agents.push({
-      id: `agent-${Date.now()}`,
-      ...values,
-      tools: [],
-      status: "Framework only",
-    });
-    showToast("Agent framework defined");
-  } else {
-    state.operatingItems.push({
-      id: Date.now(),
-      ...values,
-      status: "open",
-    });
-    showToast("Operating record added");
+  try {
+    if (backendAvailable) {
+      if (form.dataset.kind === "memory") {
+        await apiRequest("/api/memories", {
+          method: "POST",
+          body: JSON.stringify({ ...values, companyId: values.companyId === "group" ? null : values.companyId }),
+        });
+        showToast("Memory saved to database");
+      } else if (form.dataset.kind === "agent") {
+        await apiRequest("/api/agents", {
+          method: "POST",
+          body: JSON.stringify({
+            id: `agent-${Date.now()}`,
+            ...values,
+            companyId: values.companyId === "group" ? null : values.companyId,
+            tools: [],
+            status: "Planned",
+          }),
+        });
+        showToast("Agent definition saved");
+      } else {
+        await apiRequest(`/api/${values.type}s`, {
+          method: "POST",
+          body: JSON.stringify({ ...values, status: "open" }),
+        });
+        showToast(`${values.type[0].toUpperCase()}${values.type.slice(1)} saved to database`);
+      }
+      state = await apiRequest("/api/dashboard");
+    } else if (form.dataset.kind === "memory") {
+      state.memories.push({ id: Date.now(), ...values, date: new Date().toISOString().slice(0, 10) });
+      showToast("Memory stored in browser fallback");
+    } else if (form.dataset.kind === "agent") {
+      state.agents.push({ id: `agent-${Date.now()}`, ...values, tools: [], status: "Planned" });
+      showToast("Agent definition stored in browser fallback");
+    } else {
+      state.operatingItems.push({ id: Date.now(), ...values, status: "open" });
+      showToast("Operating record stored in browser fallback");
+    }
+    persist();
+    renderAll();
+    $("#form-dialog").close();
+  } catch (error) {
+    showToast(error.message);
   }
-
-  persist();
-  renderAll();
-  $("#form-dialog").close();
 }
 
 function runCommand(command) {
@@ -676,11 +753,16 @@ document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
 });
 $("#reset-data").addEventListener("click", () => {
-  if (!window.confirm("Reset Alfred Core to its initial company registry and records?")) return;
+  if (backendAvailable) {
+    loadDashboard();
+    showToast("Dashboard refreshed from database");
+    return;
+  }
+  if (!window.confirm("Reset browser fallback data to its initial records?")) return;
   state = clone(seedData);
   persist();
   renderAll();
-  showToast("Core data reset");
+  showToast("Fallback data reset");
 });
 document.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() === "b" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
@@ -694,4 +776,4 @@ document.addEventListener("keydown", (event) => {
 
 updateClock();
 setInterval(updateClock, 30_000);
-renderAll();
+loadDashboard();
