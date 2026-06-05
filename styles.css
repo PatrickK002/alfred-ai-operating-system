@@ -1192,6 +1192,19 @@ h3 {
   font-weight: 500;
 }
 
+.connection-state .integration-state-connected {
+  color: var(--accent);
+}
+
+.connection-state .integration-state-planned {
+  color: var(--blue);
+}
+
+body[data-backend="fallback"] .status-dot {
+  background: var(--amber);
+  box-shadow: 0 0 12px var(--amber);
+}
+
 dialog {
   width: min(740px, calc(100vw - 30px));
   max-height: calc(100vh - 40px);
