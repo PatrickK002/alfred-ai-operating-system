@@ -182,6 +182,24 @@
             <input id="memory-search" placeholder='Search memory, e.g. “Westminster”' />
             <div class="filter-row" id="memory-filters"></div>
           </div>
+          <section class="semantic-memory-panel">
+            <div>
+              <p class="eyebrow">SEMANTIC MEMORY</p>
+              <h3>Search Alfred Memory</h3>
+              <small id="semantic-memory-status">Voyage memory retrieval is planned.</small>
+            </div>
+            <form id="semantic-memory-form">
+              <input id="semantic-memory-query" placeholder='Try “Westminster”, “Council Assurance Platform” or “COBie risk”' />
+              <button class="secondary-button" type="submit">Search Alfred Memory</button>
+            </form>
+            <label class="memory-setting-toggle">
+              <input id="semantic-indexing-toggle" type="checkbox" checked />
+              <span>Semantic indexing enabled</span>
+            </label>
+            <div class="semantic-memory-results" id="semantic-memory-results">
+              <div class="empty-state">Search Alfred's local sensitive business memory. Raw full emails are not indexed.</div>
+            </div>
+          </section>
           <div class="memory-list" id="memory-list"></div>
         </section>
 

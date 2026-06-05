@@ -9,6 +9,7 @@ import {
   createDatabase,
   createResource,
   deleteResource,
+  deleteSemanticMemoryRecord,
   getApprovalRequest,
   getApprovalSummary,
   listAiAnalysisAudit,
@@ -22,6 +23,7 @@ import {
   runApprovalPreflight,
   saveBriefing,
   saveBriefingFeedback,
+  setSemanticIndexingEnabled,
   setIntegrationStatus,
   updateResource,
 } from "./db.js";
@@ -29,6 +31,8 @@ import { buildExecutiveAnalysis } from "./briefing.js";
 import { MICROSOFT_SCOPES, MicrosoftGraphClient } from "./microsoft.js";
 import { AnthropicClient } from "./anthropic.js";
 import { createAiReasoningService } from "./ai.js";
+import { VoyageClient } from "./voyage.js";
+import { createSemanticMemoryService } from "./semantic-memory.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -41,10 +45,16 @@ const HOST = process.env.HOST || "127.0.0.1";
 const db = createDatabase();
 const microsoft = new MicrosoftGraphClient();
 const anthropic = new AnthropicClient();
+const voyage = new VoyageClient();
 const aiReasoning = createAiReasoningService({
   db,
   client: anthropic,
   onConnected: () => setIntegrationStatus(db, "anthropic", "Connected"),
+});
+const semanticMemory = createSemanticMemoryService({
+  db,
+  client: voyage,
+  onConnected: () => setIntegrationStatus(db, "voyage", "Connected"),
 });
 
 const CONTENT_TYPES = {
@@ -92,6 +102,7 @@ async function handleApi(request, response, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
     syncAnthropicStatus();
+    syncVoyageStatus();
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
@@ -106,10 +117,31 @@ async function handleApi(request, response, url) {
   if (url.pathname === "/api/ai/audit" && request.method === "GET") {
     return sendJson(response, 200, listAiAnalysisAudit(db, url.searchParams.get("limit") || 50));
   }
+  if (url.pathname === "/api/memory/status" && request.method === "GET") {
+    return sendJson(response, 200, syncVoyageStatus());
+  }
+  if (url.pathname === "/api/memory/settings") {
+    if (request.method === "GET") return sendJson(response, 200, syncVoyageStatus());
+    if (request.method === "PATCH" || request.method === "POST") {
+      const body = await readJson(request);
+      if (typeof body.semanticIndexingEnabled !== "boolean") {
+        return sendJson(response, 400, { error: "semanticIndexingEnabled must be true or false" });
+      }
+      setSemanticIndexingEnabled(db, body.semanticIndexingEnabled);
+      return sendJson(response, 200, syncVoyageStatus());
+    }
+  }
+  if (url.pathname === "/api/memory/search" && request.method === "GET") {
+    const result = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    });
+    return sendJson(response, 200, result);
+  }
   if (url.pathname === "/api/ai/briefing" && request.method === "POST") {
     const body = await readJson(request);
     const briefing = body.briefing || await generateExecutiveBrief({ save: false });
-    const context = buildAiBriefingContext(briefing, body);
+    const baseContext = buildAiBriefingContext(briefing, body);
+    const context = await withRetrievedMemoryContext(baseContext, memoryQueryForBriefing(baseContext));
     const result = await aiReasoning.analyzeBriefing(context, {
       userAction: body.userAction || "briefing-screen:ask-alfred",
       dataCategories: [
@@ -121,16 +153,23 @@ async function handleApi(request, response, url) {
         "opportunities",
         "approval_queue",
         "briefing_history",
+        context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
     });
-    return sendJson(response, 200, result);
+    return sendJson(response, 200, {
+      ...result,
+      relatedMemory: context.retrievedMemoryContext.records,
+      memoryContext: memoryContextSummary(context.retrievedMemoryContext),
+    });
   }
   if (url.pathname === "/api/ai/decision-support" && request.method === "POST") {
     const body = await readJson(request);
     if (!body.decisionTitle || !body.context) {
       return sendJson(response, 400, { error: "decisionTitle and context are required" });
     }
-    const result = await aiReasoning.analyzeDecision(buildDecisionSupportContext(body), {
+    const baseContext = buildDecisionSupportContext(body);
+    const context = await withRetrievedMemoryContext(baseContext, memoryQueryForDecision(baseContext));
+    const result = await aiReasoning.analyzeDecision(context, {
       userAction: body.userAction || "decision-support:ask-alfred",
       dataCategories: compactCategories([
         body.category || "decision_support",
@@ -139,9 +178,14 @@ async function handleApi(request, response, url) {
         body.risks?.length ? "risks" : "",
         body.relatedItems?.length ? "operating_records" : "",
         body.approvals?.length ? "approval_queue" : "",
+        context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ]),
     });
-    return sendJson(response, 200, result);
+    return sendJson(response, 200, {
+      ...result,
+      relatedMemory: context.retrievedMemoryContext.records,
+      memoryContext: memoryContextSummary(context.retrievedMemoryContext),
+    });
   }
   if (url.pathname === "/api/approvals") {
     if (request.method === "GET") {
@@ -151,7 +195,9 @@ async function handleApi(request, response, url) {
       });
     }
     if (request.method === "POST") {
-      return sendJson(response, 201, createApprovalRequest(db, await readJson(request)));
+      const approval = createApprovalRequest(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, approval);
     }
   }
   const approvalMatch = url.pathname.match(/^\/api\/approvals\/(\d+)(?:\/(approve|reject|cancel|preflight))?$/);
@@ -166,14 +212,14 @@ async function handleApi(request, response, url) {
     }
     if (request.method === "POST" && action) {
       if (action === "preflight") {
-        return sendJson(response, 201, runApprovalPreflight(db, approvalId, await readJson(request)));
+        const preflight = runApprovalPreflight(db, approvalId, await readJson(request));
+        await tryIndexSemanticMemory();
+        return sendJson(response, 201, preflight);
       }
       const decisions = { approve: "approved", reject: "rejected", cancel: "cancelled" };
-      return sendJson(
-        response,
-        200,
-        reviewApprovalRequest(db, approvalId, decisions[action], await readJson(request)),
-      );
+      const approval = reviewApprovalRequest(db, approvalId, decisions[action], await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, approval);
     }
   }
   const briefingMatch = url.pathname.match(/^\/api\/briefings\/(\d+)(?:\/feedback)?$/);
@@ -254,14 +300,17 @@ async function handleApi(request, response, url) {
   }
   if (request.method === "POST" && !id) {
     const record = createResource(db, resource, await readJson(request));
+    await tryIndexSemanticMemory();
     return sendJson(response, 201, record);
   }
   if ((request.method === "PATCH" || request.method === "PUT") && id) {
     const record = updateResource(db, resource, decodeURIComponent(id), await readJson(request));
+    await tryIndexSemanticMemory();
     return sendJson(response, 200, record);
   }
   if (request.method === "DELETE" && id) {
     deleteResource(db, resource, decodeURIComponent(id));
+    deleteSemanticMemoryRecord(db, semanticSourceTypeForResource(resource), decodeURIComponent(id));
     response.writeHead(204);
     return response.end();
   }
@@ -325,11 +374,22 @@ async function generateExecutiveBrief({ save = true } = {}) {
 
   if (!save) return brief;
   const saved = saveBriefing(db, brief);
+  await tryIndexSemanticMemory();
   return { ...brief, briefingId: saved.id };
 }
 
 function compactCategories(categories) {
   return [...new Set(categories.map(String).filter(Boolean))];
+}
+
+function semanticSourceTypeForResource(resource) {
+  return {
+    actions: "action",
+    risks: "risk",
+    opportunities: "opportunity",
+    decisions: "decision",
+    memories: "memory",
+  }[resource] || resource;
 }
 
 function compactRecords(records = [], fields = ["id", "title", "detail", "priority", "status", "due"], limit = 12) {
@@ -368,6 +428,73 @@ function sourceReferencesFor(context) {
     ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
     ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
   ];
+}
+
+function memoryContextSummary(memoryContext) {
+  return {
+    semantic: memoryContext.semantic,
+    indexingEnabled: memoryContext.indexingEnabled,
+    voyageConfigured: memoryContext.voyageConfigured,
+    model: memoryContext.model,
+    maxRecords: memoryContext.maxRecords,
+    maxTokens: memoryContext.maxTokens,
+    tokenEstimate: memoryContext.tokenEstimate,
+    resultCount: memoryContext.records.length,
+    errorCode: memoryContext.errorCode,
+  };
+}
+
+function memoryRecordForClaude(record) {
+  return {
+    sourceReference: record.sourceReference,
+    sourceType: record.sourceType,
+    sourceId: record.sourceId,
+    relevanceScore: record.relevanceScore,
+    timestamp: record.timestamp,
+    sensitivityLabel: record.sensitivityLabel,
+    summary: compactValue(record.shortSummary),
+  };
+}
+
+async function withRetrievedMemoryContext(context, query) {
+  const memoryContext = await semanticMemory.retrieveContext(query, {
+    maxRecords: 6,
+    maxTokens: 1200,
+  });
+  const retrievedMemoryContext = {
+    ...memoryContext,
+    records: memoryContext.records.map(memoryRecordForClaude),
+  };
+  return {
+    ...context,
+    retrievedMemoryContext,
+    sourceRecordReferences: [
+      ...(context.sourceRecordReferences || []),
+      ...memoryContext.sourceRecordReferences,
+    ].slice(0, 50),
+  };
+}
+
+function memoryQueryForBriefing(context) {
+  return [
+    "executive briefing",
+    ...(context.currentExecutiveBriefing.executivePriorities || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.risks || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.decisions || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.opportunities || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
+    ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
+  ].join(" ").slice(0, 2000);
+}
+
+function memoryQueryForDecision(context) {
+  return [
+    context.decisionTitle,
+    context.context,
+    ...(context.relatedItems || []).map((item) => `${item.type || ""} ${item.title || ""} ${item.detail || ""}`),
+    ...(context.risks || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.approvals || []).map((item) => `${item.title || ""} ${item.targetSystem || ""}`),
+  ].join(" ").slice(0, 2000);
 }
 
 function buildAiBriefingContext(briefing, body = {}) {
@@ -473,6 +600,31 @@ function syncAnthropicStatus() {
     ...status,
     status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
   };
+}
+
+function syncVoyageStatus() {
+  const status = semanticMemory.status();
+  const current = listResource(db, "integrations").find((integration) => integration.id === "voyage");
+  if (!status.configured) {
+    setIntegrationStatus(db, "voyage", "Not connected");
+  } else if (current?.status !== "Connected") {
+    setIntegrationStatus(db, "voyage", "Planned");
+  }
+  return {
+    ...status,
+    status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
+  };
+}
+
+async function tryIndexSemanticMemory() {
+  const result = await semanticMemory.indexSourceRecords().catch((error) => ({
+    errorCode: error.code || "SEMANTIC_INDEXING_FAILED",
+    message: error.message,
+  }));
+  if (result.errorCode) {
+    console.warn(`Semantic indexing skipped: ${result.errorCode}`);
+  }
+  return result;
 }
 
 function serveStatic(response, pathname) {

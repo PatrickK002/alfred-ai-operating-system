@@ -42,6 +42,12 @@ jobs:
       - name: Check AI service syntax
         run: node --check ai.js
 
+      - name: Check Voyage memory syntax
+        run: node --check voyage.js
+
+      - name: Check semantic memory syntax
+        run: node --check semantic-memory.js
+
       - name: Check briefing intelligence syntax
         run: node --check briefing.js
 

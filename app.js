@@ -197,6 +197,7 @@ let microsoftPollTimer;
 let currentBriefingId = null;
 let currentBrief = null;
 let memoryFilter = "all";
+let semanticMemoryStatus = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -247,11 +248,13 @@ async function loadDashboard() {
     state = await apiRequest("/api/dashboard");
     const microsoftStatus = await apiRequest("/api/microsoft/status");
     if (microsoftStatus.connected) state = await apiRequest("/api/dashboard");
+    semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => null);
     persist();
     setBackendStatus(true);
   } catch (error) {
     console.warn("Alfred API unavailable; using local fallback.", error);
     state = loadState();
+    semanticMemoryStatus = null;
     setBackendStatus(false);
     showToast("Backend unavailable. Using browser fallback.");
   }
@@ -452,6 +455,62 @@ function renderMemory() {
         )
         .join("")
     : '<div class="empty-state">No matching memory records.</div>';
+  renderSemanticMemoryStatus();
+}
+
+function renderSemanticMemoryStatus() {
+  const status = semanticMemoryStatus;
+  const statusText = !backendAvailable
+    ? "Semantic search requires the backend."
+    : !status
+      ? "Voyage memory status is unavailable."
+      : status.indexingEnabled === false
+        ? "Semantic indexing is disabled. Local keyword fallback remains available."
+        : status.configured
+          ? `${status.status}. Model: ${status.model}. ${status.stats?.count || 0} records indexed.`
+          : "Voyage is not configured. Local keyword fallback remains available.";
+  $("#semantic-memory-status").textContent = statusText;
+  $("#semantic-indexing-toggle").checked = status?.indexingEnabled !== false;
+  $("#semantic-indexing-toggle").disabled = !backendAvailable;
+}
+
+function renderSemanticMemoryResults(result) {
+  const qualifier = result.semantic
+    ? `Semantic search via ${escapeHTML(result.model)}`
+    : escapeHTML(result.message || "Keyword fallback results");
+  $("#semantic-memory-results").innerHTML = `
+    <div class="semantic-search-meta">
+      <strong>${qualifier}</strong>
+      <span>${result.results.length} result(s) · Local sensitive business data</span>
+    </div>
+    ${
+      result.results.length
+        ? result.results.map((record) => `
+            <article class="semantic-memory-result">
+              <header>
+                <span class="record-type">${escapeHTML(record.sourceType)}</span>
+                <strong>${escapeHTML(record.sourceReference)}</strong>
+                <small>${Math.round(record.relevanceScore * 100)}% relevant</small>
+              </header>
+              <p>${escapeHTML(record.shortSummary)}</p>
+              <footer>
+                <span>${escapeHTML(record.sensitivityLabel)}</span>
+                <time>${new Date(record.timestamp).toLocaleString("en-GB")}</time>
+              </footer>
+            </article>
+          `).join("")
+        : '<div class="empty-state">No matching semantic memory records yet.</div>'
+    }
+  `;
+}
+
+function renderRelatedMemory(records = []) {
+  if (!records.length) return "";
+  return renderList("Related memory context", records, (record) => `
+    <strong>${escapeHTML(record.sourceReference)}</strong>
+    <span>${escapeHTML(record.summary || record.shortSummary || "")}</span>
+    <small>${escapeHTML(record.sensitivityLabel || "local_sensitive_business_data")} · ${Math.round((record.relevanceScore || 0) * 100)}% relevant</small>
+  `);
 }
 
 function renderAgents() {
@@ -814,7 +873,7 @@ function sourceRefs(refs = []) {
   return values.length ? `<em>Sources: ${escapeHTML(values.join(", "))}</em>` : "";
 }
 
-function renderAiBriefing(analysis) {
+function renderAiBriefing(analysis, relatedMemory = []) {
   return `
     <div class="ai-boundary">Claude analysed the supplied data only. No emails, files, calendar events, approvals, or records were changed.</div>
     <section class="ai-summary">
@@ -842,11 +901,12 @@ function renderAiBriefing(analysis) {
       <span>${escapeHTML(item.owner)} · ${escapeHTML(item.timing)}</span>
       <small>${item.requiresApproval ? "Requires approval" : "Recommendation only"} ${sourceRefs(item.sourceReferences || item.sourceReference)}</small>
     `)}
+    ${renderRelatedMemory(relatedMemory)}
     ${renderList("Assumptions", analysis.assumptions, escapeHTML)}
   `;
 }
 
-function renderAiDecision(analysis) {
+function renderAiDecision(analysis, relatedMemory = []) {
   return `
     <div class="ai-boundary">Claude provided recommendation only. No approval was granted and no action was executed.</div>
     <section class="ai-summary">
@@ -858,6 +918,7 @@ function renderAiDecision(analysis) {
     ${renderList("Cons", analysis.cons, escapeHTML)}
     ${renderList("Risks", analysis.risks, escapeHTML)}
     ${renderList("Next action", [analysis.nextAction], escapeHTML)}
+    ${renderRelatedMemory(relatedMemory)}
     ${renderList("Assumptions", analysis.assumptions, escapeHTML)}
   `;
 }
@@ -895,7 +956,7 @@ async function askAiBriefing() {
     showAiAnalysis({
       title: "Executive analysis",
       meta: `${result.model} · audit #${result.auditId} · read-only`,
-      html: renderAiBriefing(result.analysis),
+      html: renderAiBriefing(result.analysis, result.relatedMemory || []),
     });
     showToast("Claude analysis returned");
   } catch (error) {
@@ -932,7 +993,7 @@ async function askAiForOperatingItem(type, id) {
     showAiAnalysis({
       title: `${type === "risk" ? "Risk" : "Decision"} analysis`,
       meta: `${result.model} · audit #${result.auditId} · read-only`,
-      html: renderAiDecision(result.analysis),
+      html: renderAiDecision(result.analysis, result.relatedMemory || []),
     });
   } catch (error) {
     showAiAnalysis({
@@ -968,7 +1029,7 @@ async function askAiForApproval(id) {
     showAiAnalysis({
       title: "Approval analysis",
       meta: `${result.model} · audit #${result.auditId} · read-only`,
-      html: renderAiDecision(result.analysis),
+      html: renderAiDecision(result.analysis, result.relatedMemory || []),
     });
   } catch (error) {
     showAiAnalysis({
@@ -976,6 +1037,47 @@ async function askAiForApproval(id) {
       meta: "No action was executed.",
       html: `<div class="empty-state">${escapeHTML(error.message)}</div>`,
     });
+  }
+}
+
+async function searchSemanticMemory(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Semantic memory search requires the backend");
+    return;
+  }
+  const query = $("#semantic-memory-query").value.trim();
+  if (!query) {
+    showToast("Enter a memory search topic");
+    return;
+  }
+  $("#semantic-memory-results").innerHTML = '<div class="ai-loading">Searching Alfred memory…</div>';
+  try {
+    const result = await apiRequest(`/api/memory/search?q=${encodeURIComponent(query)}&limit=8`);
+    semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => semanticMemoryStatus);
+    renderSemanticMemoryStatus();
+    renderSemanticMemoryResults(result);
+  } catch (error) {
+    $("#semantic-memory-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
+async function toggleSemanticIndexing(event) {
+  if (!backendAvailable) {
+    event.preventDefault();
+    showToast("Semantic indexing settings require the backend");
+    return;
+  }
+  try {
+    semanticMemoryStatus = await apiRequest("/api/memory/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ semanticIndexingEnabled: event.target.checked }),
+    });
+    renderSemanticMemoryStatus();
+    showToast(event.target.checked ? "Semantic indexing enabled" : "Semantic indexing disabled");
+  } catch (error) {
+    event.target.checked = semanticMemoryStatus?.indexingEnabled !== false;
+    showToast(error.message);
   }
 }
 
@@ -1220,6 +1322,8 @@ $("#memory-filters").addEventListener("click", (event) => {
   memoryFilter = button.dataset.memoryFilter;
   renderMemory();
 });
+$("#semantic-memory-form").addEventListener("submit", searchSemanticMemory);
+$("#semantic-indexing-toggle").addEventListener("change", toggleSemanticIndexing);
 $("#command-form").addEventListener("submit", (event) => {
   event.preventDefault();
   runCommand($("#command-input").value);
