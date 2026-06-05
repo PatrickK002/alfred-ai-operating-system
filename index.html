@@ -250,6 +250,25 @@
       <form id="record-form"></form>
     </dialog>
 
+    <dialog id="microsoft-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">READ-ONLY MICROSOFT 365</p>
+          <h2>Connect Microsoft</h2>
+          <small>Alfred will request read access only. No send, edit or calendar-write permissions are requested.</small>
+        </div>
+        <button class="icon-button close-microsoft" aria-label="Close">×</button>
+      </div>
+      <div class="microsoft-connect">
+        <p id="microsoft-message">Starting secure device authorization…</p>
+        <strong class="device-code" id="microsoft-code">—</strong>
+        <a class="primary-button microsoft-link" id="microsoft-link" href="https://microsoft.com/devicelogin" target="_blank" rel="noreferrer">
+          Open Microsoft sign-in
+        </a>
+        <p class="connection-help" id="microsoft-progress">Waiting to start.</p>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" role="status"></div>
     <script src="app.js"></script>
   </body>

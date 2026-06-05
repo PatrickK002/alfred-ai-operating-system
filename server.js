@@ -10,12 +10,16 @@ import {
   getDashboardData,
   getMorningBrief,
   listResource,
+  setIntegrationStatus,
   updateResource,
 } from "./db.js";
+import { MICROSOFT_SCOPES, MicrosoftGraphClient } from "./microsoft.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
+const HOST = process.env.HOST || "127.0.0.1";
 const db = createDatabase();
+const microsoft = new MicrosoftGraphClient();
 
 const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -64,7 +68,84 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
-    return sendJson(response, 200, getMorningBrief(db));
+    const brief = getMorningBrief(db);
+    const microsoftStatus = await microsoft.status();
+    brief.microsoft = microsoftStatus;
+    if (microsoftStatus.connected) {
+      const [messages, meetings] = await Promise.all([
+        microsoft.listMessages({ limit: 10 }),
+        microsoft.listCalendar({ limit: 15 }),
+      ]);
+      brief.emails = messages.map((message) => ({
+        id: message.id,
+        title: message.subject || "(No subject)",
+        detail: `${message.from?.emailAddress?.name || message.from?.emailAddress?.address || "Unknown sender"} — ${message.bodyPreview || ""}`,
+        receivedDateTime: message.receivedDateTime,
+        isRead: message.isRead,
+        importance: message.importance,
+        webLink: message.webLink,
+      }));
+      brief.meetings = {
+        available: true,
+        items: meetings.map((meeting) => ({
+          id: meeting.id,
+          title: meeting.subject || "(No subject)",
+          detail: `${meeting.start?.dateTime || ""}${meeting.location?.displayName ? ` — ${meeting.location.displayName}` : ""}`,
+          start: meeting.start,
+          end: meeting.end,
+          webLink: meeting.webLink,
+        })),
+        message: meetings.length ? "" : "No meetings are scheduled in the next seven days.",
+      };
+    } else {
+      brief.emails = [];
+    }
+    return sendJson(response, 200, brief);
+  }
+
+  if (url.pathname === "/api/microsoft/status" && request.method === "GET") {
+    return sendJson(response, 200, {
+      ...(await syncMicrosoftStatus()),
+      scopes: MICROSOFT_SCOPES,
+      readOnly: true,
+    });
+  }
+  if (url.pathname === "/api/microsoft/connect" && request.method === "POST") {
+    return sendJson(response, 200, await microsoft.startDeviceFlow());
+  }
+  if (url.pathname === "/api/microsoft/connect/complete" && request.method === "POST") {
+    try {
+      await microsoft.completeDeviceFlow();
+      return sendJson(response, 200, await syncMicrosoftStatus());
+    } catch (error) {
+      if (error.statusCode === 202) {
+        return sendJson(response, 202, {
+          pending: true,
+          retryAfter: error.retryAfter,
+          message: "Waiting for Microsoft authorization",
+        });
+      }
+      throw error;
+    }
+  }
+  if (url.pathname === "/api/microsoft/messages" && request.method === "GET") {
+    return sendJson(response, 200, await microsoft.listMessages({
+      search: url.searchParams.get("search") || "",
+      limit: url.searchParams.get("limit") || 15,
+    }));
+  }
+  if (url.pathname === "/api/microsoft/calendar" && request.method === "GET") {
+    return sendJson(response, 200, await microsoft.listCalendar({
+      start: url.searchParams.get("start") || undefined,
+      end: url.searchParams.get("end") || undefined,
+      limit: url.searchParams.get("limit") || 25,
+    }));
+  }
+  if (url.pathname === "/api/microsoft/files" && request.method === "GET") {
+    return sendJson(response, 200, await microsoft.listFiles({
+      search: url.searchParams.get("search") || "",
+      limit: url.searchParams.get("limit") || 20,
+    }));
   }
 
   const match = url.pathname.match(/^\/api\/([a-z-]+)(?:\/([^/]+))?$/);
@@ -102,6 +183,42 @@ async function handleApi(request, response, url) {
   return sendJson(response, 405, { error: "Method not allowed" });
 }
 
+async function syncMicrosoftStatus() {
+  const status = await microsoft.status();
+  if (!status.connected) {
+    setIntegrationStatus(db, "outlook", "Not connected");
+    setIntegrationStatus(db, "calendar", "Not connected");
+    if (status.configured) setIntegrationStatus(db, "sharepoint", "Planned");
+    return status;
+  }
+
+  const services = {
+    profile: { connected: true },
+    mail: { connected: false },
+    calendar: { connected: false },
+    files: { connected: false },
+  };
+  const checks = await Promise.allSettled([
+    microsoft.listMessages({ limit: 1 }),
+    microsoft.listCalendar({ limit: 1 }),
+    microsoft.listFiles({ limit: 1 }),
+  ]);
+  services.mail = checks[0].status === "fulfilled"
+    ? { connected: true }
+    : { connected: false, error: checks[0].reason.message };
+  services.calendar = checks[1].status === "fulfilled"
+    ? { connected: true }
+    : { connected: false, error: checks[1].reason.message };
+  services.files = checks[2].status === "fulfilled"
+    ? { connected: true }
+    : { connected: false, error: checks[2].reason.message };
+
+  setIntegrationStatus(db, "outlook", services.mail.connected ? "Connected" : "Not connected");
+  setIntegrationStatus(db, "calendar", services.calendar.connected ? "Connected" : "Not connected");
+  setIntegrationStatus(db, "sharepoint", services.files.connected ? "Connected" : "Planned");
+  return { ...status, services };
+}
+
 function serveStatic(response, pathname) {
   const relativePath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const filePath = resolve(ROOT_DIR, relativePath);
@@ -136,8 +253,8 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Alfred Core running at http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Alfred Core running at http://${HOST}:${PORT}`);
   console.log(`SQLite database: ${process.env.ALFRED_DB_PATH || resolve(ROOT_DIR, "data", "alfred.db")}`);
 });
 

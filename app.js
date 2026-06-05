@@ -168,9 +168,9 @@ const seedData = {
     },
   ],
   integrations: [
-    { id: "outlook", name: "Microsoft Outlook", symbol: "O", description: "Email reading, attachment analysis, action extraction and draft replies.", status: "Not connected" },
-    { id: "calendar", name: "Outlook Calendar", symbol: "C", description: "Meeting context, daily schedules, preparation and briefing inputs.", status: "Not connected" },
-    { id: "sharepoint", name: "OneDrive / SharePoint", symbol: "S", description: "Read and create Word, Excel, PDF and PowerPoint documents.", status: "Planned" },
+    { id: "outlook", name: "Microsoft Outlook", symbol: "O", description: "Read and search Outlook email for briefings. Sending and drafting are disabled.", status: "Not connected" },
+    { id: "calendar", name: "Outlook Calendar", symbol: "C", description: "Read upcoming meetings for preparation and briefings. Calendar changes are disabled.", status: "Not connected" },
+    { id: "sharepoint", name: "OneDrive (SharePoint planned)", symbol: "S", description: "List and search the signed-in user's OneDrive files. File changes are disabled; SharePoint-wide search is planned.", status: "Planned" },
     { id: "monday", name: "Monday.com", symbol: "M", description: "Boards, projects, tasks, updates and operating reports.", status: "Planned" },
     { id: "krisp", name: "Krisp", symbol: "K", description: "Meeting summaries, actions, risks and follow-up extraction.", status: "Planned" },
     { id: "voyage", name: "Voyage AI", symbol: "V", description: "Semantic long-term memory and retrieval across operating records.", status: "Planned" },
@@ -182,6 +182,7 @@ const seedData = {
 
 let state = loadState();
 let backendAvailable = false;
+let microsoftPollTimer;
 let memoryFilter = "all";
 let toastTimer;
 
@@ -227,6 +228,8 @@ function setBackendStatus(available) {
 async function loadDashboard() {
   try {
     state = await apiRequest("/api/dashboard");
+    const microsoftStatus = await apiRequest("/api/microsoft/status");
+    if (microsoftStatus.connected) state = await apiRequest("/api/dashboard");
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -475,6 +478,11 @@ function renderIntegrations() {
             <span>${integration.status === "Connected" ? "Available to Alfred" : integration.status === "Planned" ? "Foundation prepared" : "Credential required"}</span>
             <strong class="integration-state integration-state-${integration.status.toLowerCase().replaceAll(" ", "-")}">${escapeHTML(integration.status.toUpperCase())}</strong>
           </div>
+          ${
+            integration.id === "outlook"
+              ? `<button class="secondary-button connect-microsoft">${integration.status === "Connected" ? "Verify Microsoft connection" : "Connect Microsoft 365"}</button>`
+              : ""
+          }
         </article>
       `,
     )
@@ -532,10 +540,11 @@ function buildBrief(brief) {
     </div>
     ${section("1. PRIORITY ACTIONS", brief.actions, "No actions are currently recorded.")}
     ${section("2. CLIENT RISKS", brief.risks, "No known risks are currently recorded.")}
-    ${section("3. MEETINGS", brief.meetings.items, brief.meetings.message)}
-    ${section("4. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
-    ${section("5. DECISIONS REQUIRED", brief.decisions, "No decisions are currently recorded.")}
-    ${section("6. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${section("3. OUTLOOK EMAIL", brief.emails || [], brief.microsoft?.connected ? "No recent email was returned." : "Outlook is not connected. No email data was reviewed.")}
+    ${section("4. MEETINGS", brief.meetings.items, brief.meetings.message)}
+    ${section("5. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
+    ${section("6. DECISIONS REQUIRED", brief.decisions, "No decisions are currently recorded.")}
+    ${section("7. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
@@ -583,8 +592,56 @@ function buildFallbackBrief() {
     opportunities: byType("opportunity"),
     decisions: byType("decision"),
     agents: state.agents,
+    emails: [],
+    microsoft: { connected: false },
     source: "localStorage",
   };
+}
+
+async function connectMicrosoft() {
+  if (!backendAvailable) {
+    showToast("Start the Alfred backend before connecting Microsoft 365");
+    return;
+  }
+  const dialog = $("#microsoft-dialog");
+  $("#microsoft-code").textContent = "—";
+  $("#microsoft-message").textContent = "Starting secure device authorization…";
+  $("#microsoft-progress").textContent = "Alfred requests read-only delegated permissions.";
+  dialog.showModal();
+
+  try {
+    const flow = await apiRequest("/api/microsoft/connect", { method: "POST", body: "{}" });
+    $("#microsoft-code").textContent = flow.userCode;
+    $("#microsoft-link").href = flow.verificationUri;
+    $("#microsoft-message").textContent = flow.message;
+    $("#microsoft-progress").textContent = "Open Microsoft sign-in, enter the code, review the read-only permissions, and approve.";
+    pollMicrosoftConnection((flow.interval || 5) * 1000, Date.now() + flow.expiresIn * 1000);
+  } catch (error) {
+    $("#microsoft-progress").textContent = error.message;
+    showToast(error.message);
+  }
+}
+
+function pollMicrosoftConnection(interval, expiresAt) {
+  clearTimeout(microsoftPollTimer);
+  microsoftPollTimer = setTimeout(async () => {
+    if (Date.now() >= expiresAt || !$("#microsoft-dialog").open) return;
+    try {
+      const result = await apiRequest("/api/microsoft/connect/complete", { method: "POST", body: "{}" });
+      if (result.pending) {
+        $("#microsoft-progress").textContent = "Waiting for Microsoft authorization…";
+        pollMicrosoftConnection((result.retryAfter || interval / 1000) * 1000, expiresAt);
+        return;
+      }
+      $("#microsoft-progress").textContent = `Connected as ${result.profile.displayName} (${result.profile.email}).`;
+      state = await apiRequest("/api/dashboard");
+      persist();
+      renderAll();
+      showToast("Microsoft 365 read-only connection verified");
+    } catch (error) {
+      $("#microsoft-progress").textContent = error.message;
+    }
+  }, interval);
 }
 
 function briefAsText() {
@@ -751,6 +808,11 @@ $("#copy-brief").addEventListener("click", async () => {
 $$(".close-dialog").forEach((button) => button.addEventListener("click", () => $("#brief-dialog").close()));
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
+  if (event.target.closest(".connect-microsoft")) connectMicrosoft();
+  if (event.target.closest(".close-microsoft")) {
+    clearTimeout(microsoftPollTimer);
+    $("#microsoft-dialog").close();
+  }
 });
 $("#reset-data").addEventListener("click", () => {
   if (backendAvailable) {
@@ -771,6 +833,10 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if ($("#brief-dialog").open) $("#brief-dialog").close();
     if ($("#form-dialog").open) $("#form-dialog").close();
+    if ($("#microsoft-dialog").open) {
+      clearTimeout(microsoftPollTimer);
+      $("#microsoft-dialog").close();
+    }
   }
 });
 

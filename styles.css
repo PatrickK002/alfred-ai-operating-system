@@ -1192,6 +1192,11 @@ h3 {
   font-weight: 500;
 }
 
+.integration-card .secondary-button {
+  width: 100%;
+  margin-top: 13px;
+}
+
 .connection-state .integration-state-connected {
   color: var(--accent);
 }
@@ -1203,6 +1208,38 @@ h3 {
 body[data-backend="fallback"] .status-dot {
   background: var(--amber);
   box-shadow: 0 0 12px var(--amber);
+}
+
+.microsoft-connect {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: 34px 25px;
+  text-align: center;
+}
+
+.microsoft-connect > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.device-code {
+  padding: 14px 22px;
+  border: 1px solid var(--line-bright);
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font: 500 24px/1 var(--font-display);
+  letter-spacing: 0.18em;
+}
+
+.microsoft-link {
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
 }
 
 dialog {
