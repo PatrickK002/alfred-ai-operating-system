@@ -178,6 +178,15 @@ const seedData = {
     { id: "deepgram", name: "Deepgram", symbol: "D", description: "Speech-to-text input for voice commands and conversations.", status: "Planned" },
     { id: "anthropic", name: "Anthropic", symbol: "A", description: "Reasoning and language-model execution for Alfred intelligence workflows.", status: "Planned" },
   ],
+  approvals: [],
+  approvalSummary: {
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    cancelled: 0,
+    expired: 0,
+    executionEnabled: false,
+  },
 };
 
 let state = loadState();
@@ -490,11 +499,59 @@ function renderIntegrations() {
     .join("");
 }
 
+function renderApprovals() {
+  const approvals = state.approvals || [];
+  const summary = state.approvalSummary || {};
+  $("#approval-nav-count").textContent = summary.pending || 0;
+  $("#approval-nav-count").classList.toggle("has-items", Boolean(summary.pending));
+  $("#approval-metrics").innerHTML = [
+    ["PENDING", summary.pending || 0],
+    ["APPROVED", summary.approved || 0],
+    ["REJECTED", summary.rejected || 0],
+    ["EXECUTION", summary.executionEnabled ? "Enabled" : "Disabled"],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value}</strong>
+    </article>
+  `).join("");
+
+  $("#approval-list").innerHTML = approvals.length
+    ? approvals.map((approval) => `
+        <article class="approval-card">
+          <header>
+            <div>
+              <span class="approval-system">${escapeHTML(approval.targetSystem)}</span>
+              <h3>${escapeHTML(approval.title)}</h3>
+            </div>
+            <span class="approval-status status-${escapeHTML(approval.status)}">${escapeHTML(approval.status)}</span>
+          </header>
+          <p>${escapeHTML(approval.description)}</p>
+          <dl>
+            <div><dt>Action</dt><dd>${escapeHTML(approval.actionType.replaceAll("_", " "))}</dd></div>
+            <div><dt>Risk</dt><dd>${escapeHTML(approval.riskLevel)}</dd></div>
+            <div><dt>Requested by</dt><dd>${escapeHTML(approval.requestedBy)}</dd></div>
+            <div><dt>Requested</dt><dd>${new Date(approval.requestedAt).toLocaleString("en-GB")}</dd></div>
+          </dl>
+          ${approval.reviewedBy ? `<div class="approval-review"><strong>${escapeHTML(approval.reviewedBy)}</strong> ${escapeHTML(approval.status)} this request.${approval.reviewNote ? ` ${escapeHTML(approval.reviewNote)}` : ""}</div>` : ""}
+          ${approval.status === "approved" ? '<div class="approval-hold">Authorised, but held. No executor is installed.</div>' : ""}
+          ${approval.status === "pending" ? `
+            <div class="approval-actions">
+              <button class="secondary-button approval-decision" data-approval-id="${approval.id}" data-decision="reject">Reject</button>
+              <button class="primary-button approval-decision" data-approval-id="${approval.id}" data-decision="approve">Approve</button>
+            </div>
+          ` : ""}
+        </article>
+      `).join("")
+    : '<div class="empty-state approval-empty">No actions are awaiting approval. Alfred has not executed anything.</div>';
+}
+
 function renderAll() {
   renderCommand();
   renderCompanies();
   renderMemory();
   renderAgents();
+  renderApprovals();
   renderIntegrations();
 }
 
@@ -504,6 +561,7 @@ function navigate(view) {
     companies: "Companies",
     memory: "Memory",
     agents: "AI Executive Team",
+    approvals: "Approvals",
     integrations: "Integrations",
   };
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
@@ -707,6 +765,33 @@ async function showBriefHistory() {
   }
 }
 
+async function reviewApproval(id, decision) {
+  if (!backendAvailable) {
+    showToast("Approvals require the backend audit trail");
+    return;
+  }
+  const verb = decision === "approve" ? "approve" : "reject";
+  const warning = decision === "approve"
+    ? "Approve this request? This records authorization only; Alfred still cannot execute it."
+    : "Reject this request? The decision will be recorded in the audit trail.";
+  if (!window.confirm(warning)) return;
+  const note = window.prompt(`Optional note for this ${verb} decision:`, "") ?? "";
+  try {
+    await apiRequest(`/api/approvals/${id}/${decision}`, {
+      method: "POST",
+      body: JSON.stringify({ actor: "Patrick King", note }),
+    });
+    state = await apiRequest("/api/dashboard");
+    persist();
+    renderAll();
+    showToast(decision === "approve"
+      ? "Approved and held. External execution remains disabled."
+      : "Approval request rejected");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function openRecordForm(kind) {
   const form = $("#record-form");
   const companies = state.companies
@@ -736,6 +821,32 @@ function openRecordForm(kind) {
       <div class="field"><label for="record-company">Company</label><select id="record-company" name="companyId"><option value="group">Group</option>${companies}</select></div>
       <div class="field"><label for="record-department">Department</label><input id="record-department" name="department" required /></div>
       <div class="form-actions"><button type="button" class="secondary-button close-form">Cancel</button><button class="primary-button" type="submit">Define agent</button></div>
+    `;
+  } else if (kind === "approval") {
+    $("#form-eyebrow").textContent = "HUMAN APPROVAL LAYER";
+    $("#form-title").textContent = "Propose external action";
+    form.innerHTML = `
+      <div class="form-notice">This creates a review request only. No external action will be executed.</div>
+      <div class="field"><label for="record-system">Target system</label><select id="record-system" name="targetSystem" required>
+        <option value="Microsoft Outlook">Microsoft Outlook</option>
+        <option value="Outlook Calendar">Outlook Calendar</option>
+        <option value="OneDrive / SharePoint">OneDrive / SharePoint</option>
+        <option value="Monday.com">Monday.com</option>
+        <option value="Other external system">Other external system</option>
+      </select></div>
+      <div class="field"><label for="record-action-type">Proposed action</label><select id="record-action-type" name="actionType" required>
+        <option value="draft_email">Draft email</option>
+        <option value="send_email">Send email</option>
+        <option value="calendar_change">Change calendar</option>
+        <option value="file_change">Change file</option>
+        <option value="external_task">Create external task</option>
+      </select></div>
+      <div class="field"><label for="record-title">Title</label><input id="record-title" name="title" required /></div>
+      <div class="field"><label for="record-detail">Exact proposed outcome</label><textarea id="record-detail" name="description" required></textarea></div>
+      <div class="field"><label for="record-risk">Risk level</label><select id="record-risk" name="riskLevel">
+        <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
+      </select></div>
+      <div class="form-actions"><button type="button" class="secondary-button close-form">Cancel</button><button class="primary-button" type="submit">Request approval</button></div>
     `;
   } else {
     $("#form-eyebrow").textContent = "COMPANY OPERATING LAYER";
@@ -783,6 +894,12 @@ async function submitRecord(event) {
           }),
         });
         showToast("Agent definition saved");
+      } else if (form.dataset.kind === "approval") {
+        await apiRequest("/api/approvals", {
+          method: "POST",
+          body: JSON.stringify({ ...values, requestedBy: "Alfred" }),
+        });
+        showToast("Approval request created. Nothing was executed.");
       } else {
         await apiRequest(`/api/${values.type}s`, {
           method: "POST",
@@ -791,6 +908,9 @@ async function submitRecord(event) {
         showToast(`${values.type[0].toUpperCase()}${values.type.slice(1)} saved to database`);
       }
       state = await apiRequest("/api/dashboard");
+    } else if (form.dataset.kind === "approval") {
+      showToast("Approvals require the backend audit trail");
+      return;
     } else if (form.dataset.kind === "memory") {
       state.memories.push({ id: Date.now(), ...values, date: new Date().toISOString().slice(0, 10) });
       showToast("Memory stored in browser fallback");
@@ -829,6 +949,8 @@ function runCommand(command) {
     }
   } else if (normalized.includes("agent") || normalized.includes("team")) {
     navigate("agents");
+  } else if (normalized.includes("approval") || normalized.includes("approve")) {
+    navigate("approvals");
   } else if (normalized.includes("compan") || normalized.includes("digitize")) {
     navigate("companies");
   } else {
@@ -842,6 +964,7 @@ $("#brief-button").addEventListener("click", generateBrief);
 $("#core-button").addEventListener("click", generateBrief);
 $("#add-memory").addEventListener("click", () => openRecordForm("memory"));
 $("#add-agent").addEventListener("click", () => openRecordForm("agent"));
+$("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
 $("#record-form").addEventListener("submit", submitRecord);
 $("#memory-search").addEventListener("input", renderMemory);
@@ -871,6 +994,8 @@ $$(".close-history").forEach((button) => button.addEventListener("click", () => 
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
   if (event.target.closest(".connect-microsoft")) connectMicrosoft();
+  const approvalButton = event.target.closest(".approval-decision");
+  if (approvalButton) reviewApproval(approvalButton.dataset.approvalId, approvalButton.dataset.decision);
   if (event.target.closest(".close-microsoft")) {
     clearTimeout(microsoftPollTimer);
     $("#microsoft-dialog").close();

@@ -40,6 +40,10 @@
           <button class="nav-item" data-view="agents">
             <span class="nav-icon">△</span> Agents
           </button>
+          <button class="nav-item" data-view="approvals">
+            <span class="nav-icon">✓</span> Approvals
+            <span class="nav-count" id="approval-nav-count">0</span>
+          </button>
           <button class="nav-item" data-view="integrations">
             <span class="nav-icon">⌘</span> Integrations
           </button>
@@ -206,6 +210,23 @@
           <div class="agent-grid" id="agent-grid"></div>
         </section>
 
+        <section class="view" id="approvals-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">HUMAN APPROVAL LAYER</p>
+              <h2>Action approvals</h2>
+              <p>Review proposed external actions before any future execution capability is allowed.</p>
+            </div>
+            <button class="secondary-button" id="add-approval">+ Propose action</button>
+          </div>
+          <div class="approval-boundary">
+            <strong>Execution remains disabled</strong>
+            <span>Approving a request records Patrick's decision and audit trail. It does not send, edit, publish or update anything.</span>
+          </div>
+          <div class="approval-metrics" id="approval-metrics"></div>
+          <div class="approval-list" id="approval-list"></div>
+        </section>
+
         <section class="view" id="integrations-view">
           <div class="section-intro">
             <div>
@@ -236,7 +257,7 @@
       <div class="brief-feedback" id="brief-feedback">
         <div>
           <strong>Was this briefing useful?</strong>
-          <small>Your feedback is stored locally against this briefing.</small>
+          <small>Your feedback is stored in Alfred's local database against this briefing.</small>
         </div>
         <input id="brief-feedback-note" placeholder="Optional note" maxlength="2000" />
         <button class="secondary-button feedback-button" data-rating="useful">Useful</button>

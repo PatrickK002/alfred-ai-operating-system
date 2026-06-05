@@ -71,6 +71,12 @@ Health and aggregate workflows:
 | `GET` | `/api/health` | API and database health |
 | `GET` | `/api/dashboard` | Complete dashboard state |
 | `GET` | `/api/morning-brief` | Backend-generated executive brief |
+| `GET` | `/api/approvals` | Approval requests and status totals |
+| `POST` | `/api/approvals` | Propose an external action for human review |
+| `GET` | `/api/approvals/{id}` | Approval detail and immutable event history |
+| `POST` | `/api/approvals/{id}/approve` | Record explicit approval |
+| `POST` | `/api/approvals/{id}/reject` | Record explicit rejection |
+| `POST` | `/api/approvals/{id}/cancel` | Cancel a pending request |
 
 Resource collections:
 
@@ -151,7 +157,7 @@ No external service calls are implemented in this phase.
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation and morning brief generation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation and approval state transitions.
 
 ## Architecture
 
@@ -164,12 +170,13 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 ## Next Integration Steps
 
 1. Add environment-based secrets management.
-2. Implement Microsoft OAuth and read-only Outlook/Calendar adapters.
-3. Add Monday.com project and task synchronization.
-4. Ingest Krisp transcripts into memories and actions.
-5. Add Voyage embeddings while retaining SQLite as the source-of-record index.
-6. Add an Anthropic reasoning adapter behind the morning brief workflow.
-7. Add ElevenLabs and Deepgram only after text workflows are stable.
+2. Add a separately reviewed Microsoft write adapter that consumes approved requests.
+3. Add idempotency, expiry and re-authentication checks before any approved action can execute.
+4. Add Monday.com project and task synchronization.
+5. Ingest Krisp transcripts into memories and actions.
+6. Add Voyage embeddings while retaining SQLite as the source-of-record index.
+7. Add an Anthropic reasoning adapter behind the morning brief workflow.
+8. Add ElevenLabs and Deepgram only after text workflows are stable.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 
@@ -241,6 +248,22 @@ This phase contains no Microsoft Graph methods for:
 - Uploading, editing, moving, or deleting files
 
 Those capabilities must wait for an explicit approval workflow and a separate permission review.
+
+## Human Approval Workflow
+
+Alfred can now create proposed external actions for Patrick to review. Approval requests contain:
+
+- Target system and action type
+- Exact proposed outcome
+- Risk level
+- Requester and timestamps
+- Optional structured payload
+- Review decision, reviewer and note
+- Append-only audit events
+
+Requests move from `pending` to `approved`, `rejected` or `cancelled`. A decided request cannot be reviewed again.
+
+Approval does **not** execute an action. There is deliberately no execution endpoint, Microsoft write method or write permission in this phase. Approved requests remain held until a separately reviewed executor, permission model, idempotency policy and re-authentication control are implemented.
 
 ## Executive Briefing V2
 
