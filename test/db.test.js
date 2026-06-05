@@ -41,7 +41,8 @@ test("seeds the Phase 1 operating registry", () => {
     assert.equal(dashboard.companies.length, 4);
     assert.equal(dashboard.clients.length, 4);
     assert.equal(dashboard.projects.length, 1);
-    assert.equal(dashboard.agents.length, 4);
+    assert.equal(dashboard.agents.length, 5);
+    assert.equal(dashboard.agents.find((agent) => agent.id === "olivia").role, "Chief Financial Officer");
     assert.equal(dashboard.integrations.length, 9);
     assert.equal(dashboard.operatingItems.length, 5);
     assert.equal(dashboard.integrations.find((item) => item.id === "anthropic").status, "Planned");
@@ -91,7 +92,7 @@ test("stores memories and generates the brief from database state", () => {
 
     assert.equal(listResource(db, "memories").length, 4);
     assert.equal(brief.summary.risks, 2);
-    assert.equal(brief.summary.agentsPlanned, 4);
+    assert.equal(brief.summary.agentsPlanned, 5);
     assert.equal(brief.meetings.available, false);
     assert.match(brief.meetings.message, /not connected/i);
     assert.equal(brief.source, "backend");

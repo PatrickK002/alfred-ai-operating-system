@@ -85,6 +85,16 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
+| `GET` | `/api/financial/dashboard` | Olivia's consolidated CFO dashboard |
+| `GET` | `/api/financial/forecast` | Monthly, quarterly, annual and scenario forecasts |
+| `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables |
+| `GET` | `/api/financial/imports` | Order book import history and validation summaries |
+| `GET` | `/api/financial/monday/status` | Monday.com finance connector status |
+| `POST` | `/api/financial/monday/refresh` | Read Monday invoice/debtor summaries and store local summaries |
+| `GET` | `/api/financial/board-reports` | List generated board reports |
+| `POST` | `/api/financial/board-reports` | Generate a quarterly board report markdown snapshot |
+| `POST` | `/api/financial/olivia-analysis` | Generate Olivia CFO insights and recommendations |
+| `GET` | `/api/financial/audit` | Finance import, refresh, report and analysis audit events |
 | `GET` | `/api/approvals` | Approval requests and status totals |
 | `POST` | `/api/approvals` | Propose an external action for human review |
 | `GET` | `/api/approvals/{id}` | Approval detail and immutable event history |
@@ -172,7 +182,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries and Voyage semantic memory retrieval.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval and Olivia CFO financial intelligence.
 
 ## Architecture
 
@@ -182,6 +192,9 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `ai.js` - read-only AI reasoning service and audit wrapper
 - `voyage.js` - Voyage embeddings client and vector helpers
 - `semantic-memory.js` - SQLite-backed semantic indexing, search and Claude context retrieval
+- `financial.js` - Olivia CFO calculations, order book import persistence, board reports and read-only finance audits
+- `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
+- `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
 - `index.html` / `styles.css` - executive command centre interface
 - `test/db.test.js` - database and workflow tests
@@ -193,8 +206,10 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 3. Add idempotency, expiry and re-authentication checks before any approved action can execute.
 4. Add Monday.com project and task synchronization.
 5. Ingest Krisp transcripts into memories and actions.
-6. Add retrieval evaluation and retention controls for semantic memory.
-7. Add ElevenLabs and Deepgram only after text workflows are stable.
+6. Add retention controls, encryption and role-based access for financial intelligence tables.
+7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.
+8. Add retrieval evaluation and retention controls for semantic memory.
+9. Add ElevenLabs and Deepgram only after text workflows are stable.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 
@@ -414,6 +429,69 @@ Before Claude analysis, Alfred retrieves a bounded memory context:
 - No unbounded database or mailbox dump
 
 Claude receives these records as context only. Voyage memory retrieval does not execute actions, send messages, edit files, update calendars or approve anything.
+
+## Olivia CFO Financial Intelligence
+
+Olivia is Alfred's planned Chief Financial Officer for Digitize Consultants and future Alfred-managed businesses.
+
+This is a financial intelligence layer, not an accounting system. Olivia can analyse and recommend, but cannot:
+
+- Raise invoices
+- Send invoices
+- Process payments
+- Chase debtors
+- Modify accounting records
+- Connect to bank accounts
+- Execute financial actions
+
+All finance workflows are read-only. The existing approval framework can record future human review requests, but no finance executor is installed.
+
+### Order Book Import
+
+Olivia can import Digitize order book `.xlsx` or `.csv` files into local SQLite tables. The importer:
+
+- Detects financial year worksheets such as `FY2026-27`
+- Preserves source file, sheet and row references
+- Validates missing client/project/amount data
+- Flags duplicate rows
+- Maintains import history
+- Records delta/change audit events
+- Requires explicit overwrite approval before changed source rows replace existing rows
+
+### Monday.com Finance Connector
+
+Set these optional environment variables:
+
+```bash
+MONDAY_API_TOKEN="your-monday-api-token"
+MONDAY_FINANCE_BOARD_IDS="123456789,987654321"
+MONDAY_API_VERSION="2025-04"
+```
+
+The connector uses Monday.com's GraphQL endpoint for read-only board item queries. It reads invoice/client/project summaries into local SQLite and never sends mutations, creates items, updates boards or writes back to Monday.
+
+The connector is designed for:
+
+- Invoices issued
+- Invoices paid
+- Overdue invoices
+- Client references
+- Project references
+
+### CFO Dashboard and Reports
+
+The Finance view shows:
+
+- Secured revenue
+- Pipeline revenue
+- Weighted forecast revenue
+- Revenue by financial year, quarter, client, project and service line
+- Invoice status
+- Outstanding and overdue debtors
+- Forecast variance/gap analysis
+- Financial risks and opportunities
+
+Board reports are generated as dashboard markdown snapshots with placeholders for future Word, PDF and PowerPoint export.
 
 ## Executive Briefing V2
 
