@@ -64,6 +64,8 @@ Database files are excluded from Git.
 
 Approval records include SHA-256 action fingerprints, retry-safe idempotency keys, expiry timestamps, audit events and persisted execution preflight reports.
 
+AI analysis audit records are also stored in SQLite. They log the timestamp, user action, data categories, model, success/error status and whether output was saved. They do not store API keys.
+
 ## API
 
 Health and aggregate workflows:
@@ -73,6 +75,10 @@ Health and aggregate workflows:
 | `GET` | `/api/health` | API and database health |
 | `GET` | `/api/dashboard` | Complete dashboard state |
 | `GET` | `/api/morning-brief` | Backend-generated executive brief |
+| `GET` | `/api/anthropic/status` | Anthropic configuration and read-only status |
+| `POST` | `/api/ai/briefing` | Claude-powered CEO analysis of the current briefing context |
+| `POST` | `/api/ai/decision-support` | Claude-powered decision, risk or approval support |
+| `GET` | `/api/ai/audit?limit=50` | Metadata-only AI analysis audit log |
 | `GET` | `/api/approvals` | Approval requests and status totals |
 | `POST` | `/api/approvals` | Propose an external action for human review |
 | `GET` | `/api/approvals/{id}` | Approval detail and immutable event history |
@@ -152,7 +158,7 @@ Allowed states are:
 - `Planned`
 - `Connected`
 
-No external service calls are implemented in this phase.
+External calls are limited to verified read-only Microsoft 365 reads and explicit Anthropic reasoning requests initiated by Patrick in the UI or API. Alfred still cannot modify external systems.
 
 ## Tests
 
@@ -160,12 +166,14 @@ No external service calls are implemented in this phase.
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation and approval state transitions.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions and Anthropic reasoning boundaries.
 
 ## Architecture
 
 - `server.js` - HTTP server, REST routes and static frontend hosting
 - `db.js` - schema, seed data, resource persistence and briefing queries
+- `anthropic.js` - Claude Messages API client, CEO system prompt and structured output schemas
+- `ai.js` - read-only AI reasoning service and audit wrapper
 - `app.js` - dashboard rendering, API client and localStorage fallback
 - `index.html` / `styles.css` - executive command centre interface
 - `test/db.test.js` - database and workflow tests
@@ -178,8 +186,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 4. Add Monday.com project and task synchronization.
 5. Ingest Krisp transcripts into memories and actions.
 6. Add Voyage embeddings while retaining SQLite as the source-of-record index.
-7. Add an Anthropic reasoning adapter behind the morning brief workflow.
-8. Add ElevenLabs and Deepgram only after text workflows are stable.
+7. Add ElevenLabs and Deepgram only after text workflows are stable.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 
@@ -285,6 +292,72 @@ The preflight checks explicit approval, expiry, payload integrity and idempotenc
 - No external action executor is installed
 
 Therefore every preflight currently returns `ready: false` and `executionAvailable: false`. This is intentional: the safeguards are observable and testable before any Microsoft write permission is requested.
+
+## Anthropic Claude Reasoning Setup
+
+Alfred can use Anthropic Claude as a read-only reasoning layer for:
+
+- Executive briefing analysis
+- Risk review
+- Decision support
+- Approval request review
+- Prioritisation
+
+Create a local `.env` from [.env.example](.env.example):
+
+```bash
+cp .env.example .env
+```
+
+Set:
+
+```bash
+ANTHROPIC_API_KEY="your-anthropic-api-key"
+ANTHROPIC_MODEL="claude-sonnet-4-6"
+```
+
+`ANTHROPIC_MODEL` is optional and defaults to `claude-sonnet-4-6`. Do not commit `.env` or API keys.
+
+If you do not use `.env`, pass the key when starting Alfred:
+
+```bash
+ANTHROPIC_API_KEY="your-anthropic-api-key" npm start
+```
+
+### Claude API Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/anthropic/status` | Shows whether Anthropic is configured and which model will be used |
+| `POST` | `/api/ai/briefing` | Analyses the current briefing, Outlook signals, calendar signals, risks, decisions, opportunities, approvals and recent briefing history |
+| `POST` | `/api/ai/decision-support` | Analyses one decision, risk or approval request |
+| `GET` | `/api/ai/audit?limit=50` | Lists metadata-only AI analysis audit records |
+
+Claude outputs are schema-constrained JSON. Alfred displays them as recommendations only.
+
+### Claude Security Boundary
+
+Claude can:
+
+- Analyse supplied Alfred records and Microsoft read-only signals
+- Prioritise Patrick's attention
+- Identify risks and assumptions
+- Recommend next actions
+- Flag when Patrick approval is required
+- Cite supplied source record references
+
+Claude cannot:
+
+- Send emails
+- Edit OneDrive or SharePoint files
+- Update calendars
+- Update Monday.com
+- Publish content
+- Execute approvals
+- Create autonomous agents
+- Claim work is complete unless Alfred's stored system data proves it
+
+Every AI request is logged in `ai_analysis_audit` with metadata only. Alfred does not log raw API keys and does not persist Claude output in this phase.
 
 ## Executive Briefing V2
 

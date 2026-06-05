@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, relative, resolve } from "node:path";
+import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   RESOURCE_CONFIG,
@@ -10,6 +11,7 @@ import {
   deleteResource,
   getApprovalRequest,
   getApprovalSummary,
+  listAiAnalysisAudit,
   getDashboardData,
   getBriefing,
   getMorningBrief,
@@ -25,12 +27,25 @@ import {
 } from "./db.js";
 import { buildExecutiveAnalysis } from "./briefing.js";
 import { MICROSOFT_SCOPES, MicrosoftGraphClient } from "./microsoft.js";
+import { AnthropicClient } from "./anthropic.js";
+import { createAiReasoningService } from "./ai.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
+try {
+  loadEnvFile(resolve(ROOT_DIR, ".env"));
+} catch (error) {
+  if (error.code !== "ENOENT") console.warn(`Could not load .env: ${error.message}`);
+}
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
 const db = createDatabase();
 const microsoft = new MicrosoftGraphClient();
+const anthropic = new AnthropicClient();
+const aiReasoning = createAiReasoningService({
+  db,
+  client: anthropic,
+  onConnected: () => setIntegrationStatus(db, "anthropic", "Connected"),
+});
 
 const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -76,13 +91,57 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, { status: "ok", database: "connected" });
   }
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
+    syncAnthropicStatus();
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
-    return sendJson(response, 200, await generateExecutiveBrief());
+    return sendJson(response, 200, await generateExecutiveBrief({ save: true }));
   }
   if (request.method === "GET" && url.pathname === "/api/briefings") {
     return sendJson(response, 200, listBriefings(db, url.searchParams.get("limit") || 20));
+  }
+  if (url.pathname === "/api/anthropic/status" && request.method === "GET") {
+    return sendJson(response, 200, syncAnthropicStatus());
+  }
+  if (url.pathname === "/api/ai/audit" && request.method === "GET") {
+    return sendJson(response, 200, listAiAnalysisAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/ai/briefing" && request.method === "POST") {
+    const body = await readJson(request);
+    const briefing = body.briefing || await generateExecutiveBrief({ save: false });
+    const context = buildAiBriefingContext(briefing, body);
+    const result = await aiReasoning.analyzeBriefing(context, {
+      userAction: body.userAction || "briefing-screen:ask-alfred",
+      dataCategories: [
+        "executive_briefing",
+        "outlook_signals",
+        "calendar_signals",
+        "risks",
+        "decisions",
+        "opportunities",
+        "approval_queue",
+        "briefing_history",
+      ],
+    });
+    return sendJson(response, 200, result);
+  }
+  if (url.pathname === "/api/ai/decision-support" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.decisionTitle || !body.context) {
+      return sendJson(response, 400, { error: "decisionTitle and context are required" });
+    }
+    const result = await aiReasoning.analyzeDecision(buildDecisionSupportContext(body), {
+      userAction: body.userAction || "decision-support:ask-alfred",
+      dataCategories: compactCategories([
+        body.category || "decision_support",
+        body.relatedEmails?.length ? "outlook_signals" : "",
+        body.relatedCalendar?.length ? "calendar_signals" : "",
+        body.risks?.length ? "risks" : "",
+        body.relatedItems?.length ? "operating_records" : "",
+        body.approvals?.length ? "approval_queue" : "",
+      ]),
+    });
+    return sendJson(response, 200, result);
   }
   if (url.pathname === "/api/approvals") {
     if (request.method === "GET") {
@@ -211,7 +270,7 @@ async function handleApi(request, response, url) {
   return sendJson(response, 405, { error: "Method not allowed" });
 }
 
-async function generateExecutiveBrief() {
+async function generateExecutiveBrief({ save = true } = {}) {
   const brief = getMorningBrief(db);
   const dashboard = getDashboardData(db);
   const microsoftStatus = await microsoft.status();
@@ -264,8 +323,106 @@ async function generateExecutiveBrief() {
   brief.summary.decisionPrompts = analysis.decisionPrompts.length;
   brief.analysisMethod = "deterministic-v1";
 
+  if (!save) return brief;
   const saved = saveBriefing(db, brief);
   return { ...brief, briefingId: saved.id };
+}
+
+function compactCategories(categories) {
+  return [...new Set(categories.map(String).filter(Boolean))];
+}
+
+function compactRecords(records = [], fields = ["id", "title", "detail", "priority", "status", "due"], limit = 12) {
+  return records.slice(0, limit).map((record) => Object.fromEntries(
+    fields
+      .filter((field) => record[field] !== undefined && record[field] !== null)
+      .map((field) => [field, compactValue(record[field])]),
+  ));
+}
+
+function compactValue(value) {
+  if (typeof value === "string") return value.length > 400 ? `${value.slice(0, 397)}...` : value;
+  if (Array.isArray(value)) return value.slice(0, 6).map(compactValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).slice(0, 8).map(([key, item]) => [key, compactValue(item)]));
+  }
+  return value;
+}
+
+function sourceReference(category, record) {
+  const id = record.id ?? record.sourceId ?? record.title ?? record.subject;
+  return {
+    reference: `${category}:${id}`,
+    label: record.title || record.subject || record.name || String(id),
+    category,
+  };
+}
+
+function sourceReferencesFor(context) {
+  return [
+    ...compactRecords(context.currentExecutiveBriefing.actions, ["id", "title"]).map((record) => sourceReference("action", record)),
+    ...compactRecords(context.risks, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "risk", record)),
+    ...compactRecords(context.decisions, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "decision", record)),
+    ...compactRecords(context.opportunities, ["id", "title"]).map((record) => sourceReference("opportunity", record)),
+    ...compactRecords(context.outlookSignals, ["id", "title", "subject"]).map((record) => sourceReference("outlook", record)),
+    ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
+    ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
+  ];
+}
+
+function buildAiBriefingContext(briefing, body = {}) {
+  const history = listBriefings(db, 5).map((item) => ({
+    id: item.id,
+    generatedAt: item.generatedAt,
+    summary: item.summary,
+    feedback: item.feedback,
+  }));
+  const context = {
+    currentExecutiveBriefing: {
+      generatedAt: briefing.generatedAt,
+      summary: briefing.summary,
+      executivePriorities: compactRecords(briefing.executivePriorities || [], ["rank", "title", "detail", "category", "score"], 6),
+      actions: compactRecords(briefing.actions || [], undefined, 8),
+      agents: compactRecords(briefing.agents || [], ["id", "name", "role", "status"]),
+    },
+    outlookSignals: compactRecords(body.outlookSignals || briefing.emails || [], ["id", "title", "detail", "priority", "score", "reasons", "receivedDateTime", "importance", "isRead"], 8),
+    calendarSignals: compactRecords(body.calendarSignals || briefing.meetings?.items || [], ["id", "title", "detail", "urgency", "hoursUntil", "preparation"], 6),
+    risks: compactRecords(body.risks || briefing.riskSignals || briefing.risks || [], ["id", "title", "detail", "priority", "confidence", "sourceType", "sourceId"], 8),
+    decisions: compactRecords(body.decisions || briefing.decisionPrompts || briefing.decisions || [], ["id", "title", "detail", "priority", "prompt", "sourceType", "sourceId"], 8),
+    opportunities: compactRecords(body.opportunities || briefing.opportunities || [], ["id", "title", "detail", "priority", "due", "status"], 6),
+    approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
+    briefingHistory: history,
+    boundaries: {
+      readOnly: true,
+      executionAvailable: false,
+      approvalExecutionAvailable: false,
+      microsoftWritePermissions: false,
+    },
+  };
+  return {
+    ...context,
+    sourceRecordReferences: sourceReferencesFor(context),
+  };
+}
+
+function buildDecisionSupportContext(body) {
+  return {
+    decisionTitle: String(body.decisionTitle).slice(0, 500),
+    context: String(body.context).slice(0, 4000),
+    category: body.category || "decision",
+    options: Array.isArray(body.options) ? body.options.slice(0, 8).map(String) : [],
+    relatedEmails: compactRecords(body.relatedEmails || [], ["id", "title", "subject", "detail", "priority", "receivedDateTime"], 8),
+    relatedCalendar: compactRecords(body.relatedCalendar || [], ["id", "title", "subject", "detail", "start", "urgency"], 8),
+    relatedItems: compactRecords(body.relatedItems || [], ["id", "type", "title", "detail", "priority", "status", "due"], 12),
+    risks: compactRecords(body.risks || [], ["id", "title", "detail", "priority", "status"], 8),
+    approvals: compactRecords(body.approvals || [], ["id", "actionType", "targetSystem", "title", "status", "riskLevel"], 8),
+    boundaries: {
+      readOnly: true,
+      executionAvailable: false,
+      approvalExecutionAvailable: false,
+    },
+    sourceRecordReferences: (body.sourceRecordReferences || []).slice(0, 20),
+  };
 }
 
 async function syncMicrosoftStatus() {
@@ -302,6 +459,20 @@ async function syncMicrosoftStatus() {
   setIntegrationStatus(db, "calendar", services.calendar.connected ? "Connected" : "Not connected");
   setIntegrationStatus(db, "sharepoint", services.files.connected ? "Connected" : "Planned");
   return { ...status, services };
+}
+
+function syncAnthropicStatus() {
+  const status = anthropic.status();
+  const current = listResource(db, "integrations").find((integration) => integration.id === "anthropic");
+  if (!status.configured) {
+    setIntegrationStatus(db, "anthropic", "Not connected");
+  } else if (current?.status !== "Connected") {
+    setIntegrationStatus(db, "anthropic", "Planned");
+  }
+  return {
+    ...status,
+    status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
+  };
 }
 
 function serveStatic(response, pathname) {

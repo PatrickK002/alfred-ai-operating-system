@@ -4,3 +4,6 @@ data/*.db-wal
 data/microsoft-token.json
 data/microsoft-config.json
 .DS_Store
+.env
+.env.local
+.env.*.local
