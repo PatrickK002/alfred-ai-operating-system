@@ -6,9 +6,13 @@ import test from "node:test";
 import {
   createDatabase,
   createResource,
+  getBriefing,
   getDashboardData,
   getMorningBrief,
   listResource,
+  listBriefings,
+  saveBriefing,
+  saveBriefingFeedback,
   updateResource,
 } from "../db.js";
 
@@ -85,5 +89,24 @@ test("stores memories and generates the brief from database state", () => {
     assert.equal(brief.meetings.available, false);
     assert.match(brief.meetings.message, /not connected/i);
     assert.equal(brief.source, "backend");
+  });
+});
+
+test("stores briefing history and feedback", () => {
+  withDatabase((db) => {
+    const saved = saveBriefing(db, {
+      generatedAt: "2026-06-05T09:00:00.000Z",
+      source: "backend",
+      summary: { totalOpen: 5, priorityEmails: 2 },
+      actions: [],
+    });
+    saveBriefingFeedback(db, saved.id, { rating: "useful", note: "Good priorities." });
+
+    const history = listBriefings(db);
+    const briefing = getBriefing(db, saved.id);
+
+    assert.equal(history.length, 1);
+    assert.equal(history[0].feedback.useful, 1);
+    assert.equal(briefing.snapshot.summary.priorityEmails, 2);
   });
 });

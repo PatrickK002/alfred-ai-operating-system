@@ -8,11 +8,16 @@ import {
   createResource,
   deleteResource,
   getDashboardData,
+  getBriefing,
   getMorningBrief,
+  listBriefings,
   listResource,
+  saveBriefing,
+  saveBriefingFeedback,
   setIntegrationStatus,
   updateResource,
 } from "./db.js";
+import { buildExecutiveAnalysis } from "./briefing.js";
 import { MICROSOFT_SCOPES, MicrosoftGraphClient } from "./microsoft.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
@@ -68,39 +73,23 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
-    const brief = getMorningBrief(db);
-    const microsoftStatus = await microsoft.status();
-    brief.microsoft = microsoftStatus;
-    if (microsoftStatus.connected) {
-      const [messages, meetings] = await Promise.all([
-        microsoft.listMessages({ limit: 10 }),
-        microsoft.listCalendar({ limit: 15 }),
-      ]);
-      brief.emails = messages.map((message) => ({
-        id: message.id,
-        title: message.subject || "(No subject)",
-        detail: `${message.from?.emailAddress?.name || message.from?.emailAddress?.address || "Unknown sender"} — ${message.bodyPreview || ""}`,
-        receivedDateTime: message.receivedDateTime,
-        isRead: message.isRead,
-        importance: message.importance,
-        webLink: message.webLink,
-      }));
-      brief.meetings = {
-        available: true,
-        items: meetings.map((meeting) => ({
-          id: meeting.id,
-          title: meeting.subject || "(No subject)",
-          detail: `${meeting.start?.dateTime || ""}${meeting.location?.displayName ? ` — ${meeting.location.displayName}` : ""}`,
-          start: meeting.start,
-          end: meeting.end,
-          webLink: meeting.webLink,
-        })),
-        message: meetings.length ? "" : "No meetings are scheduled in the next seven days.",
-      };
-    } else {
-      brief.emails = [];
+    return sendJson(response, 200, await generateExecutiveBrief());
+  }
+  if (request.method === "GET" && url.pathname === "/api/briefings") {
+    return sendJson(response, 200, listBriefings(db, url.searchParams.get("limit") || 20));
+  }
+  const briefingMatch = url.pathname.match(/^\/api\/briefings\/(\d+)(?:\/feedback)?$/);
+  if (briefingMatch) {
+    const briefingId = Number(briefingMatch[1]);
+    if (request.method === "GET" && !url.pathname.endsWith("/feedback")) {
+      const briefing = getBriefing(db, briefingId);
+      return briefing
+        ? sendJson(response, 200, briefing)
+        : sendJson(response, 404, { error: "Briefing not found" });
     }
-    return sendJson(response, 200, brief);
+    if (request.method === "POST" && url.pathname.endsWith("/feedback")) {
+      return sendJson(response, 201, saveBriefingFeedback(db, briefingId, await readJson(request)));
+    }
   }
 
   if (url.pathname === "/api/microsoft/status" && request.method === "GET") {
@@ -181,6 +170,63 @@ async function handleApi(request, response, url) {
 
   response.setHeader("Allow", id ? "PATCH, PUT, DELETE" : "GET, POST");
   return sendJson(response, 405, { error: "Method not allowed" });
+}
+
+async function generateExecutiveBrief() {
+  const brief = getMorningBrief(db);
+  const dashboard = getDashboardData(db);
+  const microsoftStatus = await microsoft.status();
+  brief.microsoft = microsoftStatus;
+  let messages = [];
+  let meetings = [];
+
+  if (microsoftStatus.connected) {
+    [messages, meetings] = await Promise.all([
+      microsoft.listMessages({ limit: 30 }),
+      microsoft.listCalendar({ limit: 25 }),
+    ]);
+  }
+
+  const analysis = buildExecutiveAnalysis({
+    baseBrief: brief,
+    messages,
+    meetings,
+    clients: dashboard.clients,
+    projects: dashboard.projects,
+  });
+
+  brief.emails = analysis.priorityEmails.slice(0, 10).map((message) => ({
+    id: message.id,
+    title: message.subject || "(No subject)",
+    detail: message.detail,
+    receivedDateTime: message.receivedDateTime,
+    isRead: message.isRead,
+    importance: message.importance,
+    priority: message.priority,
+    score: message.score,
+    reasons: message.reasons,
+    webLink: message.webLink,
+  }));
+  brief.meetings = {
+    available: microsoftStatus.connected,
+    items: analysis.meetingPreparation,
+    message: microsoftStatus.connected
+      ? analysis.meetingPreparation.length
+        ? ""
+        : "No meetings are scheduled in the next seven days."
+      : "Calendar is not connected. No meeting data was reviewed.",
+  };
+  brief.riskSignals = analysis.riskSignals;
+  brief.decisionPrompts = analysis.decisionPrompts;
+  brief.executivePriorities = analysis.executivePriorities;
+  brief.summary.priorityEmails = analysis.priorityEmails.filter((email) => email.priority === "high").length;
+  brief.summary.meetingsToday = analysis.meetingPreparation.filter((meeting) => meeting.hoursUntil >= 0 && meeting.hoursUntil <= 24).length;
+  brief.summary.riskSignals = analysis.riskSignals.length;
+  brief.summary.decisionPrompts = analysis.decisionPrompts.length;
+  brief.analysisMethod = "deterministic-v1";
+
+  const saved = saveBriefing(db, brief);
+  return { ...brief, briefingId: saved.id };
 }
 
 async function syncMicrosoftStatus() {

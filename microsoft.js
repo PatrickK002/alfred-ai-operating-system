@@ -234,7 +234,7 @@ export class MicrosoftGraphClient {
       startDateTime: startDate,
       endDateTime: endDate,
       "$top": String(Math.min(Math.max(Number(limit) || 25, 1), 50)),
-      "$select": "id,subject,start,end,location,organizer,isOnlineMeeting,onlineMeeting,webLink",
+      "$select": "id,subject,start,end,location,organizer,attendees,bodyPreview,responseStatus,isOnlineMeeting,onlineMeeting,webLink",
       "$orderby": "start/dateTime",
     });
     const body = await this.graph(`/me/calendarView?${params}`);

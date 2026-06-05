@@ -183,6 +183,7 @@ const seedData = {
 let state = loadState();
 let backendAvailable = false;
 let microsoftPollTimer;
+let currentBriefingId = null;
 let memoryFilter = "all";
 let toastTimer;
 
@@ -512,12 +513,19 @@ function navigate(view) {
 }
 
 function buildBrief(brief) {
-  const section = (title, records, empty) => `
-    <section class="brief-section">
+  const section = (title, records, empty, className = "") => `
+    <section class="brief-section ${className}">
       <h4>${title}</h4>
       ${
         records.length
-          ? `<ol>${records.map((item) => `<li><strong>${escapeHTML(item.title)}.</strong> ${escapeHTML(item.detail)}</li>`).join("")}</ol>`
+          ? `<ol>${records.map((item) => `
+              <li>
+                <strong>${escapeHTML(item.title)}.</strong> ${escapeHTML(item.detail || "")}
+                ${item.preparation?.length ? `<em>Prepare: ${escapeHTML(item.preparation.join("; "))}</em>` : ""}
+                ${item.prompt ? `<em>${escapeHTML(item.prompt)}</em>` : ""}
+                ${item.sourceType === "email-signal" ? "<em>Detected signal — verify the source before acting.</em>" : ""}
+              </li>
+            `).join("")}</ol>`
           : `<p class="core-message">${empty}</p>`
       }
     </section>
@@ -530,21 +538,28 @@ function buildBrief(brief) {
     hour: "2-digit",
     minute: "2-digit",
   });
+  currentBriefingId = brief.briefingId || null;
+  $("#brief-feedback").classList.remove("submitted");
+  $("#brief-feedback-note").value = "";
   $("#brief-content").innerHTML = `
     <div class="brief-opening">
-      Good ${$("#day-period").textContent}, Patrick. I reviewed the ${brief.summary.totalOpen} open records currently stored in Alfred Core.
-      I found ${brief.summary.risks} known risk${brief.summary.risks === 1 ? "" : "s"},
-      ${brief.summary.opportunities} opportunit${brief.summary.opportunities === 1 ? "y" : "ies"} and
-      ${brief.summary.decisions} decision${brief.summary.decisions === 1 ? "" : "s"} requiring your attention.
-      ${brief.summary.agentsPlanned} executive agent definition${brief.summary.agentsPlanned === 1 ? " is" : "s are"} planned; none are presented as executing without a connected runtime.
+      Good ${$("#day-period").textContent}, Patrick. I ranked ${brief.executivePriorities?.length || 0} executive priorities from
+      ${brief.summary.totalOpen} open operating records, ${brief.emails?.length || 0} reviewed emails and
+      ${brief.meetings.items?.length || 0} upcoming meetings.
+      Signals inferred from email language are clearly labelled and require your review.
     </div>
-    ${section("1. PRIORITY ACTIONS", brief.actions, "No actions are currently recorded.")}
-    ${section("2. CLIENT RISKS", brief.risks, "No known risks are currently recorded.")}
-    ${section("3. OUTLOOK EMAIL", brief.emails || [], brief.microsoft?.connected ? "No recent email was returned." : "Outlook is not connected. No email data was reviewed.")}
-    ${section("4. MEETINGS", brief.meetings.items, brief.meetings.message)}
-    ${section("5. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
-    ${section("6. DECISIONS REQUIRED", brief.decisions, "No decisions are currently recorded.")}
-    ${section("7. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${section("1. EXECUTIVE PRIORITIES", (brief.executivePriorities || []).map((item) => ({
+      ...item,
+      title: `${item.rank}. ${item.title}`,
+      detail: `${item.category.toUpperCase()} · score ${item.score}${item.detail ? ` — ${item.detail}` : ""}`,
+    })), "No priorities could be ranked.", "priority-section")}
+    ${section("2. PRIORITY ACTIONS", brief.actions, "No actions are currently recorded.")}
+    ${section("3. RISK REGISTER & SIGNALS", brief.riskSignals || brief.risks, "No risk records or signals were found.")}
+    ${section("4. PRIORITISED OUTLOOK EMAIL", brief.emails || [], brief.microsoft?.connected ? "No recent email was returned." : "Outlook is not connected. No email data was reviewed.")}
+    ${section("5. MEETING PREPARATION", brief.meetings.items, brief.meetings.message)}
+    ${section("6. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
+    ${section("7. DECISION PROMPTS", brief.decisionPrompts || brief.decisions, "No decisions are currently recorded.")}
+    ${section("8. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
@@ -646,6 +661,50 @@ function pollMicrosoftConnection(interval, expiresAt) {
 
 function briefAsText() {
   return $("#brief-content").innerText.trim();
+}
+
+async function submitBriefFeedback(rating) {
+  if (!backendAvailable || !currentBriefingId) {
+    showToast("Feedback requires a saved backend briefing");
+    return;
+  }
+  try {
+    await apiRequest(`/api/briefings/${currentBriefingId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ rating, note: $("#brief-feedback-note").value.trim() }),
+    });
+    $("#brief-feedback").classList.add("submitted");
+    showToast("Briefing feedback stored");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function showBriefHistory() {
+  if (!backendAvailable) {
+    showToast("Briefing history requires the backend");
+    return;
+  }
+  try {
+    const history = await apiRequest("/api/briefings?limit=30");
+    $("#brief-history-list").innerHTML = history.length
+      ? history.map((briefing) => `
+          <article class="brief-history-item">
+            <strong>${new Date(briefing.generatedAt).toLocaleString("en-GB")}</strong>
+            <small>${briefing.feedback.useful} useful · ${briefing.feedback.notUseful} not useful</small>
+            <p>
+              ${briefing.summary.totalOpen || 0} open records ·
+              ${briefing.summary.priorityEmails || 0} high-priority emails ·
+              ${briefing.summary.meetingsToday || 0} meetings within 24 hours ·
+              ${briefing.summary.decisionPrompts || 0} decision prompts
+            </p>
+          </article>
+        `).join("")
+      : '<div class="empty-state">No saved briefings yet.</div>';
+    $("#history-dialog").showModal();
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function openRecordForm(kind) {
@@ -805,7 +864,10 @@ $("#copy-brief").addEventListener("click", async () => {
     showToast("Clipboard access is unavailable");
   }
 });
+$("#brief-history-button").addEventListener("click", showBriefHistory);
+$$(".feedback-button").forEach((button) => button.addEventListener("click", () => submitBriefFeedback(button.dataset.rating)));
 $$(".close-dialog").forEach((button) => button.addEventListener("click", () => $("#brief-dialog").close()));
+$$(".close-history").forEach((button) => button.addEventListener("click", () => $("#history-dialog").close()));
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
   if (event.target.closest(".connect-microsoft")) connectMicrosoft();
@@ -837,6 +899,7 @@ document.addEventListener("keydown", (event) => {
       clearTimeout(microsoftPollTimer);
       $("#microsoft-dialog").close();
     }
+    if ($("#history-dialog").open) $("#history-dialog").close();
   }
 });
 

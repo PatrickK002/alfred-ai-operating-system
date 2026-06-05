@@ -233,10 +233,32 @@
         <button class="icon-button close-dialog" aria-label="Close">×</button>
       </div>
       <div id="brief-content"></div>
+      <div class="brief-feedback" id="brief-feedback">
+        <div>
+          <strong>Was this briefing useful?</strong>
+          <small>Your feedback is stored locally against this briefing.</small>
+        </div>
+        <input id="brief-feedback-note" placeholder="Optional note" maxlength="2000" />
+        <button class="secondary-button feedback-button" data-rating="useful">Useful</button>
+        <button class="secondary-button feedback-button" data-rating="not_useful">Not useful</button>
+      </div>
       <div class="dialog-footer">
+        <button class="text-button" id="brief-history-button">Briefing history</button>
         <button class="secondary-button" id="copy-brief">Copy briefing</button>
         <button class="primary-button close-dialog">Done</button>
       </div>
+    </dialog>
+
+    <dialog id="history-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">INSTITUTIONAL MEMORY</p>
+          <h2>Briefing history</h2>
+          <small>Generated briefings and Patrick's feedback.</small>
+        </div>
+        <button class="icon-button close-history" aria-label="Close">×</button>
+      </div>
+      <div class="brief-history-list" id="brief-history-list"></div>
     </dialog>
 
     <dialog id="form-dialog">

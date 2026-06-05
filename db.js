@@ -173,6 +173,23 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS briefing_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    generated_at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    snapshot TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS briefing_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    briefing_id INTEGER NOT NULL REFERENCES briefing_history(id) ON DELETE CASCADE,
+    rating TEXT NOT NULL CHECK(rating IN ('useful', 'not_useful')),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
 const COMPANY_SEEDS = [
@@ -481,4 +498,95 @@ export function setIntegrationStatus(db, id, status) {
     SET status = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(status, id);
+}
+
+export function saveBriefing(db, brief) {
+  const result = db.prepare(`
+    INSERT INTO briefing_history (generated_at, source, summary, snapshot)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    brief.generatedAt,
+    brief.source || "backend",
+    JSON.stringify(brief.summary || {}),
+    JSON.stringify(brief),
+  );
+  return getBriefing(db, Number(result.lastInsertRowid));
+}
+
+export function getBriefing(db, id) {
+  const row = db.prepare(`
+    SELECT
+      h.*,
+      COUNT(f.id) AS feedback_count,
+      SUM(CASE WHEN f.rating = 'useful' THEN 1 ELSE 0 END) AS useful_count,
+      SUM(CASE WHEN f.rating = 'not_useful' THEN 1 ELSE 0 END) AS not_useful_count
+    FROM briefing_history h
+    LEFT JOIN briefing_feedback f ON f.briefing_id = h.id
+    WHERE h.id = ?
+    GROUP BY h.id
+  `).get(id);
+  if (!row) return null;
+  return {
+    id: row.id,
+    generatedAt: row.generated_at,
+    source: row.source,
+    summary: JSON.parse(row.summary),
+    snapshot: JSON.parse(row.snapshot),
+    feedback: {
+      count: row.feedback_count,
+      useful: row.useful_count || 0,
+      notUseful: row.not_useful_count || 0,
+    },
+  };
+}
+
+export function listBriefings(db, limit = 20) {
+  return db.prepare(`
+    SELECT
+      h.id,
+      h.generated_at,
+      h.source,
+      h.summary,
+      COUNT(f.id) AS feedback_count,
+      SUM(CASE WHEN f.rating = 'useful' THEN 1 ELSE 0 END) AS useful_count,
+      SUM(CASE WHEN f.rating = 'not_useful' THEN 1 ELSE 0 END) AS not_useful_count
+    FROM briefing_history h
+    LEFT JOIN briefing_feedback f ON f.briefing_id = h.id
+    GROUP BY h.id
+    ORDER BY h.generated_at DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 20, 1), 100)).map((row) => ({
+    id: row.id,
+    generatedAt: row.generated_at,
+    source: row.source,
+    summary: JSON.parse(row.summary),
+    feedback: {
+      count: row.feedback_count,
+      useful: row.useful_count || 0,
+      notUseful: row.not_useful_count || 0,
+    },
+  }));
+}
+
+export function saveBriefingFeedback(db, briefingId, { rating, note = "" }) {
+  if (!["useful", "not_useful"].includes(rating)) {
+    const error = new Error("Feedback rating must be useful or not_useful");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!db.prepare("SELECT id FROM briefing_history WHERE id = ?").get(briefingId)) {
+    const error = new Error("Briefing not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const result = db.prepare(`
+    INSERT INTO briefing_feedback (briefing_id, rating, note)
+    VALUES (?, ?, ?)
+  `).run(briefingId, rating, String(note).slice(0, 2000));
+  return {
+    id: Number(result.lastInsertRowid),
+    briefingId: Number(briefingId),
+    rating,
+    note: String(note).slice(0, 2000),
+  };
 }

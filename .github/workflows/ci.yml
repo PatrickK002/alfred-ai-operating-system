@@ -36,5 +36,8 @@ jobs:
       - name: Check Microsoft integration syntax
         run: node --check microsoft.js
 
+      - name: Check briefing intelligence syntax
+        run: node --check briefing.js
+
       - name: Check frontend syntax
         run: node --check app.js

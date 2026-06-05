@@ -241,3 +241,38 @@ This phase contains no Microsoft Graph methods for:
 - Uploading, editing, moving, or deleting files
 
 Those capabilities must wait for an explicit approval workflow and a separate permission review.
+
+## Executive Briefing V2
+
+The morning brief now applies a deterministic, explainable prioritisation layer to operating records and read-only Microsoft data.
+
+It produces:
+
+- Ranked executive priorities
+- Prioritised Outlook email with scoring reasons
+- Recorded risks plus clearly labelled email risk signals
+- Meeting preparation prompts with matched client or project context
+- Revenue opportunities
+- Recorded decisions plus clearly labelled email decision signals
+- Agent status
+
+The current analysis is rule-based rather than model-generated. It scores signals such as unread status, high importance, recency, client mentions and operational language. This keeps the first intelligence layer testable and prevents unverified model conclusions from being presented as fact.
+
+Inferred email items are labelled as signals and instruct Patrick to review the source before acting.
+
+### Briefing History and Feedback
+
+Every backend-generated briefing is stored in SQLite. Patrick can mark a briefing:
+
+- `useful`
+- `not_useful`
+
+An optional feedback note can be stored with the rating.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/briefings?limit=20` | List briefing history and feedback totals |
+| `GET` | `/api/briefings/{id}` | Read one saved briefing snapshot |
+| `POST` | `/api/briefings/{id}/feedback` | Store a useful/not-useful rating and optional note |
+
+Briefing snapshots can contain email previews, meeting context and other business information. The SQLite database must therefore be treated as sensitive local data and should use encrypted storage and formal retention controls before production deployment.
