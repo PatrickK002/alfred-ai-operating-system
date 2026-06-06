@@ -14,6 +14,17 @@ const seedData = {
       clients: ["KSPF", "Westminster City Council", "RBKC", "Islington Council"],
     },
     {
+      id: "westbridge",
+      name: "Westbridge Property Group",
+      shortName: "Westbridge",
+      symbol: "WP",
+      color: "#d7b56d",
+      purpose: "Acquire and manage cashflow-producing property assets",
+      status: "Building",
+      services: ["Property Investment", "Portfolio Management", "Acquisition Analysis", "Due Diligence"],
+      clients: [],
+    },
+    {
       id: "product",
       name: "Product Studio",
       shortName: "Product",
@@ -137,6 +148,16 @@ const seedData = {
       status: "Framework only",
     },
     {
+      id: "westbridge-property-director",
+      name: "Westbridge Property Director",
+      role: "AI Investment Director",
+      companyId: "westbridge",
+      department: "Property Investment",
+      mission: "Analyse Westbridge acquisition pipeline, portfolio cashflow, due diligence and investment risks. Advisory only.",
+      tools: [],
+      status: "Framework only",
+    },
+    {
       id: "alex",
       name: "Alex",
       role: "Growth Director",
@@ -203,6 +224,7 @@ const seedData = {
     businessEntities: [
       { id: "group", name: "Patrick King Group", entityType: "group", parentEntityId: null, companyId: null, status: "active" },
       { id: "digitize", name: "Digitize Consultants", entityType: "business", parentEntityId: "group", companyId: "digitize", status: "active" },
+      { id: "westbridge-property-group", name: "Westbridge Property Group", entityType: "business", parentEntityId: "group", companyId: "westbridge", status: "active" },
       { id: "council-assurance-platform", name: "Council Assurance Platform", entityType: "product", parentEntityId: "group", companyId: "product", status: "planned" },
       { id: "media-businesses", name: "Media Businesses", entityType: "division", parentEntityId: "group", companyId: "media", status: "planned" },
       { id: "ai-businesses", name: "AI Businesses", entityType: "division", parentEntityId: "group", companyId: "venture", status: "planned" },
@@ -273,6 +295,51 @@ const seedData = {
     futureTeamPlaceholders: [],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  property: {
+    business: {
+      id: "westbridge",
+      businessEntityId: "westbridge-property-group",
+      name: "Westbridge Property Group",
+      businessType: "Property Investment",
+      owner: "Patrick King",
+      mission: "Acquire and manage cashflow-producing property assets.",
+      targetMonthlyCashflow: 10000,
+      stretchMonthlyCashflow: 15000,
+    },
+    director: {
+      name: "Westbridge Property Director",
+      role: "AI Investment Director",
+      reportsTo: "Patrick King",
+      status: "Advisory only",
+    },
+    metrics: {
+      totalProperties: 0,
+      portfolioValue: 0,
+      netEquity: 0,
+      outstandingDebt: 0,
+      monthlyCashflow: 0,
+      annualCashflow: 0,
+      targetMonthlyCashflow: 10000,
+      stretchMonthlyCashflow: 15000,
+      cashflowTargetProgress: 0,
+      activeOpportunities: 0,
+      capitalCommitted: 0,
+      monthlyCashflowForecast: 0,
+      portfolioGrowth: 0,
+      dueDiligenceRed: 0,
+      dueDiligenceAmber: 0,
+    },
+    opportunities: [],
+    activeOpportunities: [],
+    dueDiligence: [],
+    analyses: [],
+    propertyMemory: [],
+    risks: [],
+    decisions: [],
+    rules: [],
+    pipelineStages: ["Lead", "Reviewing", "Due Diligence", "Offer Made", "Negotiating", "Exchanged", "Completed", "Rejected"],
+    boundary: { advisoryOnly: true, readOnly: true },
+  },
 };
 
 let state = loadState();
@@ -286,6 +353,7 @@ let currentBoardReportMarkdown = "";
 let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
 let sarahCurrentProjectId = null;
+let currentPropertyOpportunityId = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -338,6 +406,7 @@ async function loadDashboard() {
     if (microsoftStatus.connected) state = await apiRequest("/api/dashboard");
     semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => null);
     state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
+    state.property = await apiRequest("/api/property/dashboard").catch(() => seedData.property);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     persist();
@@ -843,6 +912,111 @@ function statusLabel(status = "") {
   return String(status || "unknown").toLowerCase();
 }
 
+function propertyOpportunityLabel(opportunity) {
+  const address = opportunity.address || opportunity.title || "Property opportunity";
+  return `${address}${opportunity.assetType ? ` · ${opportunity.assetType}` : ""}`;
+}
+
+function currentPropertyOpportunity() {
+  const property = state.property || seedData.property;
+  const opportunities = property.opportunities || [];
+  return opportunities.find((item) => String(item.id) === String(currentPropertyOpportunityId))
+    || opportunities[0]
+    || null;
+}
+
+function renderPropertyAnalysis(result = null) {
+  const property = state.property || seedData.property;
+  const latest = result || (property.analyses || [])[0];
+  if (!latest) {
+    $("#property-analysis-output").innerHTML = '<div class="empty-state">Select an opportunity and run analysis. Recommendations are advisory only.</div>';
+    return;
+  }
+  const analysis = latest.analysis || latest.results || {};
+  const rules = latest.rules || [];
+  $("#property-analysis-output").innerHTML = `
+    <div class="ai-boundary">Westbridge analysed local property records only. No offer, purchase, legal instruction, payment, communication or external property action was executed.</div>
+    <section class="ai-summary">
+      <h3>${escapeHTML(latest.opportunity?.title || "Deal analysis")}</h3>
+      <p>${escapeHTML(latest.recommendation || "Recommendation not recorded.")}</p>
+    </section>
+    <div class="project-intelligence-signals">
+      <article><small>GROSS YIELD</small><strong>${analysis.grossYield || 0}%</strong><span>Rent against purchase price.</span></article>
+      <article><small>NET YIELD</small><strong>${analysis.netYield || 0}%</strong><span>After acquisition and operating costs.</span></article>
+      <article><small>NET CASHFLOW</small><strong>${formatMoney(analysis.netMonthlyCashflow || 0)}</strong><span>Monthly estimate.</span></article>
+      <article><small>CASH LEFT</small><strong>${formatMoney(analysis.cashLeftInDeal || 0)}</strong><span>After refinance assumption.</span></article>
+    </div>
+    ${renderList("Westbridge rule review", rules, (rule) => `
+      <strong>${escapeHTML(rule.rule)}</strong>
+      <span>${escapeHTML(rule.detail || "")}</span>
+      <small>${escapeHTML(rule.status || "review")}</small>
+    `)}
+    ${renderList("Visible assumptions", analysis.assumptions || latest.assumptions || [], (assumption) => `
+      <span>${escapeHTML(assumption)}</span>
+    `)}
+  `;
+}
+
+function renderProperty() {
+  const property = state.property || seedData.property;
+  const metrics = property.metrics || {};
+  $("#property-metrics").innerHTML = [
+    ["TOTAL PROPERTIES", metrics.totalProperties],
+    ["PORTFOLIO VALUE", metrics.portfolioValue],
+    ["NET EQUITY", metrics.netEquity],
+    ["OUTSTANDING DEBT", metrics.outstandingDebt],
+    ["MONTHLY CASHFLOW", metrics.monthlyCashflow],
+    ["ANNUAL CASHFLOW", metrics.annualCashflow],
+    ["ACTIVE OPPORTUNITIES", metrics.activeOpportunities],
+    ["PIPELINE CASHFLOW", metrics.monthlyCashflowForecast],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${typeof value === "number" && !label.includes("PROPERTIES") && !label.includes("OPPORTUNITIES") ? formatMoney(value) : value || 0}</strong>
+    </article>
+  `).join("");
+
+  const progress = Math.max(0, Math.min(100, Number(metrics.cashflowTargetProgress) || 0));
+  $("#property-progress-fill").style.width = `${progress}%`;
+  $("#property-target-label").textContent = `${progress}%`;
+  $("#property-target-detail").textContent = `${formatMoney(metrics.monthlyCashflow || 0)} current monthly cashflow against ${formatMoney(metrics.targetMonthlyCashflow || 10000)} target. Pipeline forecast: ${formatMoney(metrics.monthlyCashflowForecast || 0)}.`;
+
+  const opportunities = property.opportunities || [];
+  if (!currentPropertyOpportunityId && opportunities.length) currentPropertyOpportunityId = opportunities[0].id;
+  $("#property-opportunity-list").innerHTML = opportunities.length
+    ? `<div class="project-list">${opportunities.map((opportunity) => `
+        <article class="project-card property-card ${String(opportunity.id) === String(currentPropertyOpportunityId) ? "selected" : ""}">
+          <div>
+            <span class="project-health ${statusLabel(opportunity.stage).replaceAll(" ", "-")}">${escapeHTML(opportunity.stage || "Lead")}</span>
+            <h3>${escapeHTML(opportunity.title)}</h3>
+            <p>${escapeHTML(propertyOpportunityLabel(opportunity))}</p>
+          </div>
+          <small>${formatMoney(opportunity.purchasePrice || 0)} purchase · ${formatMoney(opportunity.rentMonthly || 0)} rent · ${formatMoney(opportunity.forecastNetMonthlyCashflow || 0)} net/month</small>
+          <span class="project-card-domains">${escapeHTML(opportunity.sourceUrl || opportunity.notes || "Metadata only")}</span>
+          <button class="text-button property-select" data-property-id="${opportunity.id}">Select opportunity →</button>
+        </article>
+      `).join("")}</div>`
+    : '<div class="empty-state project-empty">No property opportunities yet. Add a manual record or URL reference to begin.</div>';
+
+  const dueDiligence = property.dueDiligence || [];
+  $("#property-due-diligence").innerHTML = dueDiligence.length
+    ? `<div class="project-record-list">${dueDiligence.slice(0, 14).map((item) => `
+        <article>
+          <strong>${escapeHTML(item.category)}</strong>
+          <small>${escapeHTML(item.status)} · ${escapeHTML(item.opportunityTitle || "")}</small>
+          <span>${escapeHTML(item.detail || "Not reviewed yet.")}</span>
+        </article>
+      `).join("")}</div>`
+    : '<div class="empty-state project-empty">No due diligence records yet.</div>';
+
+  $("#property-rules").innerHTML = (property.rules || []).length
+    ? `<div class="project-record-list">${property.rules.map((rule) => `
+        <article><strong>${escapeHTML(rule)}</strong><span>Required Westbridge investment guardrail.</span></article>
+      `).join("")}</div>`
+    : '<div class="empty-state">Westbridge rules load from the backend.</div>';
+  renderPropertyAnalysis();
+}
+
 function renderProjectItems(records, empty, renderItem) {
   return records?.length
     ? `<div class="project-record-list">${records.slice(0, 8).map(renderItem).join("")}</div>`
@@ -1035,6 +1209,7 @@ function renderSarah() {
 function renderAll() {
   renderCommand();
   renderCompanies();
+  renderProperty();
   renderProjectIntelligence();
   renderSarah();
   renderFinance();
@@ -1048,6 +1223,7 @@ function navigate(view) {
   const titles = {
     command: "Executive Command",
     companies: "Companies",
+    property: "Property",
     projects: "Project Intelligence",
     sarah: "Sarah",
     finance: "Finance",
@@ -1097,6 +1273,7 @@ function buildBrief(brief) {
       Good ${$("#day-period").textContent}, Patrick. I ranked ${brief.executivePriorities?.length || 0} executive priorities from
       ${brief.summary.totalOpen} open operating records, ${brief.emails?.length || 0} reviewed emails and
       ${brief.meetings.items?.length || 0} upcoming meetings.
+      ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -1112,9 +1289,10 @@ function buildBrief(brief) {
     ${section("5. MEETING PREPARATION", brief.meetings.items, brief.meetings.message)}
     ${section("6. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
     ${section("7. DECISION PROMPTS", brief.decisionPrompts || brief.decisions, "No decisions are currently recorded.")}
-    ${section("8. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
-    ${section("9. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("10. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
+    ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
+    ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
+    ${section("11. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
@@ -1163,6 +1341,7 @@ function buildFallbackBrief() {
     decisions: byType("decision"),
     agents: state.agents,
     emails: [],
+    property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
     microsoft: { connected: false },
@@ -1607,6 +1786,120 @@ async function askOlivia() {
     showToast("Olivia analysis generated");
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+async function refreshPropertyDashboard() {
+  if (!backendAvailable) {
+    showToast("Property dashboard requires the backend");
+    return;
+  }
+  state.property = await apiRequest("/api/property/dashboard");
+  persist();
+  renderProperty();
+}
+
+async function addPropertyOpportunity(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Property deal intake requires the backend");
+    return;
+  }
+  const address = $("#property-address").value.trim();
+  const sourceUrl = $("#property-source-url").value.trim();
+  if (!address && !sourceUrl) {
+    showToast("Add an address/title or URL reference");
+    return;
+  }
+  try {
+    const opportunity = await apiRequest("/api/property/opportunities", {
+      method: "POST",
+      body: JSON.stringify({
+        title: address || sourceUrl,
+        address,
+        purchasePrice: $("#property-purchase-price").value,
+        rentMonthly: $("#property-rent").value,
+        assetType: $("#property-asset-type").value,
+        tenure: $("#property-tenure").value,
+        refurbCost: $("#property-refurb-cost").value,
+        managementCostMonthly: $("#property-management-cost").value,
+        sourceUrl,
+        sourceType: sourceUrl ? "url_reference" : "manual",
+        userAction: "ui:property:add-opportunity",
+      }),
+    });
+    currentPropertyOpportunityId = opportunity.id;
+    $("#property-deal-form").reset();
+    await refreshPropertyDashboard();
+    showToast("Property opportunity stored");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function analyseSelectedPropertyOpportunity() {
+  if (!backendAvailable) {
+    showToast("Property analysis requires the backend");
+    return;
+  }
+  const opportunity = currentPropertyOpportunity();
+  if (!opportunity) {
+    showToast("Select or add a property opportunity first");
+    return;
+  }
+  $("#property-analysis-output").innerHTML = '<div class="ai-loading">Westbridge Property Director is analysing the deal...</div>';
+  try {
+    const result = await apiRequest(`/api/property/opportunities/${opportunity.id}/analyse`, {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:property:analyse-selected" }),
+    });
+    renderPropertyAnalysis(result);
+    await refreshPropertyDashboard();
+    renderPropertyAnalysis(result);
+    showToast("Property analysis generated");
+  } catch (error) {
+    $("#property-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
+async function searchProperty(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Property search requires the backend");
+    return;
+  }
+  const query = $("#property-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a property search topic");
+    return;
+  }
+  $("#property-search-results").innerHTML = '<div class="ai-loading">Searching Westbridge property memory...</div>';
+  try {
+    const result = await apiRequest(`/api/property/search?q=${encodeURIComponent(query)}`);
+    $("#property-search-results").innerHTML = `
+      ${renderList("Matching opportunities", result.matchingOpportunities || [], (opportunity) => `
+        <strong>${escapeHTML(opportunity.title)}</strong>
+        <span>${escapeHTML(opportunity.stage)} · ${escapeHTML(opportunity.assetType || "Unknown")} · ${formatMoney(opportunity.forecastNetMonthlyCashflow || 0)} net/month</span>
+        <small>${escapeHTML(opportunity.sourceReference || "")}</small>
+      `)}
+      ${renderList("Property memory", result.propertyMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.summary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityCategory || "local_sensitive_business_data")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+      ${renderList("Source references", result.sourceReferences || [], (source) => `
+        <strong>${escapeHTML(source.reference)}</strong>
+        <span>${escapeHTML(source.label || "")}</span>
+        <small>${escapeHTML(source.category || "")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#property-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
   }
 }
 
@@ -2190,6 +2483,12 @@ function runCommand(command) {
             : "KSPF";
       $("#project-search-form").requestSubmit();
     }
+  } else if (normalized.includes("property") || normalized.includes("westbridge") || normalized.includes("garage") || normalized.includes("cashflow")) {
+    navigate("property");
+    if (backendAvailable && (normalized.includes("westbridge") || normalized.includes("garage") || normalized.includes("cashflow"))) {
+      $("#property-search-query").value = normalized.includes("garage") ? "garage block" : normalized.includes("cashflow") ? "cashflow" : "Westbridge";
+      $("#property-search-form").requestSubmit();
+    }
   } else if (normalized.includes("finance") || normalized.includes("olivia") || normalized.includes("revenue") || normalized.includes("forecast")) {
     navigate("finance");
   } else if (normalized.includes("memory") || normalized.includes("remember")) {
@@ -2213,6 +2512,10 @@ $("#add-memory").addEventListener("click", () => openRecordForm("memory"));
 $("#add-agent").addEventListener("click", () => openRecordForm("agent"));
 $("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
+$("#refresh-property").addEventListener("click", refreshPropertyDashboard);
+$("#property-deal-form").addEventListener("submit", addPropertyOpportunity);
+$("#analyse-property-opportunity").addEventListener("click", analyseSelectedPropertyOpportunity);
+$("#property-search-form").addEventListener("submit", searchProperty);
 $("#discover-projects").addEventListener("click", discoverProjectMetadata);
 $("#project-search-form").addEventListener("submit", searchProjects);
 $("#sarah-project-select").addEventListener("change", (event) => {
@@ -2267,6 +2570,11 @@ $$(".close-history").forEach((button) => button.addEventListener("click", () => 
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
   if (event.target.closest(".connect-microsoft")) connectMicrosoft();
+  const propertyButton = event.target.closest(".property-select");
+  if (propertyButton) {
+    currentPropertyOpportunityId = propertyButton.dataset.propertyId;
+    renderProperty();
+  }
   const projectButton = event.target.closest(".project-select");
   if (projectButton) openProjectDetail(projectButton.dataset.projectId);
   const projectAnalysisButton = event.target.closest(".ask-project-analysis");

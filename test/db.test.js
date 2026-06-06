@@ -38,15 +38,16 @@ test("seeds the Phase 1 operating registry", () => {
   withDatabase((db) => {
     const dashboard = getDashboardData(db);
 
-    assert.equal(dashboard.companies.length, 4);
+    assert.equal(dashboard.companies.length, 5);
     assert.equal(dashboard.clients.length, 4);
     assert.equal(dashboard.projects.length, 5);
     assert.ok(dashboard.projects.some((project) => project.name === "Westminster"));
     assert.ok(dashboard.projects.some((project) => project.name === "Council Construction Assurance Platform"));
-    assert.equal(dashboard.agents.length, 5);
+    assert.equal(dashboard.agents.length, 6);
     assert.equal(dashboard.agents.find((agent) => agent.id === "olivia").role, "Chief Financial Officer");
+    assert.equal(dashboard.agents.find((agent) => agent.id === "westbridge-property-director").role, "AI Investment Director");
     assert.equal(dashboard.integrations.length, 9);
-    assert.equal(dashboard.operatingItems.length, 5);
+    assert.equal(dashboard.operatingItems.length, 8);
     assert.equal(dashboard.integrations.find((item) => item.id === "anthropic").status, "Planned");
   });
 });
@@ -92,8 +93,8 @@ test("stores memories and generates the brief from database state", () => {
 
     const brief = getMorningBrief(db);
 
-    assert.equal(listResource(db, "memories").length, 4);
-    assert.equal(brief.summary.risks, 2);
+    assert.equal(listResource(db, "memories").length, 5);
+    assert.equal(brief.summary.risks, 3);
     assert.equal(brief.summary.agentsPlanned, 4);
     assert.equal(brief.meetings.available, false);
     assert.match(brief.meetings.message, /not connected/i);

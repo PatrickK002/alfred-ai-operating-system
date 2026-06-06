@@ -50,6 +50,7 @@ ALFRED_DB_PATH=/path/to/alfred.db npm start
 The database is seeded only when the company registry is empty. Seed data includes:
 
 - Digitize Consultants
+- Westbridge Property Group
 - Product Studio
 - AI Venture Studio
 - Media Studio
@@ -59,7 +60,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Sarah as an active advisory Executive Specialist, plus Alex, Maya, James and Olivia as planned agent definitions
+- Sarah as an active advisory Executive Specialist, the Westbridge Property Director as an active advisory Investment Director, plus Alex, Maya, James and Olivia as planned agent definitions
 
 Database files are excluded from Git.
 
@@ -86,6 +87,17 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
+| `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
+| `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
+| `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
+| `GET` | `/api/property/opportunities` | List Westbridge acquisition opportunities |
+| `POST` | `/api/property/opportunities` | Store a manual deal or URL reference; metadata only, no scraping |
+| `GET` | `/api/property/opportunities/:id` | Read an opportunity with analyses and due diligence |
+| `PATCH` | `/api/property/opportunities/:id` | Update a local Alfred opportunity record |
+| `POST` | `/api/property/opportunities/:id/analyse` | Run advisory deal analysis and Westbridge rules review |
+| `GET` | `/api/property/opportunities/:id/due-diligence` | List due diligence checks |
+| `POST` | `/api/property/opportunities/:id/due-diligence` | Update local due diligence status |
+| `GET` | `/api/property/audit` | Property audit events |
 | `GET` | `/api/project-intelligence/dashboard` | Project portfolio dashboard, health scores and attention signals |
 | `GET` | `/api/project-intelligence/projects` | List project intelligence profiles |
 | `POST` | `/api/project-intelligence/projects` | Create a local Alfred project profile |
@@ -170,8 +182,26 @@ curl -X POST http://localhost:4173/api/actions \
 - Open opportunities
 - Open decisions
 - Agent definitions and their actual status
+- Westbridge property opportunity, due diligence and cashflow signals
+- Sarah and Project Intelligence attention signals
 
 No agent is presented as active unless its stored status says it is connected. Calendar meetings are explicitly unavailable until the calendar integration is connected.
+
+## Westbridge Property Group
+
+Westbridge is Alfred's first investment-focused business. It is modelled as a group business entity owned by Patrick King with a target of `£10,000-£15,000` net monthly property income within five years.
+
+The Westbridge Property Director is advisory only. It can:
+
+- Track portfolio metrics and acquisition pipeline stages
+- Store manual deal intake and URL references from Rightmove, Zoopla, OnTheMarket or auction sites
+- Store document upload placeholders as metadata only
+- Calculate illustrative SDLT, acquisition costs, gross yield, net yield, ROI, ROCE, net monthly cashflow, refinance potential and cash left in deal
+- Apply Westbridge rules including no HMOs, cashflow first, management/acquisition cost inclusion and capital preservation
+- Track legal, planning, flood, EPC, insurance, survey, finance, tenancy and environmental due diligence
+- Add property summaries to Alfred Memory and Voyage semantic retrieval when enabled
+
+It cannot buy property, make offers, send communications, issue legal instructions, connect to bank accounts, process payments or provide regulated financial advice. All recommendations require Patrick review and professional due diligence.
 
 ## Integration States
 
@@ -201,7 +231,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence and project intelligence.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah and Westbridge property intelligence.
 
 ## Architecture
 
@@ -212,6 +242,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voyage.js` - Voyage embeddings client and vector helpers
 - `semantic-memory.js` - SQLite-backed semantic indexing, search and Claude context retrieval
 - `financial.js` - Olivia CFO calculations, order book import persistence, board reports and read-only finance audits
+- `property.js` - Westbridge portfolio metrics, deal analysis, rules engine, due diligence, property memory and audit logging
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector

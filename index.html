@@ -34,6 +34,9 @@
           <button class="nav-item" data-view="companies">
             <span class="nav-icon">◇</span> Companies
           </button>
+          <button class="nav-item" data-view="property">
+            <span class="nav-icon">P</span> Property
+          </button>
           <button class="nav-item" data-view="projects">
             <span class="nav-icon">▣</span> Projects
           </button>
@@ -176,6 +179,123 @@
             <button class="secondary-button" id="add-operating-item">+ Add operating item</button>
           </div>
           <div class="portfolio-grid" id="portfolio-grid"></div>
+        </section>
+
+        <section class="view" id="property-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">WESTBRIDGE PROPERTY GROUP</p>
+              <h2>Property investment command</h2>
+              <p>Portfolio metrics, acquisition pipeline, due diligence and advisory-only property analysis for Westbridge.</p>
+            </div>
+            <div class="property-actions">
+              <button class="secondary-button" id="refresh-property">Refresh property</button>
+              <button class="primary-button" id="analyse-property-opportunity">Analyse selected deal</button>
+            </div>
+          </div>
+          <div class="approval-boundary property-boundary">
+            <strong>Advisory-only investment mode</strong>
+            <span>The Westbridge Property Director can analyse and recommend. Alfred cannot buy property, make offers, issue legal instructions, communicate externally or provide regulated financial advice.</span>
+          </div>
+          <div class="property-metrics" id="property-metrics"></div>
+          <section class="panel property-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">CASHFLOW TARGET</p>
+                <h3>£10,000/month progress</h3>
+              </div>
+              <span id="property-target-label" class="count-badge">0%</span>
+            </div>
+            <div class="property-progress">
+              <span id="property-progress-fill"></span>
+            </div>
+            <p id="property-target-detail" class="core-message">No portfolio cashflow recorded yet.</p>
+          </section>
+          <div class="property-layout">
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ACQUISITION PIPELINE</p>
+                  <h3>Opportunities</h3>
+                </div>
+              </div>
+              <div id="property-opportunity-list"></div>
+            </section>
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DEAL INTAKE</p>
+                  <h3>Manual or URL reference</h3>
+                </div>
+              </div>
+              <form id="property-deal-form" class="property-form">
+                <input id="property-address" placeholder="Address or opportunity title" />
+                <input id="property-purchase-price" type="number" min="0" step="1000" placeholder="Purchase price" />
+                <input id="property-rent" type="number" min="0" step="50" placeholder="Monthly rent" />
+                <select id="property-asset-type">
+                  <option>Single let</option>
+                  <option>Garage block</option>
+                  <option>Commercial</option>
+                  <option>Mixed use</option>
+                  <option>HMO</option>
+                </select>
+                <input id="property-tenure" placeholder="Tenure, e.g. Freehold" />
+                <input id="property-refurb-cost" type="number" min="0" step="500" placeholder="Refurb cost" />
+                <input id="property-management-cost" type="number" min="0" step="10" placeholder="Monthly management cost" />
+                <input id="property-source-url" placeholder="Rightmove / Zoopla / auction URL reference" />
+                <button class="secondary-button" type="submit">Add opportunity</button>
+              </form>
+              <small class="form-hint">URLs are stored as references only. Alfred does not scrape property websites in this phase.</small>
+            </section>
+          </div>
+          <div class="property-layout">
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DUE DILIGENCE</p>
+                  <h3>Risk checks</h3>
+                </div>
+              </div>
+              <div id="property-due-diligence"></div>
+            </section>
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PROPERTY ANALYSIS</p>
+                  <h3>Westbridge Director output</h3>
+                </div>
+              </div>
+              <div id="property-analysis-output">
+                <div class="empty-state">Select an opportunity and run analysis. Recommendations are advisory only.</div>
+              </div>
+            </section>
+          </div>
+          <div class="property-layout">
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PROPERTY MEMORY</p>
+                  <h3>Stored context</h3>
+                </div>
+              </div>
+              <form id="property-search-form" class="project-search-form">
+                <input id="property-search-query" placeholder='Try “garage block”, “Westbridge target” or “cashflow”' />
+                <button class="secondary-button" type="submit">Search Property</button>
+              </form>
+              <div id="property-search-results" class="project-search-results">
+                <div class="empty-state">Search property opportunities, analyses, due diligence and memory references.</div>
+              </div>
+            </section>
+            <section class="panel property-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">WESTBRIDGE RULES</p>
+                  <h3>Investment guardrails</h3>
+                </div>
+              </div>
+              <div id="property-rules"></div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="projects-view">
