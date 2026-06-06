@@ -46,6 +46,22 @@ import {
   saveMondayFinancialSummaries,
 } from "./financial.js";
 import { MondayFinanceClient } from "./monday-finance.js";
+import {
+  PROJECT_READ_ONLY_BOUNDARY,
+  buildProjectAnalysisInput,
+  createProjectProfile,
+  discoverMicrosoftProjectSignals,
+  getProjectDashboard,
+  getProjectDetail,
+  importProjectDocuments,
+  importProjectEmailSignals,
+  importProjectMeetings,
+  listProjectAudit,
+  listProjectProfiles,
+  projectAttentionForBriefing,
+  searchProjectKnowledge,
+  updateProjectProfile,
+} from "./project-intelligence.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -160,6 +176,61 @@ async function handleApi(request, response, url) {
     });
     return sendJson(response, 200, result);
   }
+  if (url.pathname === "/api/projects/search" && request.method === "GET") {
+    const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+    });
+  }
+  if (url.pathname === "/api/project-intelligence/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getProjectDashboard(db));
+  }
+  if (url.pathname === "/api/project-intelligence/projects") {
+    if (request.method === "GET") return sendJson(response, 200, listProjectProfiles(db));
+    if (request.method === "POST") {
+      const profile = createProjectProfile(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, profile);
+    }
+  }
+  const projectDetailMatch = url.pathname.match(/^\/api\/project-intelligence\/projects\/(\d+)$/);
+  if (projectDetailMatch) {
+    const projectId = Number(projectDetailMatch[1]);
+    if (request.method === "GET") {
+      const detail = getProjectDetail(db, projectId);
+      return detail ? sendJson(response, 200, detail) : sendJson(response, 404, { error: "Project profile not found" });
+    }
+    if (request.method === "PATCH" || request.method === "PUT") {
+      const profile = updateProjectProfile(db, projectId, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, profile);
+    }
+  }
+  const projectImportMatch = url.pathname.match(/^\/api\/project-intelligence\/projects\/(\d+)\/(documents|emails|meetings)$/);
+  if (projectImportMatch && request.method === "POST") {
+    const projectId = Number(projectImportMatch[1]);
+    const kind = projectImportMatch[2];
+    const body = await readJson(request);
+    const result = kind === "documents"
+      ? importProjectDocuments(db, projectId, body.files || body.documents || [])
+      : kind === "emails"
+        ? importProjectEmailSignals(db, projectId, body.emails || body.messages || [])
+        : importProjectMeetings(db, projectId, body.meetings || []);
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, { ...result, boundary: PROJECT_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/project-intelligence/discover-microsoft" && request.method === "POST") {
+    const result = await discoverMicrosoftProjectSignals(db, microsoft, await readJson(request));
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, { ...result, boundary: PROJECT_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/project-intelligence/audit" && request.method === "GET") {
+    return sendJson(response, 200, listProjectAudit(db, url.searchParams.get("limit") || 50));
+  }
   if (url.pathname === "/api/financial/dashboard" && request.method === "GET") {
     return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)));
   }
@@ -216,6 +287,7 @@ async function handleApi(request, response, url) {
         "opportunities",
         "approval_queue",
         "briefing_history",
+        context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
     });
@@ -248,6 +320,42 @@ async function handleApi(request, response, url) {
       ...result,
       relatedMemory: context.retrievedMemoryContext.records,
       memoryContext: memoryContextSummary(context.retrievedMemoryContext),
+    });
+  }
+  if (url.pathname === "/api/ai/project-analysis" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.projectProfileId) {
+      return sendJson(response, 400, { error: "projectProfileId is required" });
+    }
+    const detail = getProjectDetail(db, Number(body.projectProfileId), { calculateHealth: false });
+    if (!detail) return sendJson(response, 404, { error: "Project profile not found" });
+    const memoryContext = await semanticMemory.retrieveContext(memoryQueryForProject(detail), {
+      maxRecords: 8,
+      maxTokens: 1400,
+    });
+    const retrievedMemoryContext = {
+      ...memoryContext,
+      records: memoryContext.records.map(memoryRecordForClaude),
+    };
+    const input = buildProjectAnalysisInput(db, Number(body.projectProfileId), { retrievedMemoryContext });
+    const result = await aiReasoning.analyzeProject(input, {
+      userAction: body.userAction || "project-intelligence:ask-alfred",
+      dataCategories: [
+        "project_profile",
+        input.linkedRisks.length ? "project_risks" : "",
+        input.linkedActions.length ? "project_actions" : "",
+        input.linkedDecisions.length ? "project_decisions" : "",
+        input.linkedDocumentMetadata.length ? "project_document_metadata" : "",
+        input.linkedMeetings.length ? "project_meetings" : "",
+        input.linkedEmailSignals.length ? "project_email_signals" : "",
+        input.relevantMemory.length ? "semantic_memory" : "",
+        input.oliviaFinancialContext?.linkedOrderBookEntries ? "olivia_financial_context" : "",
+      ],
+    });
+    return sendJson(response, 200, {
+      ...result,
+      relatedMemory: input.relevantMemory,
+      memoryContext: memoryContextSummary(retrievedMemoryContext),
     });
   }
   if (url.pathname === "/api/approvals") {
@@ -429,10 +537,27 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.riskSignals = analysis.riskSignals;
   brief.decisionPrompts = analysis.decisionPrompts;
   brief.executivePriorities = analysis.executivePriorities;
+  brief.projectIntelligence = projectAttentionForBriefing(db);
+  brief.executivePriorities = [
+    ...brief.projectIntelligence.projectsNeedingAttention.map((project, index) => ({
+      ...project,
+      rank: index + 1,
+      category: "project",
+      score: project.priority === "high" ? 82 : 58,
+    })),
+    ...brief.executivePriorities,
+  ]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
   brief.summary.priorityEmails = analysis.priorityEmails.filter((email) => email.priority === "high").length;
   brief.summary.meetingsToday = analysis.meetingPreparation.filter((meeting) => meeting.hoursUntil >= 0 && meeting.hoursUntil <= 24).length;
   brief.summary.riskSignals = analysis.riskSignals.length;
   brief.summary.decisionPrompts = analysis.decisionPrompts.length;
+  brief.summary.projectsNeedingAttention = brief.projectIntelligence.projectsNeedingAttention.length;
+  brief.summary.projectRisks = brief.projectIntelligence.projectRisks.length;
+  brief.summary.overdueProjectActions = brief.projectIntelligence.overdueProjectActions.length;
+  brief.summary.projectsWithMissingInformation = brief.projectIntelligence.projectsWithMissingInformation.length;
   brief.analysisMethod = "deterministic-v1";
 
   if (!save) return brief;
@@ -487,6 +612,7 @@ function sourceReferencesFor(context) {
     ...compactRecords(context.risks, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "risk", record)),
     ...compactRecords(context.decisions, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "decision", record)),
     ...compactRecords(context.opportunities, ["id", "title"]).map((record) => sourceReference("opportunity", record)),
+    ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.outlookSignals, ["id", "title", "subject"]).map((record) => sourceReference("outlook", record)),
     ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
     ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
@@ -545,6 +671,7 @@ function memoryQueryForBriefing(context) {
     ...(context.risks || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.decisions || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.opportunities || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -557,6 +684,20 @@ function memoryQueryForDecision(context) {
     ...(context.relatedItems || []).map((item) => `${item.type || ""} ${item.title || ""} ${item.detail || ""}`),
     ...(context.risks || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.approvals || []).map((item) => `${item.title || ""} ${item.targetSystem || ""}`),
+  ].join(" ").slice(0, 2000);
+}
+
+function memoryQueryForProject(detail) {
+  return [
+    detail.profile.projectName,
+    detail.profile.clientName,
+    detail.profile.serviceLine,
+    detail.profile.currentPhase,
+    detail.profile.summary,
+    ...(detail.risks || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(detail.actions || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(detail.decisions || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(detail.documents || []).map((item) => `${item.name || ""} ${item.classification || ""}`),
   ].join(" ").slice(0, 2000);
 }
 
@@ -580,6 +721,11 @@ function buildAiBriefingContext(briefing, body = {}) {
     risks: compactRecords(body.risks || briefing.riskSignals || briefing.risks || [], ["id", "title", "detail", "priority", "confidence", "sourceType", "sourceId"], 8),
     decisions: compactRecords(body.decisions || briefing.decisionPrompts || briefing.decisions || [], ["id", "title", "detail", "priority", "prompt", "sourceType", "sourceId"], 8),
     opportunities: compactRecords(body.opportunities || briefing.opportunities || [], ["id", "title", "detail", "priority", "due", "status"], 6),
+    projectIntelligence: {
+      projectsNeedingAttention: compactRecords(briefing.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "detail", "priority", "sourceType", "sourceId"], 6),
+      overdueProjectActions: compactRecords(briefing.projectIntelligence?.overdueProjectActions || [], ["id", "title", "detail", "status", "due", "projectName"], 6),
+      projectsWithMissingInformation: compactRecords(briefing.projectIntelligence?.projectsWithMissingInformation || [], ["projectProfileId", "projectName", "missing"], 6),
+    },
     approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
     briefingHistory: history,
     boundaries: {

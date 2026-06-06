@@ -233,6 +233,21 @@ const seedData = {
     monday: { invoices: [], readOnly: true },
     boundary: { readOnly: true },
   },
+  projectIntelligence: {
+    metrics: {
+      activeProjects: 0,
+      highRiskProjects: 0,
+      overdueActions: 0,
+      recentlyUpdatedProjects: 0,
+      projectsWithMissingInformation: 0,
+    },
+    projects: [],
+    highRiskProjects: [],
+    overdueActions: [],
+    recentlyUpdatedProjects: [],
+    missingInformation: [],
+    boundary: { readOnly: true },
+  },
 };
 
 let state = loadState();
@@ -244,6 +259,7 @@ let memoryFilter = "all";
 let semanticMemoryStatus = null;
 let currentBoardReportMarkdown = "";
 let financeScope = { type: "group", id: "group" };
+let currentProjectDetail = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -296,6 +312,7 @@ async function loadDashboard() {
     if (microsoftStatus.connected) state = await apiRequest("/api/dashboard");
     semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => null);
     state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
+    state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -795,9 +812,108 @@ function renderFinance() {
   `;
 }
 
+function statusLabel(status = "") {
+  return String(status || "unknown").toLowerCase();
+}
+
+function renderProjectItems(records, empty, renderItem) {
+  return records?.length
+    ? `<div class="project-record-list">${records.slice(0, 8).map(renderItem).join("")}</div>`
+    : `<div class="empty-state project-empty">${empty}</div>`;
+}
+
+function renderProjectDetail(detail) {
+  if (!detail) {
+    $("#project-detail").innerHTML = '<div class="empty-state project-empty">Select a project to inspect risks, actions, documents, meetings, email signals, memory and financial context.</div>';
+    return;
+  }
+  const profile = detail.profile;
+  const health = detail.healthScore || {};
+  $("#project-detail").innerHTML = `
+    <div class="project-detail-header">
+      <div>
+        <span class="project-health ${statusLabel(health.status)}">${escapeHTML(health.status || "unknown")}</span>
+        <h3>${escapeHTML(profile.projectName)}</h3>
+        <p>${escapeHTML(profile.clientName || "Internal / product")} · ${escapeHTML(profile.serviceLine || "Unassigned")} · ${escapeHTML(profile.currentPhase || "Unknown phase")}</p>
+      </div>
+      <button class="secondary-button ask-project-analysis" data-project-id="${profile.id}">Ask Alfred to analyse</button>
+    </div>
+    <div class="project-health-card">
+      <strong>${health.score ?? 0}/100</strong>
+      <span>${escapeHTML(health.explanation || "No health score calculated.")}</span>
+    </div>
+    <p>${escapeHTML(profile.summary || "No project summary recorded yet.")}</p>
+    <div class="project-detail-grid">
+      <section>
+        <h4>Risks</h4>
+        ${renderProjectItems(detail.risks || [], "No project risks recorded.", (risk) => `
+          <article><strong>${escapeHTML(risk.title)}</strong><small>${escapeHTML(risk.severity)} · ${escapeHTML(risk.confidence || "confirmed")}</small><span>${escapeHTML(risk.detail)}</span></article>
+        `)}
+      </section>
+      <section>
+        <h4>Actions</h4>
+        ${renderProjectItems(detail.actions || [], "No project actions recorded.", (action) => `
+          <article><strong>${escapeHTML(action.title)}</strong><small>${escapeHTML(action.status)} · ${escapeHTML(action.due || "No due date")}</small><span>${escapeHTML(action.detail)}</span></article>
+        `)}
+      </section>
+      <section>
+        <h4>Documents</h4>
+        ${renderProjectItems(detail.documents || [], "No Microsoft document metadata linked yet.", (document) => `
+          <article><strong>${escapeHTML(document.name)}</strong><small>${escapeHTML(document.classification)} · ${escapeHTML(document.associationReason || "metadata")}</small><span>${escapeHTML(document.path || document.webUrl || "No path captured")}</span></article>
+        `)}
+      </section>
+      <section>
+        <h4>Meetings & Emails</h4>
+        ${renderProjectItems([...(detail.meetings || []), ...(detail.emailSignals || [])], "No related meetings or email signals linked yet.", (item) => `
+          <article><strong>${escapeHTML(item.title || item.subject)}</strong><small>${escapeHTML(item.startDatetime || item.receivedDatetime || "")} · ${escapeHTML(item.associationReason || "inferred association")}</small><span>${escapeHTML(item.bodyPreview || item.webUrl || "")}</span></article>
+        `)}
+      </section>
+    </div>
+    <div class="project-finance-summary">
+      <h4>Olivia financial link</h4>
+      <span>${detail.financialSummary?.linkedOrderBookEntries || 0} order book link(s) · secured ${formatMoney(detail.financialSummary?.securedRevenue || 0)} · weighted ${formatMoney(detail.financialSummary?.weightedForecastRevenue || 0)}</span>
+    </div>
+    <div id="project-analysis-output"></div>
+  `;
+}
+
+function renderProjectIntelligence() {
+  const projectState = state.projectIntelligence || seedData.projectIntelligence;
+  const metrics = projectState.metrics || {};
+  $("#project-dashboard-metrics").innerHTML = [
+    ["ACTIVE PROJECTS", metrics.activeProjects],
+    ["HIGH RISK", metrics.highRiskProjects],
+    ["OVERDUE ACTIONS", metrics.overdueActions],
+    ["RECENTLY UPDATED", metrics.recentlyUpdatedProjects],
+    ["MISSING INFO", metrics.projectsWithMissingInformation],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  const projects = projectState.projects || [];
+  $("#project-list").innerHTML = projects.length
+    ? `<div class="project-list">${projects.map((project) => `
+        <article class="project-card" data-project-id="${project.profile.id}">
+          <div>
+            <span class="project-health ${statusLabel(project.healthScore?.status)}">${escapeHTML(project.healthScore?.status || "unknown")}</span>
+            <h3>${escapeHTML(project.profile.projectName)}</h3>
+            <p>${escapeHTML(project.profile.clientName || "Internal / product")} · ${escapeHTML(project.profile.currentPhase || "Unknown phase")}</p>
+          </div>
+          <small>${project.documentCount || 0} docs · ${project.riskCount || 0} risks · ${project.actionCount || 0} actions</small>
+          <button class="text-button project-select" data-project-id="${project.profile.id}">Open project →</button>
+        </article>
+      `).join("")}</div>`
+    : '<div class="empty-state project-empty">No project profiles found. Start the backend to load project intelligence.</div>';
+  renderProjectDetail(currentProjectDetail);
+}
+
 function renderAll() {
   renderCommand();
   renderCompanies();
+  renderProjectIntelligence();
   renderFinance();
   renderMemory();
   renderAgents();
@@ -809,6 +925,7 @@ function navigate(view) {
   const titles = {
     command: "Executive Command",
     companies: "Companies",
+    projects: "Project Intelligence",
     finance: "Finance",
     memory: "Memory",
     agents: "AI Executive Team",
@@ -856,6 +973,7 @@ function buildBrief(brief) {
       Good ${$("#day-period").textContent}, Patrick. I ranked ${brief.executivePriorities?.length || 0} executive priorities from
       ${brief.summary.totalOpen} open operating records, ${brief.emails?.length || 0} reviewed emails and
       ${brief.meetings.items?.length || 0} upcoming meetings.
+      ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
     </div>
     ${section("1. EXECUTIVE PRIORITIES", (brief.executivePriorities || []).map((item) => ({
@@ -869,7 +987,8 @@ function buildBrief(brief) {
     ${section("5. MEETING PREPARATION", brief.meetings.items, brief.meetings.message)}
     ${section("6. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
     ${section("7. DECISION PROMPTS", brief.decisionPrompts || brief.decisions, "No decisions are currently recorded.")}
-    ${section("8. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${section("8. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
+    ${section("9. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
@@ -918,6 +1037,7 @@ function buildFallbackBrief() {
     decisions: byType("decision"),
     agents: state.agents,
     emails: [],
+    projectIntelligence: { projectsNeedingAttention: [] },
     microsoft: { connected: false },
     source: "localStorage",
   };
@@ -1363,6 +1483,122 @@ async function askOlivia() {
   }
 }
 
+async function refreshProjectIntelligence() {
+  if (!backendAvailable) {
+    showToast("Project intelligence requires the backend");
+    return;
+  }
+  state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard");
+  persist();
+  renderProjectIntelligence();
+}
+
+async function openProjectDetail(projectId) {
+  if (!backendAvailable) {
+    showToast("Project detail requires the backend");
+    return;
+  }
+  try {
+    currentProjectDetail = await apiRequest(`/api/project-intelligence/projects/${projectId}`);
+    renderProjectDetail(currentProjectDetail);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function discoverProjectMetadata() {
+  if (!backendAvailable) {
+    showToast("Project discovery requires the backend");
+    return;
+  }
+  try {
+    showToast("Discovering Microsoft project metadata...");
+    const result = await apiRequest("/api/project-intelligence/discover-microsoft", { method: "POST", body: "{}" });
+    await refreshProjectIntelligence();
+    if (currentProjectDetail) await openProjectDetail(currentProjectDetail.profile.id);
+    showToast(`Checked ${result.projectsChecked} project(s) in read-only mode`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function searchProjects(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Project search requires the backend");
+    return;
+  }
+  const query = $("#project-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a project search topic");
+    return;
+  }
+  $("#project-search-results").innerHTML = '<div class="ai-loading">Searching project intelligence...</div>';
+  try {
+    const result = await apiRequest(`/api/projects/search?q=${encodeURIComponent(query)}`);
+    $("#project-search-results").innerHTML = `
+      ${renderList("Matching projects", result.matchingProjects, (project) => `
+        <strong>${escapeHTML(project.projectName)}</strong>
+        <span>${escapeHTML(project.clientName || "Internal / product")} · ${escapeHTML(project.currentPhase || "")}</span>
+        <small>Relevance ${project.relevanceScore}</small>
+      `)}
+      ${renderList("Relevant documents", result.relevantDocuments, (document) => `
+        <strong>${escapeHTML(document.name)}</strong>
+        <span>${escapeHTML(document.classification || "Unknown")} · ${escapeHTML(document.projectName || "")}</span>
+        <small>${escapeHTML(document.path || document.webUrl || "")}</small>
+      `)}
+      ${renderList("Memory references", result.semanticMemory || result.memoryReferences || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || memory.summary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#project-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
+async function askProjectAnalysis(projectId) {
+  if (!backendAvailable) {
+    showToast("Project analysis requires the backend");
+    return;
+  }
+  try {
+    $("#project-analysis-output").innerHTML = '<div class="ai-loading">Alfred is analysing the project...</div>';
+    const result = await apiRequest("/api/ai/project-analysis", {
+      method: "POST",
+      body: JSON.stringify({ projectProfileId: Number(projectId), userAction: "ui:project:ask-alfred" }),
+    });
+    const analysis = result.analysis || {};
+    $("#project-analysis-output").innerHTML = `
+      <div class="ai-boundary">Claude analysed project records, metadata, memory and Olivia context only. No files, emails, calendar events, SharePoint records, Monday boards or financial systems were modified.</div>
+      <section class="ai-summary">
+        <h3>Project summary</h3>
+        <p>${escapeHTML(analysis.executiveProjectSummary || analysis.currentStatus || "No analysis returned.")}</p>
+      </section>
+      ${renderList("Key risks", analysis.keyRisks || [], (risk) => `
+        <strong>${escapeHTML(risk.title)}</strong>
+        <span>${escapeHTML(risk.assessment)}</span>
+        <small>${escapeHTML(risk.severity)} · ${escapeHTML(risk.sourceReference)}</small>
+      `)}
+      ${renderList("Missing information", analysis.missingInformation || [], (item) => `
+        <strong>${escapeHTML(item.item)}</strong>
+        <span>${escapeHTML(item.whyItMatters)}</span>
+        <small>${escapeHTML(item.sourceReference)}</small>
+      `)}
+      ${renderList("Recommended next actions", analysis.recommendedNextActions || [], (item) => `
+        <strong>${escapeHTML(item.action)}</strong>
+        <span>${escapeHTML(item.owner)} · ${escapeHTML(item.timing)}</span>
+        <small>${item.requiresApproval ? "Approval required before external action" : "Recommendation only"} · ${escapeHTML(item.sourceReference)}</small>
+      `)}
+    `;
+    showToast("Project analysis generated");
+  } catch (error) {
+    $("#project-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
 async function reviewApproval(id, decision) {
   if (!backendAvailable) {
     showToast("Approvals require the backend audit trail");
@@ -1571,14 +1807,22 @@ function runCommand(command) {
   } else if (normalized.includes("opportun")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "opportunity").length} active opportunity record(s)`);
+  } else if (normalized.includes("project") || normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("kspf")) {
+    navigate("projects");
+    if (backendAvailable && (normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("kspf"))) {
+      $("#project-search-query").value = normalized.includes("westminster")
+        ? "Westminster"
+        : normalized.includes("rbkc")
+          ? "RBKC"
+          : normalized.includes("islington")
+            ? "Islington"
+            : "KSPF";
+      $("#project-search-form").requestSubmit();
+    }
   } else if (normalized.includes("finance") || normalized.includes("olivia") || normalized.includes("revenue") || normalized.includes("forecast")) {
     navigate("finance");
-  } else if (normalized.includes("memory") || normalized.includes("remember") || normalized.includes("westminster")) {
+  } else if (normalized.includes("memory") || normalized.includes("remember")) {
     navigate("memory");
-    if (normalized.includes("westminster")) {
-      $("#memory-search").value = "Westminster";
-      renderMemory();
-    }
   } else if (normalized.includes("agent") || normalized.includes("team")) {
     navigate("agents");
   } else if (normalized.includes("approval") || normalized.includes("approve")) {
@@ -1598,6 +1842,8 @@ $("#add-memory").addEventListener("click", () => openRecordForm("memory"));
 $("#add-agent").addEventListener("click", () => openRecordForm("agent"));
 $("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
+$("#discover-projects").addEventListener("click", discoverProjectMetadata);
+$("#project-search-form").addEventListener("submit", searchProjects);
 $("#import-order-book").addEventListener("click", () => $("#order-book-file").click());
 $("#order-book-file").addEventListener("change", importOrderBookFile);
 $("#finance-scope").addEventListener("change", changeFinanceScope);
@@ -1644,6 +1890,10 @@ $$(".close-history").forEach((button) => button.addEventListener("click", () => 
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
   if (event.target.closest(".connect-microsoft")) connectMicrosoft();
+  const projectButton = event.target.closest(".project-select");
+  if (projectButton) openProjectDetail(projectButton.dataset.projectId);
+  const projectAnalysisButton = event.target.closest(".ask-project-analysis");
+  if (projectAnalysisButton) askProjectAnalysis(projectAnalysisButton.dataset.projectId);
   const approvalButton = event.target.closest(".approval-decision");
   if (approvalButton) reviewApproval(approvalButton.dataset.approvalId, approvalButton.dataset.decision);
   const preflightButton = event.target.closest(".approval-preflight");

@@ -34,6 +34,9 @@
           <button class="nav-item" data-view="companies">
             <span class="nav-icon">◇</span> Companies
           </button>
+          <button class="nav-item" data-view="projects">
+            <span class="nav-icon">▣</span> Projects
+          </button>
           <button class="nav-item" data-view="finance">
             <span class="nav-icon">£</span> Finance
           </button>
@@ -170,6 +173,59 @@
             <button class="secondary-button" id="add-operating-item">+ Add operating item</button>
           </div>
           <div class="portfolio-grid" id="portfolio-grid"></div>
+        </section>
+
+        <section class="view" id="projects-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">PROJECT INTELLIGENCE</p>
+              <h2>Project portfolio</h2>
+              <p>Read-only project knowledge from Alfred records, Microsoft 365 metadata, memory and Olivia financial context.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="discover-projects">Discover Microsoft metadata</button>
+            </div>
+          </div>
+          <div class="approval-boundary project-boundary">
+            <strong>Read-only project mode</strong>
+            <span>Alfred may classify, associate and analyse project metadata. It cannot edit files, send email, update calendars or write to SharePoint, OneDrive, Monday.com or finance systems.</span>
+          </div>
+          <div class="project-metrics" id="project-dashboard-metrics"></div>
+          <div class="project-layout">
+            <section class="panel project-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PORTFOLIO</p>
+                  <h3>Projects needing attention</h3>
+                </div>
+              </div>
+              <div id="project-list"></div>
+            </section>
+            <section class="panel project-panel project-detail-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DETAIL</p>
+                  <h3>Project intelligence</h3>
+                </div>
+              </div>
+              <div id="project-detail"></div>
+            </section>
+          </div>
+          <section class="panel project-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SEARCH</p>
+                <h3>Search project knowledge</h3>
+              </div>
+            </div>
+            <form id="project-search-form" class="project-search-form">
+              <input id="project-search-query" placeholder='Try “Westminster”, “COBie risk” or “KSPF documents”' />
+              <button class="secondary-button" type="submit">Search Projects</button>
+            </form>
+            <div id="project-search-results" class="project-search-results">
+              <div class="empty-state">Search project records, document metadata, risks, actions, decisions and memory links.</div>
+            </div>
+          </section>
         </section>
 
         <section class="view" id="finance-view">

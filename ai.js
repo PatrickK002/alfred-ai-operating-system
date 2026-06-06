@@ -57,5 +57,13 @@ export function createAiReasoningService({ db, client, onConnected = () => {} })
         analyze: () => client.analyzeDecision(input),
       });
     },
+    analyzeProject(input, metadata = {}) {
+      return run({
+        analysisType: "project_analysis",
+        userAction: metadata.userAction || "api:ai-project-analysis",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeProject(input),
+      });
+    },
   };
 }

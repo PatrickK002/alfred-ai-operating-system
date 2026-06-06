@@ -134,6 +134,85 @@ export const DECISION_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+export const PROJECT_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    executiveProjectSummary: { type: "string" },
+    currentStatus: { type: "string" },
+    keyRisks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          assessment: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["title", "assessment", "severity", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    missingInformation: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          item: { type: "string" },
+          whyItMatters: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["item", "whyItMatters", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    recommendedNextActions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          owner: { type: "string" },
+          timing: { type: "string" },
+          requiresApproval: { type: "boolean" },
+          sourceReference: { type: "string" },
+        },
+        required: ["action", "owner", "timing", "requiresApproval", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    decisionsRequired: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          decision: { type: "string" },
+          whyNow: { type: "string" },
+          patrickApprovalRequired: { type: "boolean" },
+          sourceReference: { type: "string" },
+        },
+        required: ["decision", "whyNow", "patrickApprovalRequired", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+    assumptions: { type: "array", items: { type: "string" } },
+    sourceRecordReferences: { type: "array", items: sourceReferenceSchema },
+  },
+  required: [
+    "executiveProjectSummary",
+    "currentStatus",
+    "keyRisks",
+    "missingInformation",
+    "recommendedNextActions",
+    "decisionsRequired",
+    "confidenceLevel",
+    "assumptions",
+    "sourceRecordReferences",
+  ],
+  additionalProperties: false,
+};
+
 function createConfigurationError() {
   const error = new Error("Anthropic is not configured. Set ANTHROPIC_API_KEY and restart Alfred.");
   error.statusCode = 503;
@@ -180,6 +259,16 @@ export class AnthropicClient {
       input,
       schema: DECISION_OUTPUT_SCHEMA,
       maxTokens: 1600,
+    });
+  }
+
+  async analyzeProject(input) {
+    return this.requestStructured({
+      analysisType: "project_analysis",
+      instruction: "Analyse the supplied project intelligence context for Patrick. Distinguish confirmed records, inferred associations, assumptions and missing information. Do not claim full documents were read unless fullDocumentContentsRetrieved is true.",
+      input,
+      schema: PROJECT_OUTPUT_SCHEMA,
+      maxTokens: 2200,
     });
   }
 

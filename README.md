@@ -58,7 +58,8 @@ The database is seeded only when the company registry is empty. Seed data includ
 - RBKC
 - Islington Council
 - Council Construction Assurance Platform
-- Sarah, Alex, Maya and James as planned agent definitions
+- Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
+- Sarah, Alex, Maya, James and Olivia as planned agent definitions
 
 Database files are excluded from Git.
 
@@ -85,6 +86,17 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
+| `GET` | `/api/project-intelligence/dashboard` | Project portfolio dashboard, health scores and attention signals |
+| `GET` | `/api/project-intelligence/projects` | List project intelligence profiles |
+| `POST` | `/api/project-intelligence/projects` | Create a local Alfred project profile |
+| `GET` | `/api/project-intelligence/projects/:id` | Project detail with risks, actions, documents, meetings, email signals, memory and finance context |
+| `PATCH` | `/api/project-intelligence/projects/:id` | Update a local Alfred project profile |
+| `POST` | `/api/project-intelligence/projects/:id/documents` | Import read-only Microsoft file metadata for a project |
+| `POST` | `/api/project-intelligence/projects/:id/emails` | Import compact read-only Outlook email signals for a project |
+| `POST` | `/api/project-intelligence/projects/:id/meetings` | Import read-only calendar meeting metadata for a project |
+| `POST` | `/api/project-intelligence/discover-microsoft` | Discover project file/email/calendar metadata using existing Microsoft read-only access |
+| `GET` | `/api/projects/search?q=Westminster` | Project-aware search across profiles, document metadata, project risks/actions/decisions and memory |
+| `POST` | `/api/ai/project-analysis` | Claude project analysis with bounded Voyage memory and Olivia finance context |
 | `GET` | `/api/financial/dashboard?scopeType=group&scopeId=group` | Olivia's scoped CFO dashboard |
 | `GET` | `/api/financial/forecast?scopeType=business&scopeId=digitize` | Monthly, quarterly, annual and scenario forecasts for a reporting scope |
 | `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables for a `businessEntityId` |
@@ -182,7 +194,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval and Olivia CFO financial intelligence.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence and project intelligence.
 
 ## Architecture
 
@@ -193,6 +205,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voyage.js` - Voyage embeddings client and vector helpers
 - `semantic-memory.js` - SQLite-backed semantic indexing, search and Claude context retrieval
 - `financial.js` - Olivia CFO calculations, order book import persistence, board reports and read-only finance audits
+- `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
@@ -429,6 +442,48 @@ Before Claude analysis, Alfred retrieves a bounded memory context:
 - No unbounded database or mailbox dump
 
 Claude receives these records as context only. Voyage memory retrieval does not execute actions, send messages, edit files, update calendars or approve anything.
+
+## Project Intelligence Platform
+
+Alfred's Project Intelligence Platform is the read-only project knowledge layer for Digitize and future Sarah workflows. It combines confirmed Alfred project profiles, Microsoft 365 metadata, compact email/calendar signals, semantic memory and Olivia financial context.
+
+Seeded project profiles include:
+
+- KSPF
+- Westminster
+- RBKC
+- Islington
+- Council Construction Assurance Platform
+
+### Microsoft Read-Only Discovery
+
+The project discovery workflow uses the existing Microsoft delegated read scopes only:
+
+- `Mail.Read`
+- `Calendars.Read`
+- `Files.Read`
+
+Alfred can list OneDrive file metadata, search Outlook message summaries and read calendar metadata. It does not download or index full document contents in this phase, and it does not send email, update calendars, edit files, write to SharePoint/OneDrive or modify Monday.com.
+
+Document metadata is classified as EIR, AIR, BEP, MIDP, TIDP, COBie, IFC, Drawings, Meeting minutes, Reports, Proposals, Contracts, Commercial or Unknown.
+
+Email and calendar associations are inferred from client names, project names, known contacts, keywords, subject lines and meeting attendees. Inferred associations are stored with confidence/reason metadata and should be reviewed before acting.
+
+### Project Health Score
+
+Project health is calculated from risk level, open and overdue actions, document metadata completeness, recent activity, client responsiveness signals and Olivia financial context where available.
+
+Health outputs are `green`, `amber` or `red` with a plain-English explanation and source records. Missing information is reported explicitly rather than hidden.
+
+### Claude Project Analysis
+
+`POST /api/ai/project-analysis` sends Claude a bounded project context: project profile, linked risks/actions/decisions, document metadata only, meeting and email signals, relevant Voyage memory and Olivia financial summary.
+
+Claude must distinguish confirmed records, inferred associations, assumptions and missing information. It must not claim full documents were read unless a future feature actually retrieves full document content.
+
+### Future Sarah Preparation
+
+Sarah remains a role placeholder only. The project outputs are shaped so Sarah can later analyse BIM risks, ISO 19650 compliance, COBie gaps, GIS issues, Digital Twin opportunities and asset information requirements, but no Sarah runtime or autonomous execution exists in this phase.
 
 ## Olivia CFO Financial Intelligence
 
