@@ -8,6 +8,7 @@ import {
   ALFRED_CEO_SYSTEM_PROMPT,
   ANTHROPIC_API_VERSION,
   AnthropicClient,
+  extractStructuredAnalysis,
   parseStructuredJson,
 } from "../anthropic.js";
 import {
@@ -90,6 +91,13 @@ test("parses JSON even when the model wraps the structured response", () => {
   assert.deepEqual(parseStructuredJson("```json\n{\"ready\":true}\n```"), { ready: true });
   assert.deepEqual(parseStructuredJson("Here is the analysis:\n{\"ready\":false}"), { ready: false });
   assert.equal(parseStructuredJson("not json"), null);
+  assert.deepEqual(extractStructuredAnalysis({
+    content: [{
+      type: "tool_use",
+      name: "return_structured_analysis",
+      input: { ready: true },
+    }],
+  }), { ready: true });
 });
 
 test("missing Anthropic key is handled gracefully and audited", async () => {
@@ -142,8 +150,9 @@ test("AI briefing returns structured output without execution tools", async () =
     assert.equal(result.executionAttempted, false);
     assert.equal(calls[0].url, "https://api.anthropic.com/v1/messages");
     assert.equal(calls[0].options.headers["anthropic-version"], ANTHROPIC_API_VERSION);
-    assert.equal(calls[0].body.tools, undefined);
-    assert.equal(calls[0].body.output_config.format.type, "json_schema");
+    assert.equal(calls[0].body.tools[0].name, "return_structured_analysis");
+    assert.equal(calls[0].body.tools[0].input_schema.required.includes("executiveSummary"), true);
+    assert.deepEqual(calls[0].body.tool_choice, { type: "tool", name: "return_structured_analysis" });
     assert.match(calls[0].body.system, /Never send email/);
 
     const audit = listAiAnalysisAudit(db);

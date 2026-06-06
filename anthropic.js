@@ -1,5 +1,6 @@
 export const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6";
 export const ANTHROPIC_API_VERSION = "2023-06-01";
+const STRUCTURED_ANALYSIS_TOOL = "return_structured_analysis";
 
 export const ALFRED_CEO_SYSTEM_PROMPT = `
 You are Alfred, Patrick King's AI Chief of Staff and Operating Partner.
@@ -487,12 +488,12 @@ export class AnthropicClient {
           role: "user",
           content: `${instruction}\n\nAnalysis type: ${analysisType}\n\nSupplied internal context:\n${JSON.stringify(input)}`,
         }],
-        output_config: {
-          format: {
-            type: "json_schema",
-            schema,
-          },
-        },
+        tools: [{
+          name: STRUCTURED_ANALYSIS_TOOL,
+          description: "Return the requested Alfred analysis as structured JSON only. Do not execute actions.",
+          input_schema: schema,
+        }],
+        tool_choice: { type: "tool", name: STRUCTURED_ANALYSIS_TOOL },
       }),
     }).catch((error) => {
       if (error.name === "TimeoutError" || error.name === "AbortError") {
@@ -512,19 +513,11 @@ export class AnthropicClient {
       throw error;
     }
 
-    const text = body.content?.find((block) => block.type === "text")?.text;
-    if (!text) {
+    const analysis = extractStructuredAnalysis(body);
+    if (!analysis) {
       const error = new Error("Anthropic returned no structured analysis");
       error.statusCode = 502;
-      error.code = "ANTHROPIC_EMPTY_RESPONSE";
-      throw error;
-    }
-
-    const analysis = parseStructuredJson(text);
-    if (!analysis) {
-      const error = new Error("Anthropic returned invalid structured analysis");
-      error.statusCode = 502;
-      error.code = body.stop_reason === "max_tokens" ? "ANTHROPIC_MAX_TOKENS" : "ANTHROPIC_INVALID_RESPONSE";
+      error.code = body.stop_reason === "max_tokens" ? "ANTHROPIC_MAX_TOKENS" : "ANTHROPIC_EMPTY_RESPONSE";
       throw error;
     }
 
@@ -536,6 +529,20 @@ export class AnthropicClient {
       executedActions: [],
     };
   }
+}
+
+export function extractStructuredAnalysis(body) {
+  const toolUse = body?.content?.find((block) => (
+    block.type === "tool_use"
+    && block.name === STRUCTURED_ANALYSIS_TOOL
+    && block.input
+    && typeof block.input === "object"
+  ));
+  if (toolUse) return toolUse.input;
+
+  const text = body?.content?.find((block) => block.type === "text")?.text;
+  if (!text) return null;
+  return parseStructuredJson(text);
 }
 
 export function parseStructuredJson(text) {
