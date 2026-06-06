@@ -13,6 +13,7 @@ import {
   getApprovalRequest,
   getApprovalSummary,
   listAiAnalysisAudit,
+  listVoiceAudit,
   getDashboardData,
   getBriefing,
   getMorningBrief,
@@ -89,6 +90,7 @@ import {
   upsertDueDiligenceItem,
   westbridgeBriefingForDaily,
 } from "./property.js";
+import { createVoiceCommandService } from "./voice.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -112,6 +114,14 @@ const semanticMemory = createSemanticMemoryService({
   db,
   client: voyage,
   onConnected: () => setIntegrationStatus(db, "voyage", "Connected"),
+});
+const voiceCommandCentre = createVoiceCommandService({
+  db,
+  getExecutiveBrief: () => generateExecutiveBrief({ save: false }),
+  aiReasoning,
+  semanticMemory,
+  onDeepgramConnected: () => setIntegrationStatus(db, "deepgram", "Connected"),
+  onElevenLabsConnected: () => setIntegrationStatus(db, "elevenlabs", "Connected"),
 });
 
 const CONTENT_TYPES = {
@@ -169,6 +179,7 @@ async function handleApi(request, response, url) {
     syncAnthropicStatus();
     syncVoyageStatus();
     syncMondayFinanceStatus();
+    syncVoiceStatus();
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
@@ -202,6 +213,27 @@ async function handleApi(request, response, url) {
       limit: url.searchParams.get("limit") || 8,
     });
     return sendJson(response, 200, result);
+  }
+  if (url.pathname === "/api/voice/status" && request.method === "GET") {
+    return sendJson(response, 200, syncVoiceStatus());
+  }
+  if (url.pathname === "/api/voice/settings") {
+    if (request.method === "GET") return sendJson(response, 200, voiceCommandCentre.getSettings());
+    if (request.method === "PATCH" || request.method === "POST") {
+      return sendJson(response, 200, voiceCommandCentre.setSettings(await readJson(request)));
+    }
+  }
+  if (url.pathname === "/api/voice/sessions" && request.method === "POST") {
+    return sendJson(response, 201, voiceCommandCentre.createSession(await readJson(request)));
+  }
+  if (url.pathname === "/api/voice/conversations" && request.method === "GET") {
+    return sendJson(response, 200, voiceCommandCentre.listConversations(url.searchParams.get("limit") || 20));
+  }
+  if (url.pathname === "/api/voice/audit" && request.method === "GET") {
+    return sendJson(response, 200, listVoiceAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/voice/command" && request.method === "POST") {
+    return sendJson(response, 200, await voiceCommandCentre.handleCommand(await readJson(request)));
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
     const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
@@ -1143,6 +1175,44 @@ function syncMondayFinanceStatus() {
   return {
     ...status,
     status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
+  };
+}
+
+function syncVoiceStatus() {
+  const status = voiceCommandCentre.status();
+  const integrations = listResource(db, "integrations");
+  const deepgramCurrent = integrations.find((integration) => integration.id === "deepgram");
+  const elevenlabsCurrent = integrations.find((integration) => integration.id === "elevenlabs");
+
+  if (!status.providers.deepgram.configured) {
+    setIntegrationStatus(db, "deepgram", "Not connected");
+  } else if (deepgramCurrent?.status !== "Connected") {
+    setIntegrationStatus(db, "deepgram", "Planned");
+  }
+
+  if (!status.providers.elevenlabs.configured) {
+    setIntegrationStatus(db, "elevenlabs", "Not connected");
+  } else if (elevenlabsCurrent?.status !== "Connected") {
+    setIntegrationStatus(db, "elevenlabs", "Planned");
+  }
+
+  return {
+    ...status,
+    providers: {
+      ...status.providers,
+      deepgram: {
+        ...status.providers.deepgram,
+        state: !status.providers.deepgram.configured
+          ? "Not connected"
+          : deepgramCurrent?.status === "Connected" ? "Connected" : "Planned",
+      },
+      elevenlabs: {
+        ...status.providers.elevenlabs,
+        state: !status.providers.elevenlabs.configured
+          ? "Not connected"
+          : elevenlabsCurrent?.status === "Connected" ? "Connected" : "Planned",
+      },
+    },
   };
 }
 

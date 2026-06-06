@@ -622,6 +622,299 @@ h3 {
   font-weight: 600;
 }
 
+.voice-panel {
+  margin-top: 18px;
+  padding: 24px;
+}
+
+.voice-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.voice-status.disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.voice-boundary {
+  margin: 18px 0;
+}
+
+.voice-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);
+  gap: 18px;
+}
+
+.voice-console,
+.voice-output,
+.voice-history-panel {
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(3, 8, 9, 0.34);
+}
+
+.voice-console,
+.voice-output {
+  padding: 18px;
+}
+
+.voice-console {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.voice-button {
+  position: relative;
+  display: grid;
+  width: 116px;
+  height: 116px;
+  place-items: center;
+  border: 1px solid rgba(98, 234, 213, 0.48);
+  border-radius: 50%;
+  color: var(--accent);
+  background:
+    radial-gradient(circle, rgba(98, 234, 213, 0.18), rgba(8, 19, 20, 0.94) 64%);
+  box-shadow: 0 0 28px rgba(98, 234, 213, 0.14);
+  cursor: pointer;
+}
+
+.voice-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.voice-button[aria-pressed="true"] {
+  border-color: var(--amber);
+  color: var(--amber);
+  animation: voice-listening 900ms ease-in-out infinite alternate;
+}
+
+@keyframes voice-listening {
+  to { box-shadow: 0 0 42px rgba(226, 180, 107, 0.28); }
+}
+
+.voice-ring {
+  position: absolute;
+  inset: 13px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.25;
+}
+
+.voice-mark {
+  position: relative;
+  font: 500 38px/1 var(--font-display);
+}
+
+.voice-state {
+  text-align: center;
+}
+
+.voice-state strong,
+.voice-state span {
+  display: block;
+}
+
+.voice-state strong {
+  color: var(--accent);
+  font: 500 11px/1 var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.voice-state span {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.voice-transcript-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  width: 100%;
+}
+
+.voice-transcript-form input,
+.voice-settings input[type="text"],
+.voice-settings input:not([type]) {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(3, 8, 9, 0.55);
+  padding: 10px 12px;
+  outline: 0;
+  font-size: 12px;
+}
+
+.voice-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.voice-example {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.voice-example:hover {
+  color: var(--accent);
+  border-color: var(--line-bright);
+}
+
+.voice-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.voice-provider-grid article {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.voice-provider-grid small,
+.voice-provider-grid strong {
+  display: block;
+}
+
+.voice-provider-grid small {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.voice-provider-grid strong {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.voice-response {
+  min-height: 130px;
+}
+
+.voice-answer {
+  padding: 15px;
+  border: 1px solid rgba(98, 234, 213, 0.16);
+  border-radius: 14px;
+  background: rgba(98, 234, 213, 0.06);
+}
+
+.voice-answer strong,
+.voice-answer small {
+  display: block;
+}
+
+.voice-answer p {
+  margin: 8px 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.voice-answer small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.voice-specialists {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.voice-specialists article,
+.voice-history-item {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.voice-specialists strong,
+.voice-specialists span,
+.voice-specialists small,
+.voice-history-item strong,
+.voice-history-item span,
+.voice-history-item small {
+  display: block;
+}
+
+.voice-specialists span,
+.voice-history-item span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.voice-specialists small,
+.voice-history-item small {
+  margin-top: 7px;
+  color: #516663;
+  font-size: 9px;
+}
+
+.voice-settings {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.voice-settings summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.voice-settings label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.voice-settings label:has(input[type="range"]),
+.voice-settings label:has(input:not([type])) {
+  grid-template-columns: 115px minmax(0, 1fr) auto;
+}
+
+.voice-settings input[type="range"] {
+  width: 100%;
+}
+
+.voice-history-panel {
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.voice-history {
+  display: grid;
+  gap: 9px;
+}
+
 .count-badge {
   justify-content: center;
   min-width: 29px;
@@ -2398,6 +2691,7 @@ dialog::backdrop {
   .sarah-grid { grid-template-columns: 1fr; }
   .project-intelligence-signals { grid-template-columns: 1fr; }
   .project-layout,
+  .voice-layout,
   .property-layout,
   .project-detail-grid { grid-template-columns: 1fr; }
 }
@@ -2423,7 +2717,7 @@ dialog::backdrop {
   .topbar h1 { font-size: 19px; }
   .date-block, #reset-data, .primary-button kbd { display: none; }
   .command-grid { grid-template-columns: minmax(0, 1fr); }
-  .core-panel, .attention-panel, .company-status { padding: 18px; }
+  .core-panel, .attention-panel, .company-status, .voice-panel { padding: 18px; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .company-strip,
   .portfolio-grid,
@@ -2456,4 +2750,9 @@ dialog::backdrop {
   .sarah-actions,
   .project-actions,
   .property-actions { justify-content: flex-start; }
+  .voice-provider-grid,
+  .voice-transcript-form { grid-template-columns: 1fr; }
+  .voice-settings label,
+  .voice-settings label:has(input[type="range"]),
+  .voice-settings label:has(input:not([type])) { grid-template-columns: 1fr; }
 }
