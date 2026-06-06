@@ -40,7 +40,9 @@ test("seeds the Phase 1 operating registry", () => {
 
     assert.equal(dashboard.companies.length, 4);
     assert.equal(dashboard.clients.length, 4);
-    assert.equal(dashboard.projects.length, 1);
+    assert.equal(dashboard.projects.length, 5);
+    assert.ok(dashboard.projects.some((project) => project.name === "Westminster"));
+    assert.ok(dashboard.projects.some((project) => project.name === "Council Construction Assurance Platform"));
     assert.equal(dashboard.agents.length, 5);
     assert.equal(dashboard.agents.find((agent) => agent.id === "olivia").role, "Chief Financial Officer");
     assert.equal(dashboard.integrations.length, 9);

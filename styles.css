@@ -1162,6 +1162,167 @@ h3 {
   text-transform: uppercase;
 }
 
+.project-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.project-boundary {
+  margin-bottom: 18px;
+}
+
+.project-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.project-metrics article,
+.project-card,
+.project-record-list article,
+.project-health-card,
+.project-finance-summary {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.project-metrics small,
+.project-record-list small,
+.project-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.project-metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.project-layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.project-panel {
+  padding: 20px;
+}
+
+.project-list,
+.project-record-list {
+  display: grid;
+  gap: 10px;
+}
+
+.project-card {
+  display: grid;
+  gap: 9px;
+}
+
+.project-card h3,
+.project-detail-header h3 {
+  margin: 6px 0 4px;
+  font-family: var(--display);
+}
+
+.project-card p,
+.project-detail-header p,
+.project-record-list span,
+.project-finance-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-health {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.project-health.green {
+  color: #74e3a0;
+  border-color: rgba(116, 227, 160, 0.35);
+}
+
+.project-health.amber {
+  color: #e2b46b;
+  border-color: rgba(226, 180, 107, 0.35);
+}
+
+.project-health.red {
+  color: #ff7f7f;
+  border-color: rgba(255, 127, 127, 0.4);
+}
+
+.project-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.project-health-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.project-health-card strong {
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+.project-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.project-detail-grid h4,
+.project-finance-summary h4 {
+  margin: 0 0 9px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.project-record-list article {
+  display: grid;
+  gap: 4px;
+}
+
+.project-search-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.project-search-results {
+  display: grid;
+  gap: 12px;
+}
+
 .finance-empty {
   padding: 24px;
 }
@@ -2025,6 +2186,9 @@ dialog::backdrop {
   .approval-card dl { grid-template-columns: repeat(2, 1fr); }
   .finance-metrics { grid-template-columns: repeat(3, 1fr); }
   .finance-grid { grid-template-columns: 1fr; }
+  .project-metrics { grid-template-columns: repeat(3, 1fr); }
+  .project-layout,
+  .project-detail-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -2036,7 +2200,7 @@ dialog::backdrop {
     padding: 16px;
   }
   .nav {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(8, 1fr);
     margin-top: 18px;
     overflow-x: auto;
   }
@@ -2069,5 +2233,8 @@ dialog::backdrop {
   .approval-card dl { grid-template-columns: 1fr; }
   .finance-actions { justify-content: flex-start; }
   .finance-metrics,
-  .forecast-cases { grid-template-columns: 1fr; }
+  .forecast-cases,
+  .project-metrics,
+  .project-search-form { grid-template-columns: 1fr; }
+  .project-detail-header { flex-direction: column; }
 }

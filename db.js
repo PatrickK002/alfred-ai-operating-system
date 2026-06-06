@@ -90,6 +90,226 @@ const SCHEMA = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS project_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER REFERENCES projects(id),
+    company_id TEXT NOT NULL REFERENCES companies(id),
+    client_id INTEGER REFERENCES clients(id),
+    client_name TEXT NOT NULL DEFAULT '',
+    project_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    service_line TEXT NOT NULL DEFAULT 'Information Management',
+    lead_name TEXT NOT NULL DEFAULT '',
+    start_date TEXT NOT NULL DEFAULT '',
+    end_date TEXT NOT NULL DEFAULT '',
+    current_phase TEXT NOT NULL DEFAULT 'Discovery',
+    summary TEXT NOT NULL DEFAULT '',
+    financial_business_entity_id TEXT REFERENCES financial_business_entities(id),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, client_name, project_name)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    source_system TEXT NOT NULL DEFAULT 'microsoft',
+    external_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    path TEXT NOT NULL DEFAULT '',
+    web_url TEXT NOT NULL DEFAULT '',
+    file_type TEXT NOT NULL DEFAULT '',
+    classification TEXT NOT NULL DEFAULT 'Unknown',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_datetime TEXT NOT NULL DEFAULT '',
+    modified_datetime TEXT NOT NULL DEFAULT '',
+    parent_folder TEXT NOT NULL DEFAULT '',
+    association_confidence REAL NOT NULL DEFAULT 0,
+    association_reason TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, source_system, external_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    update_type TEXT NOT NULL DEFAULT 'status',
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    due TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low', 'medium', 'high')),
+    status TEXT NOT NULL DEFAULT 'open',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    decided_at TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    source_system TEXT NOT NULL DEFAULT 'microsoft',
+    external_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    start_datetime TEXT NOT NULL DEFAULT '',
+    end_datetime TEXT NOT NULL DEFAULT '',
+    organizer TEXT NOT NULL DEFAULT '',
+    attendees TEXT NOT NULL DEFAULT '[]',
+    web_url TEXT NOT NULL DEFAULT '',
+    body_preview TEXT NOT NULL DEFAULT '',
+    association_confidence REAL NOT NULL DEFAULT 0,
+    association_reason TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, source_system, external_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_email_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    source_system TEXT NOT NULL DEFAULT 'microsoft',
+    external_id TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    from_name TEXT NOT NULL DEFAULT '',
+    from_email TEXT NOT NULL DEFAULT '',
+    received_datetime TEXT NOT NULL DEFAULT '',
+    importance TEXT NOT NULL DEFAULT '',
+    is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
+    body_preview TEXT NOT NULL DEFAULT '',
+    web_url TEXT NOT NULL DEFAULT '',
+    association_confidence REAL NOT NULL DEFAULT 0,
+    association_reason TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, source_system, external_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, email)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    due_date TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'planned',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_health_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK(status IN ('green', 'amber', 'red')),
+    risk_level TEXT NOT NULL DEFAULT 'low',
+    action_status TEXT NOT NULL DEFAULT 'clear',
+    document_completeness TEXT NOT NULL DEFAULT 'unknown',
+    recent_activity TEXT NOT NULL DEFAULT 'unknown',
+    client_responsiveness TEXT NOT NULL DEFAULT 'unknown',
+    financial_risk TEXT NOT NULL DEFAULT 'unknown',
+    explanation TEXT NOT NULL DEFAULT '',
+    inputs TEXT NOT NULL DEFAULT '{}',
+    calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_memory_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    semantic_memory_id INTEGER REFERENCES semantic_memory(id),
+    relevance_score REAL NOT NULL DEFAULT 0,
+    summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'Alfred',
+    source TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS project_profiles_company
+  ON project_profiles(company_id, client_name, project_name);
+
+  CREATE INDEX IF NOT EXISTS project_documents_profile
+  ON project_documents(project_profile_id, classification, modified_datetime);
+
+  CREATE INDEX IF NOT EXISTS project_actions_profile
+  ON project_actions(project_profile_id, status, due);
+
+  CREATE INDEX IF NOT EXISTS project_risks_profile
+  ON project_risks(project_profile_id, status, severity);
+
+  CREATE INDEX IF NOT EXISTS project_meetings_profile
+  ON project_meetings(project_profile_id, start_datetime);
+
+  CREATE INDEX IF NOT EXISTS project_email_signals_profile
+  ON project_email_signals(project_profile_id, received_datetime);
+
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id TEXT NOT NULL REFERENCES companies(id),
@@ -574,6 +794,59 @@ const CLIENT_SEEDS = [
   ["digitize", "Islington Council"],
 ];
 
+const PROJECT_PROFILE_SEEDS = [
+  {
+    companyId: "digitize",
+    clientName: "KSPF",
+    projectName: "KSPF",
+    status: "Active",
+    serviceLine: "Information Management",
+    currentPhase: "Delivery",
+    summary: "Digitize project profile for KSPF. Confirm live scope, commercial position, document set and outstanding actions from Microsoft 365 metadata.",
+    financialBusinessEntityId: "digitize",
+  },
+  {
+    companyId: "digitize",
+    clientName: "Westminster City Council",
+    projectName: "Westminster",
+    status: "Active",
+    serviceLine: "Digital Construction Assurance",
+    currentPhase: "Delivery Review",
+    summary: "Digitize project profile for Westminster. Track delivery review, key risks, client agreements, documents and outstanding chairman-level actions.",
+    financialBusinessEntityId: "digitize",
+  },
+  {
+    companyId: "digitize",
+    clientName: "RBKC",
+    projectName: "RBKC",
+    status: "Active",
+    serviceLine: "COBie / Information Management",
+    currentPhase: "Delivery",
+    summary: "Digitize project profile for RBKC. Track COBie, information management and assurance risks using confirmed project records and inferred Microsoft 365 signals.",
+    financialBusinessEntityId: "digitize",
+  },
+  {
+    companyId: "digitize",
+    clientName: "Islington Council",
+    projectName: "Islington",
+    status: "Active",
+    serviceLine: "Information Management",
+    currentPhase: "Delivery",
+    summary: "Digitize project profile for Islington. Track outstanding actions, recent meetings, project documents and missing information.",
+    financialBusinessEntityId: "digitize",
+  },
+  {
+    companyId: "product",
+    clientName: "",
+    projectName: "Council Construction Assurance Platform",
+    status: "Discovery",
+    serviceLine: "SaaS Product",
+    currentPhase: "MVP Definition",
+    summary: "Product Studio project profile for the Council Construction Assurance Platform SaaS concept.",
+    financialBusinessEntityId: "council-assurance-platform",
+  },
+];
+
 const AGENT_SEEDS = [
   ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Lead BIM, GIS, Digital Twin and ISO 19650 delivery for Digitize.", [], "Planned"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
@@ -737,6 +1010,7 @@ export function seedDatabase(db) {
   const companyCount = db.prepare("SELECT COUNT(*) AS count FROM companies").get().count;
   if (companyCount > 0) {
     updateFinancialBusinessEntities(db);
+    updateProjectProfiles(db);
     updateAgentDefinitions(db);
     updateIntegrationDefinitions(db);
     return;
@@ -756,11 +1030,7 @@ export function seedDatabase(db) {
     for (const client of CLIENT_SEEDS) insertClient.run(...client);
 
     updateFinancialBusinessEntities(db);
-
-    db.prepare(`
-      INSERT INTO projects (company_id, name, purpose, status)
-      VALUES (?, ?, ?, ?)
-    `).run("product", "Council Construction Assurance Platform", "Create a SaaS platform for council construction assurance.", "Discovery");
+    updateProjectProfiles(db);
 
     db.prepare(`
       INSERT INTO risks (company_id, title, detail, priority, due)
@@ -841,6 +1111,74 @@ function updateFinancialBusinessEntities(db) {
   for (const entity of FINANCIAL_BUSINESS_ENTITY_SEEDS) {
     insertEntity.run(...entity);
     updateEntity.run(entity[1], entity[2], entity[3], entity[4], entity[5], entity[6], entity[0]);
+  }
+}
+
+function updateProjectProfiles(db) {
+  const findClient = db.prepare("SELECT id FROM clients WHERE company_id = ? AND lower(name) = lower(?)");
+  const insertClient = db.prepare("INSERT INTO clients (company_id, name) VALUES (?, ?)");
+  const findProject = db.prepare("SELECT id FROM projects WHERE company_id = ? AND lower(name) = lower(?)");
+  const insertProject = db.prepare(`
+    INSERT INTO projects (company_id, client_id, name, purpose, status)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const insertProfile = db.prepare(`
+    INSERT OR IGNORE INTO project_profiles (
+      project_id, company_id, client_id, client_name, project_name, status,
+      service_line, current_phase, summary, financial_business_entity_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateProfile = db.prepare(`
+    UPDATE project_profiles
+    SET project_id = ?, client_id = ?, client_name = ?, status = ?,
+        service_line = ?, current_phase = ?, summary = ?,
+        financial_business_entity_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE company_id = ? AND client_name = ? AND project_name = ?
+  `);
+
+  for (const seed of PROJECT_PROFILE_SEEDS) {
+    let clientId = null;
+    if (seed.clientName) {
+      let client = findClient.get(seed.companyId, seed.clientName);
+      if (!client) {
+        const result = insertClient.run(seed.companyId, seed.clientName);
+        client = { id: Number(result.lastInsertRowid) };
+      }
+      clientId = client.id;
+    }
+
+    let project = findProject.get(seed.companyId, seed.projectName);
+    if (!project) {
+      const result = insertProject.run(seed.companyId, clientId, seed.projectName, seed.summary, seed.status);
+      project = { id: Number(result.lastInsertRowid) };
+    }
+
+    insertProfile.run(
+      project.id,
+      seed.companyId,
+      clientId,
+      seed.clientName,
+      seed.projectName,
+      seed.status,
+      seed.serviceLine,
+      seed.currentPhase,
+      seed.summary,
+      seed.financialBusinessEntityId,
+    );
+    updateProfile.run(
+      project.id,
+      clientId,
+      seed.clientName,
+      seed.status,
+      seed.serviceLine,
+      seed.currentPhase,
+      seed.summary,
+      seed.financialBusinessEntityId,
+      seed.companyId,
+      seed.clientName,
+      seed.projectName,
+    );
   }
 }
 
@@ -1622,6 +1960,116 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         summary: operatingSummary(label, row),
       }));
     }
+  }
+
+  const projectRows = db.prepare(`
+    SELECT
+      p.*,
+      c.short_name AS company_short_name,
+      c.name AS company_name,
+      (SELECT COUNT(*) FROM project_documents d WHERE d.project_profile_id = p.id) AS document_count,
+      (SELECT COUNT(*) FROM project_actions a WHERE a.project_profile_id = p.id AND a.status != 'complete') AS open_action_count,
+      (SELECT COUNT(*) FROM project_risks r WHERE r.project_profile_id = p.id AND r.status != 'closed') AS open_risk_count,
+      (SELECT MAX(created_at) FROM project_updates u WHERE u.project_profile_id = p.id) AS latest_update_at
+    FROM project_profiles p
+    LEFT JOIN companies c ON c.id = p.company_id
+    ORDER BY p.updated_at DESC, p.id DESC
+  `).all();
+  for (const row of projectRows) {
+    records.push(semanticRecord({
+      sourceType: "project_profile",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at,
+      title: row.project_name,
+      summary: [
+        `Project profile: ${row.project_name}.`,
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Company: ${companyLabel(row)}.`,
+        `Status: ${row.status}.`,
+        `Service line: ${row.service_line}.`,
+        `Phase: ${row.current_phase}.`,
+        row.summary,
+        `Documents linked: ${row.document_count || 0}.`,
+        `Open project actions: ${row.open_action_count || 0}.`,
+        `Open project risks: ${row.open_risk_count || 0}.`,
+        row.latest_update_at ? `Latest project update: ${row.latest_update_at}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const projectDocuments = db.prepare(`
+    SELECT d.*, p.project_name, p.client_name
+    FROM project_documents d
+    JOIN project_profiles p ON p.id = d.project_profile_id
+    ORDER BY d.modified_datetime DESC, d.updated_at DESC, d.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of projectDocuments) {
+    records.push(semanticRecord({
+      sourceType: "project_document",
+      sourceId: row.id,
+      sourceCreatedAt: row.modified_datetime || row.updated_at,
+      title: row.name,
+      summary: [
+        `Project document metadata: ${row.name}.`,
+        `Project: ${row.project_name}.`,
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Classification: ${row.classification}.`,
+        row.path ? `Path: ${row.path}.` : "",
+        row.modified_datetime ? `Modified: ${row.modified_datetime}.` : "",
+        `Association: ${row.association_reason || "metadata match"}.`,
+        "Full document content was not indexed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const projectEmailSignals = db.prepare(`
+    SELECT e.*, p.project_name, p.client_name
+    FROM project_email_signals e
+    JOIN project_profiles p ON p.id = e.project_profile_id
+    ORDER BY e.received_datetime DESC, e.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of projectEmailSignals) {
+    records.push(semanticRecord({
+      sourceType: "project_email_signal",
+      sourceId: row.id,
+      sourceCreatedAt: row.received_datetime || row.created_at,
+      title: row.subject || "(No subject)",
+      summary: [
+        `Project email signal metadata: ${row.subject || "(No subject)"}.`,
+        `Project: ${row.project_name}.`,
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        row.from_name || row.from_email ? `From: ${row.from_name || row.from_email}.` : "",
+        row.body_preview,
+        `Association: ${row.association_reason || "metadata match"}.`,
+        "Raw full email content was not indexed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const projectMeetings = db.prepare(`
+    SELECT m.*, p.project_name, p.client_name
+    FROM project_meetings m
+    JOIN project_profiles p ON p.id = m.project_profile_id
+    ORDER BY m.start_datetime DESC, m.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of projectMeetings) {
+    records.push(semanticRecord({
+      sourceType: "project_meeting",
+      sourceId: row.id,
+      sourceCreatedAt: row.start_datetime || row.created_at,
+      title: row.title || "(Untitled meeting)",
+      summary: [
+        `Project meeting metadata: ${row.title || "(Untitled meeting)"}.`,
+        `Project: ${row.project_name}.`,
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        row.organizer ? `Organizer: ${row.organizer}.` : "",
+        row.body_preview,
+        `Association: ${row.association_reason || "metadata match"}.`,
+      ].filter(Boolean).join(" "),
+    }));
   }
 
   const approvals = db.prepare(`

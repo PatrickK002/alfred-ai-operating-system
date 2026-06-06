@@ -54,6 +54,9 @@ jobs:
       - name: Check CFO finance syntax
         run: node --check financial.js
 
+      - name: Check project intelligence syntax
+        run: node --check project-intelligence.js
+
       - name: Check order book importer syntax
         run: node --check excel-orderbook.js
 
