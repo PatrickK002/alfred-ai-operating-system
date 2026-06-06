@@ -34,6 +34,7 @@ import { AnthropicClient } from "./anthropic.js";
 import { createAiReasoningService } from "./ai.js";
 import { VoyageClient } from "./voyage.js";
 import { createSemanticMemoryService } from "./semantic-memory.js";
+import { buildHealthResponse, currentEnvironment, publicAppStatus } from "./app-metadata.js";
 import {
   FINANCIAL_READ_ONLY_BOUNDARY,
   generateBoardReport,
@@ -99,7 +100,8 @@ try {
   if (error.code !== "ENOENT") console.warn(`Could not load .env: ${error.message}`);
 }
 const PORT = Number(process.env.PORT || 4173);
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || (process.env.WEBSITE_SITE_NAME ? "0.0.0.0" : "127.0.0.1");
+const SERVER_STARTED_AT = Date.now();
 const db = createDatabase();
 const microsoft = new MicrosoftGraphClient();
 const anthropic = new AnthropicClient();
@@ -129,14 +131,27 @@ const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
 };
+
+function securityHeaders() {
+  const production = currentEnvironment() === "production";
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Permissions-Policy": "camera=(), geolocation=(), microphone=(self)",
+    ...(production ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
+  };
+}
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    ...securityHeaders(),
   });
   response.end(JSON.stringify(body));
 }
@@ -173,7 +188,10 @@ function financialScopeFromSearch(searchParams) {
 
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
-    return sendJson(response, 200, { status: "ok", database: "connected" });
+    return sendJson(response, 200, healthResponse());
+  }
+  if (request.method === "GET" && url.pathname === "/api/app/status") {
+    return sendJson(response, 200, publicAppStatus());
   }
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
     syncAnthropicStatus();
@@ -1222,6 +1240,47 @@ function syncVoiceStatus() {
   };
 }
 
+function databaseStatus() {
+  try {
+    db.prepare("SELECT 1 AS ok").get();
+    return "connected";
+  } catch {
+    return "error";
+  }
+}
+
+function healthResponse() {
+  const voice = voiceCommandCentre.status();
+  return buildHealthResponse({
+    databaseStatus: databaseStatus(),
+    uptimeSeconds: Math.round((Date.now() - SERVER_STARTED_AT) / 1000),
+    integrationConfiguration: {
+      anthropic: syncAnthropicStatus(),
+      voyage: syncVoyageStatus(),
+      microsoft: {
+        configured: microsoft.configured,
+        connected: Boolean(microsoft.loadToken()),
+        readOnlyScopes: MICROSOFT_SCOPES,
+      },
+      monday: syncMondayFinanceStatus(),
+      deepgram: {
+        configured: Boolean(voice.providers.deepgram.configured),
+        state: voice.providers.deepgram.state,
+        rawAudioStored: false,
+      },
+      elevenlabs: {
+        configured: Boolean(voice.providers.elevenlabs.configured),
+        state: voice.providers.elevenlabs.state,
+      },
+      voice: {
+        enabled: Boolean(voice.settings.enabled),
+        readOnly: true,
+        executionEnabled: false,
+      },
+    },
+  });
+}
+
 async function tryIndexSemanticMemory() {
   const result = await semanticMemory.indexSourceRecords().catch((error) => ({
     errorCode: error.code || "SEMANTIC_INDEXING_FAILED",
@@ -1243,7 +1302,10 @@ function serveStatic(response, pathname) {
 
   response.writeHead(200, {
     "Content-Type": CONTENT_TYPES[extname(filePath)] || "application/octet-stream",
-    "Cache-Control": "no-cache",
+    "Cache-Control": ["service-worker.js", "index.html"].includes(relativePath)
+      ? "no-cache"
+      : "public, max-age=3600",
+    ...securityHeaders(),
   });
   createReadStream(filePath).pipe(response);
   return true;
@@ -1252,6 +1314,14 @@ function serveStatic(response, pathname) {
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+    if (shouldRedirectToHttps(request, url)) {
+      response.writeHead(308, {
+        Location: `https://${request.headers.host}${request.url}`,
+        ...securityHeaders(),
+      });
+      response.end();
+      return;
+    }
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
       return;
@@ -1266,6 +1336,13 @@ const server = createServer(async (request, response) => {
     });
   }
 });
+
+function shouldRedirectToHttps(request, url) {
+  if (currentEnvironment() !== "production") return false;
+  if (process.env.ENFORCE_HTTPS === "false") return false;
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return false;
+  return request.headers["x-forwarded-proto"] !== "https";
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`Alfred Core running at http://${HOST}:${PORT}`);

@@ -1,0 +1,43 @@
+{
+  "id": "/",
+  "name": "Alfred AI Operating System",
+  "short_name": "Alfred",
+  "description": "Patrick King's AI Chief of Staff and executive operating system.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#071011",
+  "theme_color": "#071011",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/icons/alfred-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/alfred-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Executive Briefing",
+      "short_name": "Briefing",
+      "description": "Open Alfred ready for an executive briefing.",
+      "url": "/?view=command"
+    },
+    {
+      "name": "Project Intelligence",
+      "short_name": "Projects",
+      "description": "Open the Project Intelligence dashboard.",
+      "url": "/?view=projects"
+    }
+  ]
+}

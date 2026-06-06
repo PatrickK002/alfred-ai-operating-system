@@ -7,7 +7,13 @@
       name="description"
       content="Alfred Core - AI operating partner and executive command centre."
     />
+    <meta name="theme-color" content="#071011" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Alfred" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Alfred Core</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/alfred-icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -58,6 +64,9 @@
           </button>
           <button class="nav-item" data-view="integrations">
             <span class="nav-icon">⌘</span> Integrations
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="nav-icon">⚙</span> Settings
           </button>
         </nav>
 
@@ -154,6 +163,43 @@
               <button class="text-button" data-view-target="companies">Open operating register →</button>
             </section>
           </div>
+
+          <section class="ipad-executive-mode panel" aria-label="iPad executive mode" data-layout-marker="ipad-executive-mode">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">IPAD EXECUTIVE MODE</p>
+                <h3>Five-panel command view</h3>
+              </div>
+              <span class="live-label"><i></i> TABLET READY</span>
+            </div>
+            <div class="ipad-executive-grid" id="ipad-executive-grid">
+              <article data-layout-marker="executive-briefing-panel">
+                <small>Executive briefing</small>
+                <strong id="ipad-briefing-status">Ready</strong>
+                <span id="ipad-briefing-detail">Generate a briefing to populate the live summary.</span>
+              </article>
+              <article data-layout-marker="calendar-panel">
+                <small>Calendar</small>
+                <strong id="ipad-calendar-status">Read-only</strong>
+                <span id="ipad-calendar-detail">Microsoft Calendar appears here when connected.</span>
+              </article>
+              <article data-layout-marker="risk-panel">
+                <small>Risks</small>
+                <strong id="ipad-risk-status">0 active</strong>
+                <span id="ipad-risk-detail">High-priority operating and project risks.</span>
+              </article>
+              <article data-layout-marker="actions-panel">
+                <small>Actions</small>
+                <strong id="ipad-action-status">0 open</strong>
+                <span id="ipad-action-detail">Current actions requiring attention.</span>
+              </article>
+              <article data-layout-marker="voice-panel">
+                <small>Voice</small>
+                <strong id="ipad-voice-status">Advisory</strong>
+                <span id="ipad-voice-detail">Voice button remains accessible below. No execution.</span>
+              </article>
+            </div>
+          </section>
 
           <section class="voice-panel panel" id="voice-command-centre">
             <div class="panel-heading">
@@ -689,6 +735,74 @@
             <span>Connection states come from the backend. Alfred will not claim to have read or changed an unconnected system.</span>
           </div>
           <div class="integration-grid" id="integration-grid"></div>
+        </section>
+
+        <section class="view" id="settings-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">DEPLOYMENT & PWA</p>
+              <h2>About Alfred</h2>
+              <p>Version, environment, install readiness and production security posture.</p>
+            </div>
+            <button class="secondary-button" id="refresh-app-status">Refresh status</button>
+          </div>
+          <div class="deployment-warning" id="deployment-warning"></div>
+          <section class="settings-grid">
+            <article class="panel settings-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">VERSION</p>
+                  <h3>App metadata</h3>
+                </div>
+              </div>
+              <div class="settings-facts" id="app-version-facts"></div>
+            </article>
+            <article class="panel settings-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ENVIRONMENT</p>
+                  <h3>Deployment profile</h3>
+                </div>
+              </div>
+              <div class="settings-facts" id="environment-facts"></div>
+            </article>
+            <article class="panel settings-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SYSTEMS</p>
+                  <h3>Backend readiness</h3>
+                </div>
+              </div>
+              <div class="status-grid" id="backend-readiness-grid"></div>
+            </article>
+            <article class="panel settings-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PWA</p>
+                  <h3>Install readiness</h3>
+                </div>
+              </div>
+              <div class="settings-facts" id="pwa-readiness-facts"></div>
+            </article>
+            <article class="panel settings-panel settings-panel-wide">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SECURITY</p>
+                  <h3>Production boundary</h3>
+                </div>
+              </div>
+              <div class="security-list" id="security-boundary-list"></div>
+            </article>
+            <article class="panel settings-panel settings-panel-wide">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">APPLE PENCIL PREP</p>
+                  <h3>Future review input layer</h3>
+                </div>
+              </div>
+              <p class="core-message">Architecture placeholder only: future annotation review, document markups, project review notes and property inspection notes. No Pencil annotation runtime is implemented in this phase.</p>
+            </article>
+          </section>
         </section>
       </main>
     </div>

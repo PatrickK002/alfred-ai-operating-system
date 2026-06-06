@@ -33,6 +33,9 @@ jobs:
       - name: Check server syntax
         run: node --check server.js
 
+      - name: Check app metadata syntax
+        run: node --check app-metadata.js
+
       - name: Check database syntax
         run: node --check db.js
 
@@ -60,6 +63,12 @@ jobs:
       - name: Check Sarah specialist syntax
         run: node --check sarah.js
 
+      - name: Check Westbridge property syntax
+        run: node --check property.js
+
+      - name: Check voice command centre syntax
+        run: node --check voice.js
+
       - name: Check order book importer syntax
         run: node --check excel-orderbook.js
 
@@ -71,3 +80,6 @@ jobs:
 
       - name: Check frontend syntax
         run: node --check app.js
+
+      - name: Check service worker syntax
+        run: node --check service-worker.js

@@ -1108,6 +1108,55 @@ h3 {
   font-size: 9px;
 }
 
+.ipad-executive-mode {
+  display: none;
+  margin-top: 18px;
+  padding: 20px;
+}
+
+.ipad-executive-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ipad-executive-grid article,
+.status-grid article {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.024);
+}
+
+.ipad-executive-grid small,
+.ipad-executive-grid strong,
+.ipad-executive-grid span,
+.status-grid small,
+.status-grid strong {
+  display: block;
+}
+
+.ipad-executive-grid small,
+.status-grid small {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.ipad-executive-grid strong,
+.status-grid strong {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ipad-executive-grid span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .company-status {
   margin-top: 0;
 }
@@ -1214,6 +1263,104 @@ h3 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.settings-panel {
+  padding: 20px;
+}
+
+.settings-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-facts,
+.status-grid,
+.security-list,
+.deployment-warning {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-facts div,
+.security-list article,
+.deployment-warning article {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.024);
+}
+
+.settings-facts small,
+.settings-facts strong,
+.security-list strong,
+.security-list span,
+.deployment-warning strong,
+.deployment-warning span {
+  display: block;
+}
+
+.settings-facts small {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.settings-facts strong {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.deployment-warning {
+  margin-bottom: 18px;
+}
+
+.deployment-warning article {
+  border-color: rgba(226, 180, 107, 0.24);
+  background: var(--amber-soft);
+}
+
+.deployment-warning article.ok {
+  border-color: rgba(98, 234, 213, 0.2);
+  background: var(--accent-soft);
+}
+
+.deployment-warning span,
+.security-list span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.security-list article.ok {
+  border-color: rgba(98, 234, 213, 0.16);
+}
+
+.security-list article.blocked {
+  border-color: rgba(226, 127, 121, 0.18);
+}
+
+.offline-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.offline-card {
+  max-width: 520px;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  text-align: center;
 }
 
 .approval-boundary,
@@ -2785,8 +2932,36 @@ dialog::backdrop {
   .project-intelligence-signals { grid-template-columns: 1fr; }
   .project-layout,
   .voice-layout,
+  .settings-grid,
   .property-layout,
   .project-detail-grid { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 1180px) and (max-width: 1366px) {
+  .ipad-executive-mode {
+    display: block;
+  }
+
+  .ipad-executive-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .voice-button,
+  .primary-button,
+  .secondary-button,
+  .nav-item {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1179px) {
+  .ipad-executive-mode {
+    display: block;
+  }
+
+  .ipad-executive-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -2798,7 +2973,7 @@ dialog::backdrop {
     padding: 16px;
   }
   .nav {
-    grid-template-columns: repeat(10, 1fr);
+    grid-template-columns: repeat(11, 1fr);
     margin-top: 18px;
     overflow-x: auto;
   }
@@ -2815,7 +2990,8 @@ dialog::backdrop {
   .company-strip,
   .portfolio-grid,
   .agent-grid,
-  .integration-grid { grid-template-columns: 1fr; }
+  .integration-grid,
+  .settings-grid { grid-template-columns: 1fr; }
   .memory-toolbar { align-items: stretch; flex-direction: column; }
   #semantic-memory-form { grid-template-columns: 1fr; }
   .semantic-search-meta { align-items: flex-start; flex-direction: column; }
@@ -2834,6 +3010,7 @@ dialog::backdrop {
   .forecast-cases,
   .project-metrics,
   .property-metrics,
+  .ipad-executive-grid,
   .sarah-metrics,
   .sarah-grid,
   .project-intelligence-signals,
@@ -2851,4 +3028,5 @@ dialog::backdrop {
   .voice-settings label:has(input[type="range"]),
   .voice-settings label:has(input[type="number"]),
   .voice-settings label:has(input:not([type])) { grid-template-columns: 1fr; }
+  .settings-panel-wide { grid-column: auto; }
 }

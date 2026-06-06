@@ -381,6 +381,42 @@ const seedData = {
     conversations: [],
     lastResult: null,
   },
+  deployment: {
+    status: "degraded",
+    app: {
+      name: "Alfred AI Operating System",
+      packageVersion: "0.9.0",
+      release: { version: "v0.4", title: "Cloud/PWA Preparation" },
+    },
+    environment: "development",
+    environmentProfile: {
+      label: "Development",
+      description: "Local use on Patrick's machine.",
+      branch: "feature/* or local",
+      deployment: "Local Node server",
+    },
+    database: { status: "unknown" },
+    integrations: {},
+    pwa: {
+      manifest: "/manifest.json",
+      serviceWorker: "/service-worker.js",
+      offlineFallback: "/offline.html",
+      displayMode: "standalone",
+      installTargets: ["MacBook Dock", "iPhone Home Screen", "iPad Pro Home Screen"],
+      installReady: true,
+    },
+    warnings: [],
+    security: {
+      httpsRequired: false,
+      secretsInFrontend: false,
+      apiKeysInLocalStorage: false,
+      externalWritesEnabled: false,
+      approvalSafeguardsRequired: true,
+      authenticationProvider: "Microsoft Entra ID planned",
+      authenticationEnabled: false,
+    },
+    uptimeSeconds: 0,
+  },
 };
 
 let state = loadState();
@@ -459,6 +495,7 @@ async function loadDashboard() {
       conversations: await apiRequest("/api/voice/conversations?limit=8").catch(() => []),
       lastResult: state.voice?.lastResult || null,
     };
+    state.deployment = await apiRequest("/api/health").catch(() => seedData.deployment);
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -584,6 +621,7 @@ function renderCommand() {
       `;
     })
     .join("");
+  renderIpadExecutiveMode(items);
 }
 
 function renderVoiceCommandCentre() {
@@ -859,6 +897,119 @@ function renderIntegrations() {
       `,
     )
     .join("");
+}
+
+function renderIpadExecutiveMode(items = openItems()) {
+  const risks = items.filter((item) => item.type === "risk");
+  const actions = items.filter((item) => item.type === "action");
+  const meetings = currentBrief?.meetings || {};
+  const voiceStatus = state.voice?.status || seedData.voice.status;
+  $("#ipad-briefing-status").textContent = currentBrief
+    ? `${currentBrief.summary?.totalOpen || items.length} signal(s)`
+    : "Ready";
+  $("#ipad-briefing-detail").textContent = currentBrief
+    ? `Latest briefing source: ${currentBrief.source || "backend"}.`
+    : "Generate a briefing to populate the live summary.";
+  $("#ipad-calendar-status").textContent = meetings.available ? `${meetings.items?.length || 0} meeting(s)` : "Read-only";
+  $("#ipad-calendar-detail").textContent = meetings.available
+    ? "Calendar signals are available from Microsoft read-only data."
+    : "Microsoft Calendar appears here when connected.";
+  $("#ipad-risk-status").textContent = `${risks.length} active`;
+  $("#ipad-risk-detail").textContent = risks[0]?.title || "High-priority operating and project risks.";
+  $("#ipad-action-status").textContent = `${actions.length} open`;
+  $("#ipad-action-detail").textContent = actions[0]?.title || "Current actions requiring attention.";
+  $("#ipad-voice-status").textContent = voiceStatus.settings?.enabled ? "Advisory ready" : "Disabled";
+  $("#ipad-voice-detail").textContent = voiceStatus.boundary?.voiceExecutionEnabled
+    ? "Unexpected execution flag detected."
+    : "Voice button remains accessible below. No execution.";
+}
+
+function deploymentStatusLabel(value) {
+  if (value === true || value === "connected" || value === "Connected" || value === "ok") return "Connected";
+  if (value === false || value === "Not connected" || value === "error") return "Not connected";
+  return value || "Planned";
+}
+
+function factRows(rows) {
+  return rows.map(([label, value]) => `
+    <div>
+      <small>${escapeHTML(label)}</small>
+      <strong>${escapeHTML(value)}</strong>
+    </div>
+  `).join("");
+}
+
+function renderSettings() {
+  const deployment = state.deployment || seedData.deployment;
+  const app = deployment.app || seedData.deployment.app;
+  const environmentProfile = deployment.environmentProfile || seedData.deployment.environmentProfile;
+  const pwa = deployment.pwa || seedData.deployment.pwa;
+  const integrations = deployment.integrations || {};
+  const warnings = deployment.warnings || [];
+  const security = deployment.security || seedData.deployment.security;
+  const property = state.property || seedData.property;
+  const financial = state.financial || seedData.financial;
+
+  $("#deployment-warning").innerHTML = warnings.length
+    ? warnings.map((warning) => `
+        <article>
+          <strong>${escapeHTML(warning.code || "CONFIGURATION_WARNING")}</strong>
+          <span>${escapeHTML(warning.message || warning)}</span>
+        </article>
+      `).join("")
+    : `<article class="ok"><strong>Deployment checks clear for ${escapeHTML(deployment.environment || "development")}</strong><span>Production authentication is still a documented future requirement before public exposure.</span></article>`;
+
+  $("#app-version-facts").innerHTML = factRows([
+    ["App", app.name || "Alfred AI Operating System"],
+    ["Package version", app.packageVersion || deployment.version || "unknown"],
+    ["Release", `${app.release?.version || deployment.release || "v0.4"} ${app.release?.title || "Cloud/PWA Preparation"}`],
+    ["Uptime", `${deployment.uptimeSeconds || 0}s`],
+  ]);
+
+  $("#environment-facts").innerHTML = factRows([
+    ["Environment", environmentProfile.label || deployment.environment || "Development"],
+    ["Branch", environmentProfile.branch || "feature/* or local"],
+    ["Deployment", environmentProfile.deployment || "Local Node server"],
+    ["Database", deployment.database?.status || "unknown"],
+  ]);
+
+  $("#backend-readiness-grid").innerHTML = [
+    ["Backend", backendAvailable ? "Connected" : "Fallback"],
+    ["Memory", deploymentStatusLabel(integrations.voyage?.status || integrations.voyage?.configured)],
+    ["Voice", integrations.voice?.enabled ? "Enabled" : "Disabled"],
+    ["Microsoft", integrations.microsoft?.connected ? "Connected" : integrations.microsoft?.configured ? "Configured" : "Not connected"],
+    ["Property", property.boundary?.readOnly ? "Read-only" : "Review"],
+    ["Finance", financial.boundary?.readOnly ? "Read-only" : "Review"],
+  ].map(([label, value]) => `
+    <article>
+      <small>${escapeHTML(label)}</small>
+      <strong>${escapeHTML(value)}</strong>
+    </article>
+  `).join("");
+
+  $("#pwa-readiness-facts").innerHTML = factRows([
+    ["Manifest", pwa.manifest || "/manifest.json"],
+    ["Service worker", pwa.serviceWorker || "/service-worker.js"],
+    ["Offline fallback", pwa.offlineFallback || "/offline.html"],
+    ["Install targets", (pwa.installTargets || []).join(", ")],
+    ["Standalone mode", pwa.displayMode || "standalone"],
+  ]);
+
+  $("#security-boundary-list").innerHTML = [
+    ["HTTPS required in production", security.httpsRequired],
+    ["Secure cookies required", security.secureCookiesRequired],
+    ["Cookies used", security.cookiesUsed],
+    ["Secrets exposed to frontend", security.secretsInFrontend],
+    ["API keys in localStorage", security.apiKeysInLocalStorage],
+    ["External writes enabled", security.externalWritesEnabled],
+    ["Approval safeguards required", security.approvalSafeguardsRequired],
+    ["Authentication", security.authenticationEnabled ? "Enabled" : security.authenticationProvider || "Microsoft Entra ID planned"],
+  ].map(([label, value]) => `
+    <article class="${value === false || value === "Disabled" ? "blocked" : "ok"}">
+      <strong>${escapeHTML(label)}</strong>
+      <span>${escapeHTML(typeof value === "boolean" ? (value ? "Yes" : "No") : value)}</span>
+    </article>
+  `).join("");
 }
 
 function renderApprovals() {
@@ -1345,6 +1496,7 @@ function renderAll() {
   renderAgents();
   renderApprovals();
   renderIntegrations();
+  renderSettings();
 }
 
 function navigate(view) {
@@ -1359,11 +1511,42 @@ function navigate(view) {
     agents: "AI Executive Team",
     approvals: "Approvals",
     integrations: "Integrations",
+    settings: "Settings",
   };
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   $$(".view").forEach((section) => section.classList.toggle("active", section.id === `${view}-view`));
   $("#view-title").textContent = titles[view];
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function refreshAppStatus() {
+  if (!backendAvailable) {
+    state.deployment = seedData.deployment;
+    renderSettings();
+    showToast("App status requires the backend API");
+    return;
+  }
+  try {
+    state.deployment = await apiRequest("/api/health");
+    renderSettings();
+    showToast("Deployment status refreshed");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.warn("Service worker registration skipped.", error);
+    });
+  });
+}
+
+function navigateFromUrl() {
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view && $(`#${view}-view`)) navigate(view);
 }
 
 function buildBrief(brief) {
@@ -2864,6 +3047,7 @@ $("#finance-scope").addEventListener("change", changeFinanceScope);
 $("#refresh-monday-finance").addEventListener("click", refreshMondayFinance);
 $("#generate-board-report").addEventListener("click", generateBoardReportView);
 $("#ask-olivia").addEventListener("click", askOlivia);
+$("#refresh-app-status").addEventListener("click", refreshAppStatus);
 $("#copy-board-report").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(currentBoardReportMarkdown || $("#board-report-output").textContent);
@@ -2973,4 +3157,5 @@ document.addEventListener("keydown", (event) => {
 
 updateClock();
 setInterval(updateClock, 30_000);
-loadDashboard();
+registerServiceWorker();
+loadDashboard().then(navigateFromUrl);
