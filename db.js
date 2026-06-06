@@ -244,6 +244,32 @@ const SCHEMA = `
     execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS semantic_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_created_at TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    embedding_model TEXT NOT NULL,
+    embedding_dimension INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    sensitivity_category TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS semantic_memory_source
+  ON semantic_memory(source_type, source_id);
 `;
 
 const COMPANY_SEEDS = [
@@ -318,9 +344,20 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+  ensureDefaultSettings(db);
   migrateApprovalSchema(db);
   seedDatabase(db);
   return db;
+}
+
+function ensureDefaultSettings(db) {
+  const semanticDefault = String(process.env.SEMANTIC_INDEXING_ENABLED || "true").toLowerCase() === "false"
+    ? "false"
+    : "true";
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('semantic_indexing_enabled', ?)
+  `).run(semanticDefault);
 }
 
 function migrateApprovalSchema(db) {
@@ -743,6 +780,7 @@ function requestFingerprint(payload) {
 
 function toIsoTimestamp(value) {
   if (!value || value.includes("T")) return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T00:00:00Z`;
   return `${value.replace(" ", "T")}Z`;
 }
 
@@ -1068,6 +1106,306 @@ export function listAiAnalysisAudit(db, limit = 50) {
     errorCode: row.error_code,
     executionAttempted: Boolean(row.execution_attempted),
   }));
+}
+
+export function getSetting(db, key, fallback = "") {
+  return db.prepare("SELECT value FROM app_settings WHERE key = ?").get(String(key))?.value ?? fallback;
+}
+
+export function setSetting(db, key, value) {
+  db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(String(key), String(value));
+  return getSetting(db, key);
+}
+
+export function getSemanticIndexingEnabled(db) {
+  return getSetting(db, "semantic_indexing_enabled", "true") === "true";
+}
+
+export function setSemanticIndexingEnabled(db, enabled) {
+  return setSetting(db, "semantic_indexing_enabled", enabled ? "true" : "false") === "true";
+}
+
+function semanticRecord({
+  sourceType,
+  sourceId,
+  sourceCreatedAt,
+  title,
+  summary,
+  sensitivityCategory = "local_sensitive_business_data",
+}) {
+  return {
+    sourceType,
+    sourceId: String(sourceId),
+    sourceCreatedAt: toIsoTimestamp(String(sourceCreatedAt || new Date().toISOString())),
+    title: String(title || `${sourceType}:${sourceId}`).slice(0, 300),
+    summary: String(summary || "").replace(/\s+/g, " ").trim().slice(0, 2400),
+    sensitivityCategory,
+  };
+}
+
+function companyLabel(row) {
+  return row.company_short_name || row.company_name || "Group";
+}
+
+function operatingSummary(kind, row) {
+  const parts = [
+    `${kind}: ${row.title}.`,
+    row.detail,
+    `Company: ${companyLabel(row)}.`,
+    `Priority: ${row.priority || "medium"}.`,
+    `Status: ${row.status || "open"}.`,
+    row.due ? `Timing: ${row.due}.` : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value || "");
+  } catch {
+    return fallback;
+  }
+}
+
+function briefingSummaryRecord(row) {
+  const summary = safeJsonParse(row.summary, {});
+  const snapshot = safeJsonParse(row.snapshot, {});
+  const priorities = (snapshot.executivePriorities || [])
+    .slice(0, 3)
+    .map((item) => `${item.title}: ${item.detail || item.category || ""}`)
+    .join(" ");
+  return semanticRecord({
+    sourceType: "briefing",
+    sourceId: row.id,
+    sourceCreatedAt: row.generated_at,
+    title: `Executive briefing ${row.id}`,
+    summary: [
+      `Executive briefing generated ${row.generated_at}.`,
+      `Open records: ${summary.totalOpen || 0}.`,
+      `Priority emails: ${summary.priorityEmails || 0}.`,
+      `Meetings within 24 hours: ${summary.meetingsToday || 0}.`,
+      `Decision prompts: ${summary.decisionPrompts || 0}.`,
+      priorities ? `Top priorities: ${priorities}` : "",
+    ].filter(Boolean).join(" "),
+  });
+}
+
+function microsoftSummaryRecords(row) {
+  const snapshot = safeJsonParse(row.snapshot, {});
+  const emails = (snapshot.emails || []).slice(0, 10).map((email, index) => semanticRecord({
+    sourceType: "microsoft_email_summary",
+    sourceId: `${row.id}:${email.id || index}`,
+    sourceCreatedAt: email.receivedDateTime || row.generated_at,
+    title: email.title || "(No subject)",
+    summary: [
+      `Outlook email summary captured in briefing ${row.id}.`,
+      `Subject: ${email.title || "(No subject)"}.`,
+      email.detail,
+      email.importance ? `Importance: ${email.importance}.` : "",
+      email.priority ? `Priority: ${email.priority}.` : "",
+      email.reasons?.length ? `Reasons: ${email.reasons.join("; ")}.` : "",
+    ].filter(Boolean).join(" "),
+  }));
+  const meetings = (snapshot.meetings?.items || []).slice(0, 10).map((meeting, index) => semanticRecord({
+    sourceType: "microsoft_calendar_summary",
+    sourceId: `${row.id}:${meeting.id || index}`,
+    sourceCreatedAt: meeting.start?.dateTime || row.generated_at,
+    title: meeting.title || "(Untitled meeting)",
+    summary: [
+      `Calendar meeting summary captured in briefing ${row.id}.`,
+      `Meeting: ${meeting.title || "(Untitled meeting)"}.`,
+      meeting.detail,
+      meeting.urgency ? `Urgency: ${meeting.urgency}.` : "",
+      meeting.preparation?.length ? `Preparation: ${meeting.preparation.join("; ")}.` : "",
+    ].filter(Boolean).join(" "),
+  }));
+  return [...emails, ...meetings];
+}
+
+export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicrosoftSummaries = true } = {}) {
+  const records = [];
+  const memoryRows = db.prepare(`
+    SELECT m.*, c.short_name AS company_short_name, c.name AS company_name
+    FROM memories m
+    LEFT JOIN companies c ON c.id = m.company_id
+    ORDER BY m.recorded_at DESC, m.id DESC
+  `).all();
+  for (const row of memoryRows) {
+    records.push(semanticRecord({
+      sourceType: "memory",
+      sourceId: row.id,
+      sourceCreatedAt: row.recorded_at,
+      title: row.title,
+      summary: `Memory (${row.type}): ${row.title}. ${row.detail}. Company: ${companyLabel(row)}.`,
+    }));
+  }
+
+  for (const [table, label] of [
+    ["actions", "Action"],
+    ["risks", "Risk"],
+    ["opportunities", "Opportunity"],
+    ["decisions", "Decision"],
+  ]) {
+    const rows = db.prepare(`
+      SELECT r.*, c.short_name AS company_short_name, c.name AS company_name
+      FROM ${table} r
+      LEFT JOIN companies c ON c.id = r.company_id
+      ORDER BY r.updated_at DESC, r.id DESC
+    `).all();
+    for (const row of rows) {
+      records.push(semanticRecord({
+        sourceType: table.slice(0, -1),
+        sourceId: row.id,
+        sourceCreatedAt: row.created_at,
+        title: row.title,
+        summary: operatingSummary(label, row),
+      }));
+    }
+  }
+
+  const approvals = db.prepare(`
+    SELECT *
+    FROM approval_requests
+    ORDER BY requested_at DESC, id DESC
+  `).all();
+  for (const row of approvals) {
+    records.push(semanticRecord({
+      sourceType: "approval",
+      sourceId: row.id,
+      sourceCreatedAt: row.requested_at,
+      title: row.title,
+      summary: [
+        `Approval request: ${row.title}.`,
+        row.description,
+        `Target system: ${row.target_system}.`,
+        `Action type: ${row.action_type}.`,
+        `Risk level: ${row.risk_level}.`,
+        `Status: ${row.status}.`,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const briefings = db.prepare(`
+    SELECT id, generated_at, summary, snapshot
+    FROM briefing_history
+    ORDER BY generated_at DESC, id DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(briefingLimit) || 10, 1), 50));
+  for (const row of briefings) {
+    records.push(briefingSummaryRecord(row));
+    if (includeMicrosoftSummaries) records.push(...microsoftSummaryRecords(row));
+  }
+
+  return records.filter((record) => record.summary);
+}
+
+function mapSemanticMemoryRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    sourceCreatedAt: toIsoTimestamp(row.source_created_at),
+    summary: row.summary,
+    embedding: JSON.parse(row.embedding || "[]"),
+    embeddingModel: row.embedding_model,
+    embeddingDimension: row.embedding_dimension,
+    contentHash: row.content_hash,
+    sensitivityCategory: row.sensitivity_category,
+    indexedAt: toIsoTimestamp(row.indexed_at),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
+  };
+}
+
+export function getSemanticMemoryRecord(db, sourceType, sourceId) {
+  return mapSemanticMemoryRow(db.prepare(`
+    SELECT *
+    FROM semantic_memory
+    WHERE source_type = ? AND source_id = ?
+  `).get(String(sourceType), String(sourceId)));
+}
+
+export function shouldIndexSemanticRecord(db, { sourceType, sourceId, contentHash, embeddingModel }) {
+  const existing = getSemanticMemoryRecord(db, sourceType, sourceId);
+  return !existing || existing.contentHash !== contentHash || existing.embeddingModel !== embeddingModel;
+}
+
+export function upsertSemanticMemoryRecord(db, {
+  sourceType,
+  sourceId,
+  sourceCreatedAt,
+  summary,
+  embedding,
+  embeddingModel,
+  contentHash,
+  sensitivityCategory = "local_sensitive_business_data",
+}) {
+  const vector = Array.isArray(embedding) ? embedding.map(Number) : [];
+  if (!vector.length) {
+    const error = new Error("Semantic memory embedding is required");
+    error.statusCode = 400;
+    throw error;
+  }
+  db.prepare(`
+    INSERT INTO semantic_memory (
+      source_type, source_id, source_created_at, summary,
+      embedding, embedding_model, embedding_dimension, content_hash,
+      sensitivity_category, indexed_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(source_type, source_id) DO UPDATE SET
+      source_created_at = excluded.source_created_at,
+      summary = excluded.summary,
+      embedding = excluded.embedding,
+      embedding_model = excluded.embedding_model,
+      embedding_dimension = excluded.embedding_dimension,
+      content_hash = excluded.content_hash,
+      sensitivity_category = excluded.sensitivity_category,
+      indexed_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    String(sourceType),
+    String(sourceId),
+    String(sourceCreatedAt),
+    String(summary).slice(0, 2400),
+    JSON.stringify(vector),
+    String(embeddingModel),
+    vector.length,
+    String(contentHash),
+    String(sensitivityCategory),
+  );
+  return getSemanticMemoryRecord(db, sourceType, sourceId);
+}
+
+export function listSemanticMemoryRecords(db, limit = 1000) {
+  return db.prepare(`
+    SELECT *
+    FROM semantic_memory
+    ORDER BY indexed_at DESC, id DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 1000, 1), 5000)).map(mapSemanticMemoryRow);
+}
+
+export function getSemanticMemoryStats(db) {
+  const row = db.prepare("SELECT COUNT(*) AS count, MAX(indexed_at) AS last_indexed_at FROM semantic_memory").get();
+  return {
+    count: row.count || 0,
+    lastIndexedAt: toIsoTimestamp(row.last_indexed_at),
+  };
+}
+
+export function deleteSemanticMemoryRecord(db, sourceType, sourceId) {
+  db.prepare(`
+    DELETE FROM semantic_memory
+    WHERE source_type = ? AND source_id = ?
+  `).run(String(sourceType), String(sourceId));
 }
 
 function getLatestApprovalPreflight(db, id) {

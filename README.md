@@ -66,6 +66,8 @@ Approval records include SHA-256 action fingerprints, retry-safe idempotency key
 
 AI analysis audit records are also stored in SQLite. They log the timestamp, user action, data categories, model, success/error status and whether output was saved. They do not store API keys.
 
+Semantic memory records are stored in SQLite in `semantic_memory`. SQLite remains the source of truth: vector rows store source type, source ID, timestamp, compact summary, embedding, model and sensitivity label only. Alfred treats these records as local sensitive business data.
+
 ## API
 
 Health and aggregate workflows:
@@ -79,6 +81,10 @@ Health and aggregate workflows:
 | `POST` | `/api/ai/briefing` | Claude-powered CEO analysis of the current briefing context |
 | `POST` | `/api/ai/decision-support` | Claude-powered decision, risk or approval support |
 | `GET` | `/api/ai/audit?limit=50` | Metadata-only AI analysis audit log |
+| `GET` | `/api/memory/status` | Voyage configuration, indexing setting and vector stats |
+| `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
+| `GET` | `/api/memory/settings` | Current semantic indexing setting |
+| `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
 | `GET` | `/api/approvals` | Approval requests and status totals |
 | `POST` | `/api/approvals` | Propose an external action for human review |
 | `GET` | `/api/approvals/{id}` | Approval detail and immutable event history |
@@ -158,7 +164,7 @@ Allowed states are:
 - `Planned`
 - `Connected`
 
-External calls are limited to verified read-only Microsoft 365 reads and explicit Anthropic reasoning requests initiated by Patrick in the UI or API. Alfred still cannot modify external systems.
+External calls are limited to verified read-only Microsoft 365 reads, explicit Anthropic reasoning requests and Voyage embedding/search requests over compact summaries. Alfred still cannot modify external systems.
 
 ## Tests
 
@@ -166,7 +172,7 @@ External calls are limited to verified read-only Microsoft 365 reads and explici
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions and Anthropic reasoning boundaries.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries and Voyage semantic memory retrieval.
 
 ## Architecture
 
@@ -174,6 +180,8 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `db.js` - schema, seed data, resource persistence and briefing queries
 - `anthropic.js` - Claude Messages API client, CEO system prompt and structured output schemas
 - `ai.js` - read-only AI reasoning service and audit wrapper
+- `voyage.js` - Voyage embeddings client and vector helpers
+- `semantic-memory.js` - SQLite-backed semantic indexing, search and Claude context retrieval
 - `app.js` - dashboard rendering, API client and localStorage fallback
 - `index.html` / `styles.css` - executive command centre interface
 - `test/db.test.js` - database and workflow tests
@@ -185,7 +193,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 3. Add idempotency, expiry and re-authentication checks before any approved action can execute.
 4. Add Monday.com project and task synchronization.
 5. Ingest Krisp transcripts into memories and actions.
-6. Add Voyage embeddings while retaining SQLite as the source-of-record index.
+6. Add retrieval evaluation and retention controls for semantic memory.
 7. Add ElevenLabs and Deepgram only after text workflows are stable.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
@@ -358,6 +366,54 @@ Claude cannot:
 - Claim work is complete unless Alfred's stored system data proves it
 
 Every AI request is logged in `ai_analysis_audit` with metadata only. Alfred does not log raw API keys and does not persist Claude output in this phase.
+
+## Voyage Semantic Memory Setup
+
+Alfred can use Voyage AI to create embeddings for compact business summaries while keeping SQLite as the source of truth.
+
+Create or update your local `.env`:
+
+```bash
+VOYAGE_API_KEY="your-voyage-api-key"
+VOYAGE_MODEL="voyage-4-lite"
+SEMANTIC_INDEXING_ENABLED=true
+```
+
+`VOYAGE_MODEL` is optional and defaults to `voyage-4-lite`. `SEMANTIC_INDEXING_ENABLED` seeds the first local database setting only; after that, use the dashboard toggle or `/api/memory/settings`.
+
+### What Gets Embedded
+
+Alfred indexes compact summaries and metadata for:
+
+- Memories
+- Actions, risks, opportunities and decisions
+- Briefing snapshots
+- Approval requests
+- Selected Outlook and calendar summaries captured inside saved briefings
+
+Alfred does **not** embed raw full emails by default. Microsoft-derived records are summary-first and are marked as `local_sensitive_business_data`.
+
+### Memory API Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/memory/status` | Voyage configuration, indexing state and vector table stats |
+| `GET` | `/api/memory/search?q=Westminster` | Search Alfred memory and return source references, relevance, timestamp and sensitivity label |
+| `GET` | `/api/memory/settings` | Read the semantic indexing setting |
+| `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing with `{ "semanticIndexingEnabled": false }` |
+
+If `VOYAGE_API_KEY` is missing or indexing is disabled, Alfred falls back to local keyword matching and does not call Voyage.
+
+### Claude Context Retrieval
+
+Before Claude analysis, Alfred retrieves a bounded memory context:
+
+- Maximum 6 records
+- Approximate 1,200 token budget
+- Source references included
+- No unbounded database or mailbox dump
+
+Claude receives these records as context only. Voyage memory retrieval does not execute actions, send messages, edit files, update calendars or approve anything.
 
 ## Executive Briefing V2
 
