@@ -3,10 +3,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   AGENT_AVATAR_PROFILES,
+  AVATAR_PROVIDER_CANDIDATES,
+  AVATAR_PROVIDER_STATUSES,
+  AVATAR_VISUAL_STANDARD,
   CURRENT_AGENT_IDS,
   PLANNED_AGENT_IDS,
   agentFallbackInitials,
   buildAgentAvatarRenderModel,
+  buildAvatarProviderState,
   buildExecutiveTeamRoster,
   isLocalAvatarPath,
 } from "../agent-avatars.js";
@@ -36,11 +40,31 @@ test("agent avatar metadata exists for all executive identities", () => {
     assert.ok(agent.fallbackInitials);
     assert.match(agent.accentColor, /^#[0-9a-f]{6}$/i);
     assert.ok(agent.voicePersonaPlaceholder);
+    assert.equal(agent.avatarProvider, "avatarProvider");
+    assert.ok(agent.talkingAvatarPlaceholder);
     assert.ok(agent.reportingLine);
     assert.ok(agent.currentCapabilitySummary);
     assert.ok(agent.plannedCapabilitySummary);
     assert.ok(agent.expertiseTags.length);
   }
+});
+
+test("executive avatar visual standard and provider abstraction are provider-neutral", () => {
+  const provider = buildAvatarProviderState();
+  const providerNames = AVATAR_PROVIDER_CANDIDATES.map((candidate) => candidate.name);
+
+  assert.equal(AVATAR_VISUAL_STANDARD.experience, "Premium AI Executive Operating System");
+  assert.ok(AVATAR_VISUAL_STANDARD.designLanguage.includes("Executive boardroom feel"));
+  assert.ok(AVATAR_VISUAL_STANDARD.designLanguage.includes("Voice waveform"));
+  assert.ok(AVATAR_VISUAL_STANDARD.supportedStates.includes("speaking"));
+  assert.equal(AVATAR_VISUAL_STANDARD.securityBoundary.deepfakeGenerationAllowed, false);
+  assert.equal(AVATAR_VISUAL_STANDARD.securityBoundary.externalAvatarProviderCallsEnabled, false);
+  assert.deepEqual(AVATAR_PROVIDER_STATUSES, ["Not connected", "Planned", "Connected"]);
+  assert.deepEqual(providerNames, ["Synthesia", "HeyGen", "Tavus", "D-ID", "Native Alfred avatar engine"]);
+  assert.equal(provider.id, "avatarProvider");
+  assert.equal(provider.status, "Planned");
+  assert.equal(provider.liveProviderCallsEnabled, false);
+  assert.equal(provider.storesAudioVideoByDefault, false);
 });
 
 test("Sentinel CISO metadata exists as planned advisory governance only", () => {
@@ -107,6 +131,8 @@ test("voice persona placeholders exist for current and future agents", () => {
   assert.deepEqual(VOICE_PERSONAS.map((persona) => persona.id), REQUIRED_AGENT_IDS);
   for (const persona of VOICE_PERSONAS) {
     assert.ok(persona.voicePersonaPlaceholder, persona.id);
+    assert.equal(persona.avatarProvider, "avatarProvider", persona.id);
+    assert.ok(persona.talkingAvatarPlaceholder, persona.id);
   }
 });
 
@@ -114,12 +140,16 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   const html = readFileSync("index.html", "utf8");
   const app = readFileSync("app.js", "utf8");
   assert.match(html, /id="executive-team-identity"/);
+  assert.match(html, /id="sidebar-executive-team"/);
   assert.match(html, /id="voice-agent-identity"/);
+  assert.match(html, /id="voice-avatar-presence"/);
+  assert.match(html, /id="avatar-provider-status"/);
   assert.match(html, /id="finance-agent-identity"/);
   assert.match(html, /id="sarah-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);
+  assert.match(app, /renderSidebarExecutiveTeam/);
   assert.match(app, /enhanceAvatarFallbacks/);
   assert.doesNotMatch(app, /roster\.slice\(0,\s*9\)/);
 });
@@ -130,5 +160,7 @@ test("roadmap documents Sentinel, Teams Meeting Intelligence, feedback loops and
   assert.match(readme, /Teams Meeting Intelligence/i);
   assert.match(readme, /Agent Feedback Loop Roadmap/);
   assert.match(readme, /Monday\.com Operating System Roadmap/);
+  assert.match(readme, /Provider-Neutral Talking Avatar Architecture/);
+  assert.match(readme, /No celebrity likenesses/);
   assert.match(readme, /Sentinel must exist before future write-capable or autonomous agents/);
 });

@@ -1,6 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Alfred app icon">
-  <rect width="512" height="512" rx="112" fill="#071011"/>
-  <circle cx="256" cy="256" r="178" fill="#0d191a" stroke="#62ead5" stroke-width="10"/>
-  <circle cx="256" cy="256" r="116" fill="none" stroke="#62ead5" stroke-opacity="0.28" stroke-width="4"/>
-  <text x="256" y="306" text-anchor="middle" font-family="Arial, sans-serif" font-size="154" font-weight="700" fill="#62ead5">A</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Alfred AI Operating System app icon">
+  <defs>
+    <radialGradient id="bgGlow" cx="68%" cy="18%" r="78%">
+      <stop offset="0" stop-color="#2431a8" stop-opacity="0.7"/>
+      <stop offset="0.34" stop-color="#0b4f5a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#071011"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="96" y1="70" x2="420" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.42" stop-color="#62ead5" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.16"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="120" y1="92" x2="418" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#62ead5"/>
+      <stop offset="0.52" stop-color="#7fa9e2"/>
+      <stop offset="1" stop-color="#b18ae2"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.38 0 0 0 0 0.92 0 0 0 0 0.84 0 0 0 0.65 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)"/>
+  <rect x="58" y="58" width="396" height="396" rx="92" fill="url(#glass)" stroke="#ffffff" stroke-opacity="0.08"/>
+  <circle cx="256" cy="256" r="146" fill="none" stroke="url(#stroke)" stroke-width="7" stroke-opacity="0.92" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="104" fill="none" stroke="#62ead5" stroke-width="2" stroke-opacity="0.24"/>
+  <path d="M256 114a142 142 0 0 1 137 104M256 398A142 142 0 0 1 119 294" fill="none" stroke="#b18ae2" stroke-linecap="round" stroke-width="8" stroke-opacity="0.68"/>
+  <path d="M167 334 243 154h32l77 180h-34l-16-40h-84l-16 40h-35Zm61-67h64l-32-80-32 80Z" fill="#e6efec"/>
+  <path d="M215 350h102" stroke="#62ead5" stroke-linecap="round" stroke-width="8"/>
+  <circle cx="390" cy="154" r="12" fill="#62ead5"/>
+  <circle cx="132" cy="330" r="9" fill="#b18ae2"/>
 </svg>

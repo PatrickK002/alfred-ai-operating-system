@@ -74,6 +74,7 @@ export const ENVIRONMENT_VARIABLES = [
   { key: "ELEVENLABS_API_KEY", category: "voice", publicName: "ElevenLabs text-to-speech", productionCritical: false, secret: true },
   { key: "ELEVENLABS_VOICE_ID", category: "voice", publicName: "ElevenLabs voice ID", productionCritical: false, secret: false },
   { key: "VOICE_ENABLED", category: "voice", publicName: "Voice interface", productionCritical: false, secret: false },
+  { key: "AVATAR_PROVIDER", category: "avatar", publicName: "Talking avatar provider placeholder", productionCritical: false, secret: false },
 ];
 
 function hasValue(value) {
@@ -163,9 +164,13 @@ export function pwaReadiness() {
     manifest: "/manifest.json",
     serviceWorker: "/service-worker.js",
     offlineFallback: "/offline.html",
+    favicon: "/icons/alfred-icon.svg",
+    appleTouchIcon: "/icons/alfred-icon.svg",
+    splashScreen: "/icons/alfred-splash.svg",
     displayMode: "standalone",
     themeColor: "#071011",
     installTargets: ["MacBook Dock", "iPhone Home Screen", "iPad Pro Home Screen"],
+    iconStrategy: "Premium Alfred command-centre SVG placeholders; final production artwork can replace the same local paths.",
     installReady: true,
   };
 }

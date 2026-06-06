@@ -75,7 +75,14 @@ PWA install:
 - iPhone Safari: Share -> **Add to Home Screen**.
 - iPad Pro Safari: Share -> **Add to Home Screen**.
 
-The PWA includes `manifest.json`, `service-worker.js`, icon placeholders, local executive avatar assets and `offline.html`. Offline mode only provides the installed shell; live executive data, approvals, voice, memory and integrations still require the backend.
+The PWA includes `manifest.json`, `service-worker.js`, brand-ready local SVG icon placeholders, splash-screen placeholder, local executive avatar assets and `offline.html`. Offline mode only provides the installed shell; live executive data, approvals, voice, memory and integrations still require the backend.
+
+PWA icon strategy:
+
+- Use local controlled assets only: `/icons/alfred-icon.svg`, `/icons/alfred-maskable.svg` and `/icons/alfred-splash.svg`.
+- Support MacBook Dock, iPhone Home Screen, iPad Pro Home Screen, browser tab favicon and launch/splash placeholder paths.
+- Keep the icon direction premium, dark, executive and AI command-centre aligned.
+- Future final brand artwork should replace the same local paths without adding remote images or large binary assets.
 
 Production security notes:
 
@@ -344,7 +351,7 @@ VOICE_AI_TIMEOUT_MS=12000
 
 ### Voice Security Boundary
 
-Voice is an executive intelligence interface only. It can analyse, brief, route internally to Sarah, Olivia and Westbridge, and recommend next steps.
+Voice is an executive intelligence interface only. It can analyse, brief, route internally to Sarah, Olivia, Westbridge and Sentinel, and recommend next steps.
 
 Voice cannot:
 
@@ -385,7 +392,31 @@ Alfred includes a local executive avatar identity layer for:
 - Liam
 - James
 
-The source of truth is `agent-avatars.js`. It stores each agent's name, title, business area, department, local avatar path, fallback initials, accent colour, voice persona placeholder, expertise tags, status, reporting line, current capability summary and planned capability summary.
+The target experience is that Patrick opens Alfred from the MacBook Dock, iPhone Home Screen or iPad Pro Home Screen and sees a premium AI Executive Operating System rather than a generic web dashboard.
+
+Visual standard:
+
+- Executive boardroom feel
+- Dark premium interface
+- Glass panels
+- Subtle blue/purple AI glow
+- Professional abstract avatar portraits
+- Voice waveform
+- Speaking, listening and thinking states
+- Agent presence indicators
+- Executive Team sidebar
+- Current topics and suggested actions panels
+
+Avoid:
+
+- Cartoon avatars
+- Gaming UI
+- Childish icons
+- Generic chatbot bubbles
+- Consumer social-media styling
+- Celebrity likenesses or real human likenesses without consent
+
+The source of truth is `agent-avatars.js`. It stores each agent's name, title, business area, department, local avatar path, fallback initials, accent colour, voice persona placeholder, avatar provider placeholder, talking-avatar placeholder, expertise tags, status, reporting line, current capability summary and planned capability summary.
 
 Avatar assets live in:
 
@@ -402,9 +433,47 @@ Rules:
 - If an avatar image is missing or fails to load, the UI falls back to a styled initials badge.
 - Future brand artwork can replace the placeholder SVGs by keeping the same local paths.
 
+### Provider-Neutral Talking Avatar Architecture
+
+Alfred exposes an `avatarProvider` abstraction for future talking-avatar support.
+
+Current status:
+
+- `avatarProvider`: `Planned`
+- Live external provider calls: disabled
+- Audio/video storage by default: disabled
+- Current implementation: static local avatar portraits, speaking/listening/thinking state metadata, waveform UI and provider-neutral placeholders
+
+Future provider candidates:
+
+- Synthesia
+- HeyGen
+- Tavus
+- D-ID
+- Native Alfred avatar engine
+
+The current architecture deliberately does not hard-code a live provider. A future provider can only be enabled after explicit configuration, security review, consent review and approval of data handling.
+
+### Consent And Likeness Rules
+
+- No celebrity likenesses.
+- No real human likeness without explicit consent.
+- No deepfake generation.
+- No external avatar provider calls without explicit configuration.
+- No audio or video storage by default.
+- No autonomous actions.
+
 The avatar layer is visual identity only. It does not add autonomous agents, write actions, external integrations, email sending, calendar updates, Microsoft writes, Monday writes, financial writes or property actions.
 
 Voice persona fields are placeholders for future multi-voice support across Alfred, Olivia, Sarah, Westbridge, Sentinel, Maya, Alex, Ethan, Liam and James. Alfred remains the only primary voice in the current voice phase.
+
+Current limitations:
+
+- Avatars are static local SVG portraits with fallback initials.
+- Talking avatar support is metadata and UI-state only.
+- No Synthesia, HeyGen, Tavus, D-ID or native avatar runtime calls are made.
+- Provider status shows `Connected` only after a future verified provider call exists.
+- Final production icon/avatar artwork can replace placeholders later without changing the architecture.
 
 ## Sentinel CISO Foundation
 
@@ -640,7 +709,8 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
-- `manifest.json` / `service-worker.js` / `offline.html` - installable PWA shell, static cache and offline fallback
+- `manifest.json` / `service-worker.js` / `offline.html` - installable PWA shell, static cache, icon strategy and offline fallback
+- `icons/` - local Alfred PWA icon, maskable icon and splash-screen placeholders
 - `assets/avatars/` - local abstract executive avatar placeholders
 - `index.html` / `styles.css` - executive command centre interface and responsive iPad/iPhone layouts
 - `test/db.test.js` - database and workflow tests

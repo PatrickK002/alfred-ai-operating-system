@@ -1,5 +1,93 @@
 const LOCAL_AVATAR_PREFIX = "/assets/avatars/";
 
+export const AVATAR_PROVIDER_STATUSES = Object.freeze([
+  "Not connected",
+  "Planned",
+  "Connected",
+]);
+
+export const AVATAR_PROVIDER_CANDIDATES = Object.freeze([
+  {
+    id: "synthesia",
+    name: "Synthesia",
+    status: "Not connected",
+    type: "future_external_provider",
+  },
+  {
+    id: "heygen",
+    name: "HeyGen",
+    status: "Not connected",
+    type: "future_external_provider",
+  },
+  {
+    id: "tavus",
+    name: "Tavus",
+    status: "Not connected",
+    type: "future_external_provider",
+  },
+  {
+    id: "d-id",
+    name: "D-ID",
+    status: "Not connected",
+    type: "future_external_provider",
+  },
+  {
+    id: "native-alfred-avatar-engine",
+    name: "Native Alfred avatar engine",
+    status: "Planned",
+    type: "future_internal_provider",
+  },
+]);
+
+export const AVATAR_VISUAL_STANDARD = Object.freeze({
+  experience: "Premium AI Executive Operating System",
+  designLanguage: [
+    "Executive boardroom feel",
+    "Dark premium interface",
+    "Glass panels",
+    "Subtle blue/purple AI glow",
+    "Professional abstract avatar portraits",
+    "Voice waveform",
+    "Speaking/listening/thinking states",
+    "Agent presence indicators",
+    "Executive Team sidebar",
+    "Current topics panel",
+    "Suggested actions panel",
+  ],
+  avoid: [
+    "cartoon avatars",
+    "gaming UI",
+    "childish icons",
+    "generic chatbot bubbles",
+    "consumer social-media styling",
+    "celebrity likenesses",
+    "real human likenesses without consent",
+  ],
+  supportedStates: ["ready", "listening", "thinking", "speaking", "handoff"],
+  securityBoundary: {
+    celebrityLikenessAllowed: false,
+    realHumanLikenessWithoutConsentAllowed: false,
+    deepfakeGenerationAllowed: false,
+    externalAvatarProviderCallsEnabled: false,
+    audioVideoStoredByDefault: false,
+    autonomousActionsEnabled: false,
+  },
+});
+
+export const AVATAR_PROVIDER = Object.freeze({
+  id: "avatarProvider",
+  name: "Provider-neutral talking avatar",
+  status: "Planned",
+  configured: false,
+  connected: false,
+  selectedProvider: "",
+  futureProviders: AVATAR_PROVIDER_CANDIDATES.map((provider) => provider.name),
+  liveProviderCallsEnabled: false,
+  storesAudioVideoByDefault: false,
+  consentRequiredForHumanLikeness: true,
+  deepfakeGenerationAllowed: false,
+});
+
 export const CURRENT_AGENT_IDS = Object.freeze([
   "alfred",
   "olivia",
@@ -28,6 +116,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "A",
     accentColor: "#62ead5",
     voicePersonaPlaceholder: "alfred-primary-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "alfred-executive-presence",
     expertiseTags: ["Executive briefings", "Prioritisation", "Risk review", "Decision support"],
     status: "Active advisory",
     statusCategory: "active",
@@ -47,6 +137,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "O",
     accentColor: "#8bc7ff",
     voicePersonaPlaceholder: "olivia-cfo-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "olivia-cfo-presence",
     expertiseTags: ["Forecasting", "Order book", "Debtors", "Board reporting"],
     status: "Active advisory",
     statusCategory: "active",
@@ -66,6 +158,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "S",
     accentColor: "#b18ae2",
     voicePersonaPlaceholder: "sarah-digital-construction-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "sarah-digital-construction-presence",
     expertiseTags: ["BIM", "ISO 19650", "COBie", "Digital Twin"],
     status: "Active advisory",
     statusCategory: "active",
@@ -85,6 +179,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "W",
     accentColor: "#d7b56d",
     voicePersonaPlaceholder: "westbridge-property-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "westbridge-property-presence",
     expertiseTags: ["Cashflow", "Due diligence", "Deal analysis", "Refinance"],
     status: "Active advisory",
     statusCategory: "active",
@@ -104,6 +200,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "S",
     accentColor: "#ff6f8f",
     voicePersonaPlaceholder: "sentinel-ciso-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "sentinel-ciso-presence",
     expertiseTags: [
       "Cyber Security",
       "Microsoft 365 Security",
@@ -139,6 +237,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "M",
     accentColor: "#e2b46b",
     voicePersonaPlaceholder: "maya-media-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "maya-media-presence",
     expertiseTags: ["Content strategy", "Channel systems", "Production", "Monetisation"],
     status: "Planned",
     statusCategory: "planned",
@@ -158,6 +258,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "A",
     accentColor: "#7fa9e2",
     voicePersonaPlaceholder: "alex-growth-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "alex-growth-presence",
     expertiseTags: ["Pipeline", "Partnerships", "Sales strategy", "Market signals"],
     status: "Planned",
     statusCategory: "planned",
@@ -177,6 +279,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "E",
     accentColor: "#72d6ff",
     voicePersonaPlaceholder: "ethan-cto-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "ethan-cto-presence",
     expertiseTags: ["Architecture", "Security", "Cloud", "Engineering"],
     status: "Planned",
     statusCategory: "planned",
@@ -196,6 +300,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "L",
     accentColor: "#9ee080",
     voicePersonaPlaceholder: "liam-power-platform-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "liam-power-platform-presence",
     expertiseTags: ["Power Apps", "Dataverse", "Automation", "Power BI"],
     status: "Planned",
     statusCategory: "planned",
@@ -215,6 +321,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "J",
     accentColor: "#ff9fb2",
     voicePersonaPlaceholder: "james-product-voice",
+    avatarProvider: "avatarProvider",
+    talkingAvatarPlaceholder: "james-product-presence",
     expertiseTags: ["SaaS", "MVP validation", "Product strategy", "Customer discovery"],
     status: "Planned",
     statusCategory: "planned",
@@ -275,6 +383,9 @@ export function buildAgentAvatarRenderModel(agent = {}) {
     fallbackInitials,
     accentColor: profile.accentColor || agent.accentColor || "#62ead5",
     voicePersonaPlaceholder: profile.voicePersonaPlaceholder || agent.voicePersonaPlaceholder || `${fallbackInitials.toLowerCase()}-voice-placeholder`,
+    avatarProvider: profile.avatarProvider || agent.avatarProvider || AVATAR_PROVIDER.id,
+    talkingAvatarPlaceholder: profile.talkingAvatarPlaceholder || agent.talkingAvatarPlaceholder || `${fallbackInitials.toLowerCase()}-executive-presence`,
+    avatarStates: AVATAR_VISUAL_STANDARD.supportedStates,
     expertiseTags: profile.expertiseTags || agent.expertiseTags || agent.tools || [],
     status: profile.status || agent.status || "Planned",
     statusCategory: profile.statusCategory || String(agent.status || "planned").toLowerCase(),
@@ -284,6 +395,30 @@ export function buildAgentAvatarRenderModel(agent = {}) {
     plannedCapabilitySummary: profile.plannedCapabilitySummary || agent.plannedCapabilitySummary || "Future capability requires approval and security review.",
     tools: Array.isArray(agent.tools) ? agent.tools : [],
     databaseStatus: agent.status || "",
+  };
+}
+
+export function buildAvatarProviderState(overrides = {}) {
+  const envProvider = typeof process !== "undefined" ? process.env?.AVATAR_PROVIDER : "";
+  const selectedProvider = String(overrides.selectedProvider || envProvider || "").trim();
+  const connected = Boolean(overrides.connected);
+  const configured = Boolean(overrides.configured || selectedProvider);
+  const status = AVATAR_PROVIDER_STATUSES.includes(overrides.status)
+    ? overrides.status
+    : connected ? "Connected" : configured ? "Planned" : AVATAR_PROVIDER.status;
+  return {
+    ...AVATAR_PROVIDER,
+    ...overrides,
+    selectedProvider,
+    configured,
+    connected,
+    status,
+    state: status,
+    candidates: AVATAR_PROVIDER_CANDIDATES,
+    visualStandard: AVATAR_VISUAL_STANDARD,
+    liveProviderCallsEnabled: false,
+    storesAudioVideoByDefault: false,
+    deepfakeGenerationAllowed: false,
   };
 }
 

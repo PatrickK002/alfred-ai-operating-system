@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Alfred AI Operating System",
   "short_name": "Alfred",
-  "description": "Patrick King's AI Chief of Staff and executive operating system.",
+  "description": "Patrick King's premium AI Executive Operating System with board-level digital executive agents.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -38,6 +38,12 @@
       "short_name": "Projects",
       "description": "Open the Project Intelligence dashboard.",
       "url": "/?view=projects"
+    },
+    {
+      "name": "Voice Command Centre",
+      "short_name": "Voice",
+      "description": "Open Alfred ready for advisory voice interaction.",
+      "url": "/?view=command#voice-command-centre"
     }
   ]
 }

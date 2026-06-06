@@ -15,7 +15,10 @@ import { getFinancialDashboardData } from "./financial.js";
 import { getProjectDashboard, searchProjectKnowledge } from "./project-intelligence.js";
 import { getSarahDashboard, SARAH_READ_ONLY_BOUNDARY } from "./sarah.js";
 import { getPropertyDashboardData, PROPERTY_READ_ONLY_BOUNDARY, searchPropertyKnowledge } from "./property.js";
-import { AGENT_AVATAR_PROFILES } from "./agent-avatars.js";
+import {
+  AGENT_AVATAR_PROFILES,
+  buildAvatarProviderState,
+} from "./agent-avatars.js";
 
 export const VOICE_READ_ONLY_BOUNDARY = {
   advisoryOnly: true,
@@ -40,6 +43,8 @@ export const VOICE_PERSONAS = AGENT_AVATAR_PROFILES.map((agent) => ({
   role: agent.title,
   status: agent.id === "alfred" ? "Primary voice" : agent.statusCategory === "active" ? "Routable advisory specialist" : "Placeholder",
   voicePersonaPlaceholder: agent.voicePersonaPlaceholder,
+  avatarProvider: agent.avatarProvider,
+  talkingAvatarPlaceholder: agent.talkingAvatarPlaceholder,
 }));
 
 export const SUPPORTED_VOICE_COMMANDS = [
@@ -289,7 +294,7 @@ function providerChecklistItem({ id, label, configured, connected = false, requi
   };
 }
 
-function voiceProviderSetupStatus(settings, deepgram = {}, elevenlabs = {}) {
+function voiceProviderSetupStatus(settings, deepgram = {}, elevenlabs = {}, avatarProvider = buildAvatarProviderState()) {
   const deepgramConfigured = Boolean(deepgram.configured);
   const elevenLabsKeyConfigured = Boolean(elevenlabs.apiKeyConfigured || elevenlabs.configured);
   const elevenLabsConfigured = Boolean(elevenlabs.configured);
@@ -339,12 +344,25 @@ function voiceProviderSetupStatus(settings, deepgram = {}, elevenlabs = {}) {
         ? `Transcripts are stored locally for manual review. Retention purge threshold is ${settings.transcriptRetentionDays} day(s).`
         : "Transcript content is not persisted while logging is disabled.",
     }),
+    providerChecklistItem({
+      id: "avatar-provider",
+      label: "Talking avatar provider",
+      configured: avatarProvider.status !== "Not connected" || avatarProvider.configured,
+      connected: avatarProvider.connected,
+      requiredEnv: ["AVATAR_PROVIDER"],
+      missingEnv: [],
+      nextStep: avatarProvider.configured
+        ? "Avatar provider metadata is configured. Live calls remain disabled until a separate provider review."
+        : "Provider-neutral avatar placeholder is active. Add AVATAR_PROVIDER only after a consent and security review.",
+    }),
   ];
   return {
     readyForTypedCommands: Boolean(settings.enabled),
     readyForMicrophone: Boolean(settings.enabled && deepgramConfigured),
     readyForSpokenOutput: Boolean(settings.enabled && elevenLabsConfigured),
+    readyForTalkingAvatar: Boolean(settings.enabled && avatarProvider.connected),
     rawAudioStored: false,
+    rawVideoStored: false,
     secretsExposed: false,
     checklist,
     summary: checklist.every((item) => item.configured)
@@ -656,6 +674,7 @@ export function createVoiceCommandService({
     const settings = getVoiceSettings(db);
     const deepgram = providerStatus(speechToText);
     const elevenlabs = providerStatus(textToSpeech);
+    const avatarProvider = buildAvatarProviderState();
     const providers = {
       deepgram: {
         ...deepgram,
@@ -665,13 +684,15 @@ export function createVoiceCommandService({
         ...elevenlabs,
         state: elevenlabs.configured ? "Planned" : "Not connected",
       },
+      avatarProvider,
     };
     return {
       settings,
       personas: VOICE_PERSONAS,
       supportedCommands: SUPPORTED_VOICE_COMMANDS,
       providers,
-      setup: voiceProviderSetupStatus(settings, providers.deepgram, providers.elevenlabs),
+      avatarProvider,
+      setup: voiceProviderSetupStatus(settings, providers.deepgram, providers.elevenlabs, avatarProvider),
       retention: {
         transcriptLoggingEnabled: settings.transcriptLoggingEnabled,
         transcriptRetentionDays: settings.transcriptRetentionDays,

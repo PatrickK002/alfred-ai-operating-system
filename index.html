@@ -13,14 +13,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Alfred Core</title>
     <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icons/alfred-icon.svg" />
     <link rel="apple-touch-icon" href="/icons/alfred-icon.svg" />
+    <link rel="apple-touch-startup-image" href="/icons/alfred-splash.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.7" />
+    <link rel="stylesheet" href="styles.css?v=0.4.9" />
   </head>
   <body>
     <div class="shell">
@@ -75,6 +77,8 @@
             <span class="nav-icon">⚙</span> Settings
           </button>
         </nav>
+
+        <div class="sidebar-executive-team" id="sidebar-executive-team" aria-label="Executive team presence"></div>
 
         <div class="sidebar-foot">
           <div class="system-status">
@@ -217,7 +221,7 @@
             </div>
             <div class="approval-boundary voice-boundary">
               <strong>Advisory-only voice mode</strong>
-              <span>Voice can brief, analyse and route to Sarah, Olivia or Westbridge. It cannot send emails, update calendars, edit files, modify finance/property records or bypass approvals.</span>
+              <span>Voice can brief, analyse and route to Sarah, Olivia, Westbridge or Sentinel. It cannot send emails, update calendars, edit files, modify finance/property records or bypass approvals.</span>
             </div>
             <div class="voice-layout">
               <section class="voice-console">
@@ -226,10 +230,14 @@
                   <span class="voice-ring"></span>
                   <span class="voice-mark">A</span>
                 </button>
+                <div class="voice-waveform" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
                 <div class="voice-state">
                   <strong id="voice-state-label">Ready</strong>
                   <span id="voice-state-detail">Press the microphone, or type a transcript below.</span>
                 </div>
+                <div class="voice-avatar-presence" id="voice-avatar-presence"></div>
                 <form class="voice-transcript-form" id="voice-transcript-form">
                   <input id="voice-transcript-input" placeholder='Try “Alfred, brief me” or “Ask Olivia for revenue forecast”' />
                   <button class="secondary-button" type="submit">Ask Alfred</button>
@@ -240,6 +248,7 @@
                 <div class="voice-provider-grid">
                   <article><small>Deepgram</small><strong id="deepgram-status">Checking</strong></article>
                   <article><small>ElevenLabs</small><strong id="elevenlabs-status">Checking</strong></article>
+                  <article><small>Avatar</small><strong id="avatar-provider-status">Planned</strong></article>
                   <article><small>Microphone</small><strong id="microphone-status">Not requested</strong></article>
                 </div>
                 <div class="voice-setup">

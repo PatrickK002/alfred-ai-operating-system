@@ -1,6 +1,8 @@
 import {
   AGENT_AVATAR_PROFILES,
+  AVATAR_VISUAL_STANDARD,
   buildAgentAvatarRenderModel,
+  buildAvatarProviderState,
   buildExecutiveTeamRoster,
   getAgentAvatarProfile,
   isLocalAvatarPath,
@@ -375,12 +377,16 @@ const seedData = {
       providers: {
         deepgram: { state: "Not connected", configured: false },
         elevenlabs: { state: "Not connected", configured: false },
+        avatarProvider: buildAvatarProviderState(),
       },
+      avatarProvider: buildAvatarProviderState(),
       setup: {
         readyForTypedCommands: true,
         readyForMicrophone: false,
         readyForSpokenOutput: false,
+        readyForTalkingAvatar: false,
         rawAudioStored: false,
+        rawVideoStored: false,
         secretsExposed: false,
         checklist: [],
         summary: "Voice works with typed transcript fallback.",
@@ -417,8 +423,12 @@ const seedData = {
       manifest: "/manifest.json",
       serviceWorker: "/service-worker.js",
       offlineFallback: "/offline.html",
+      favicon: "/icons/alfred-icon.svg",
+      appleTouchIcon: "/icons/alfred-icon.svg",
+      splashScreen: "/icons/alfred-splash.svg",
       displayMode: "standalone",
       installTargets: ["MacBook Dock", "iPhone Home Screen", "iPad Pro Home Screen"],
+      iconStrategy: "Premium Alfred command-centre SVG placeholders",
       installReady: true,
     },
     warnings: [],
@@ -574,6 +584,25 @@ function renderAgentAvatar(identity, className = "") {
   `;
 }
 
+function renderSidebarExecutiveTeam() {
+  const roster = executiveTeamRoster();
+  const active = roster.filter((agent) => agent.statusCategory === "active");
+  $("#sidebar-executive-team").innerHTML = `
+    <small>EXECUTIVE TEAM</small>
+    <div>
+      ${active.map((agent) => `
+        <span
+          class="sidebar-agent-presence status-${escapeHTML(agent.statusCategory)}"
+          style="--agent-accent:${escapeHTML(agent.accentColor)}"
+          title="${escapeHTML(`${agent.name} - ${agent.status}`)}"
+        >
+          ${renderAgentAvatar(agent, "small")}
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderAgentIdentitySummary(agentOrId, options = {}) {
   const identity = agentIdentity(agentOrId);
   const compact = options.compact ? " compact" : "";
@@ -716,18 +745,26 @@ function renderVoiceCommandCentre() {
   const alfred = agentIdentity("alfred");
   const deepgram = status.providers?.deepgram || {};
   const elevenlabs = status.providers?.elevenlabs || {};
+  const avatarProvider = status.avatarProvider || status.providers?.avatarProvider || buildAvatarProviderState();
   const setup = status.setup || seedData.voice.status.setup;
   const conversations = voice.conversations || [];
   const last = voice.lastResult;
   const voiceEnabled = Boolean(settings.enabled);
 
+  $("#voice-command-centre").dataset.voiceState = $("#voice-command-centre").dataset.voiceState || "ready";
   $("#voice-agent-identity").innerHTML = renderAgentIdentitySummary(alfred, { compact: true, tagLimit: 3 });
   $("#voice-button").style.setProperty("--agent-accent", alfred.accentColor);
   $("#voice-status-pill").textContent = voiceEnabled ? "Voice ready" : "Voice disabled";
   $("#voice-status-pill").classList.toggle("disabled", !voiceEnabled);
   $("#deepgram-status").textContent = deepgram.state || (deepgram.configured ? "Planned" : "Not connected");
   $("#elevenlabs-status").textContent = elevenlabs.state || (elevenlabs.configured ? "Planned" : "Not connected");
+  $("#avatar-provider-status").textContent = avatarProvider.state || avatarProvider.status || "Planned";
   $("#microphone-status").textContent = navigator.mediaDevices ? "Available on request" : "Unavailable";
+  $("#voice-avatar-presence").innerHTML = `
+    <article><small>Portrait</small><strong>Static</strong></article>
+    <article><small>Talking avatar</small><strong>${escapeHTML(avatarProvider.state || avatarProvider.status || "Planned")}</strong></article>
+    <article><small>Provider calls</small><strong>${avatarProvider.liveProviderCallsEnabled ? "Enabled" : "Disabled"}</strong></article>
+  `;
   $("#voice-button").disabled = !backendAvailable || !voiceEnabled;
   $("#voice-enabled-toggle").checked = voiceEnabled;
   $("#voice-transcript-logging-toggle").checked = Boolean(settings.transcriptLoggingEnabled);
@@ -945,6 +982,7 @@ function renderRelatedMemory(records = []) {
 
 function renderAgents() {
   const roster = executiveTeamRoster();
+  renderSidebarExecutiveTeam();
   $("#executive-team-identity").innerHTML = roster
     .map((identity) => `
       <article class="executive-identity-card status-${escapeHTML(identity.statusCategory)}" style="--agent-accent:${escapeHTML(identity.accentColor)}">
@@ -985,6 +1023,8 @@ function renderAgents() {
             <div><small>Department</small><strong>${escapeHTML(agent.department)}</strong></div>
             <div><small>Reports to</small><strong>${escapeHTML(agent.reportingLine)}</strong></div>
             <div><small>Voice persona</small><strong>${escapeHTML(agent.voicePersonaPlaceholder)}</strong></div>
+            <div><small>Avatar provider</small><strong>${escapeHTML(agent.avatarProvider)}</strong></div>
+            <div><small>Talking avatar</small><strong>${escapeHTML(agent.talkingAvatarPlaceholder)}</strong></div>
           </div>
         </article>
       `;
@@ -1110,8 +1150,12 @@ function renderSettings() {
     ["Manifest", pwa.manifest || "/manifest.json"],
     ["Service worker", pwa.serviceWorker || "/service-worker.js"],
     ["Offline fallback", pwa.offlineFallback || "/offline.html"],
+    ["Favicon", pwa.favicon || "/icons/alfred-icon.svg"],
+    ["Apple icon", pwa.appleTouchIcon || "/icons/alfred-icon.svg"],
+    ["Splash screen", pwa.splashScreen || "/icons/alfred-splash.svg"],
     ["Install targets", (pwa.installTargets || []).join(", ")],
     ["Standalone mode", pwa.displayMode || "standalone"],
+    ["Icon strategy", pwa.iconStrategy || "Brand-ready local SVG placeholders"],
   ]);
 
   $("#security-boundary-list").innerHTML = [
@@ -1136,13 +1180,18 @@ function renderSettings() {
     </div>
     <div class="settings-facts compact">
       ${factRows([
+        ["Visual standard", AVATAR_VISUAL_STANDARD.experience],
         ["Avatar assets", "/assets/avatars/"],
+        ["Provider abstraction", "avatarProvider"],
+        ["Avatar provider state", buildAvatarProviderState().status],
         ["Current identities", roster.filter((agent) => agent.statusCategory === "active").length],
         ["Planned identities", roster.filter((agent) => agent.statusCategory === "planned").length],
         ["Security identity", roster.some((agent) => agent.id === "sentinel") ? "Sentinel planned" : "Not defined"],
         ["Fallback", "Styled initials badge"],
         ["External images", "Blocked by policy"],
+        ["External provider calls", "Disabled"],
         ["Multi-voice", "Metadata placeholders only"],
+        ["Consent rules", "No likeness without consent"],
       ])}
     </div>
   `;

@@ -83,6 +83,10 @@ test("voice session creation stores local session metadata", () => {
     assert.equal(session.metadata.source, "test");
     assert.equal(service.status().boundary.voiceExecutionEnabled, false);
     assert.equal(service.status().setup.readyForTypedCommands, true);
+    assert.equal(service.status().avatarProvider.id, "avatarProvider");
+    assert.equal(service.status().avatarProvider.liveProviderCallsEnabled, false);
+    assert.equal(service.status().setup.readyForTalkingAvatar, false);
+    assert.equal(service.status().setup.rawVideoStored, false);
     assert.equal(service.status().retention.transcriptRetentionDays, 30);
   });
 });

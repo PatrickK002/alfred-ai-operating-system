@@ -75,17 +75,31 @@ test("PWA manifest and service worker assets exist with install metadata", () =>
   const manifestPath = join(ROOT, "manifest.json");
   const workerPath = join(ROOT, "service-worker.js");
   const offlinePath = join(ROOT, "offline.html");
+  const iconPath = join(ROOT, "icons", "alfred-icon.svg");
+  const maskablePath = join(ROOT, "icons", "alfred-maskable.svg");
+  const splashPath = join(ROOT, "icons", "alfred-splash.svg");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const worker = readFileSync(workerPath, "utf8");
+  const html = readFileSync(join(ROOT, "index.html"), "utf8");
   const readiness = pwaReadiness();
 
   assert.equal(existsSync(manifestPath), true);
   assert.equal(existsSync(workerPath), true);
   assert.equal(existsSync(offlinePath), true);
+  assert.equal(existsSync(iconPath), true);
+  assert.equal(existsSync(maskablePath), true);
+  assert.equal(existsSync(splashPath), true);
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.theme_color, "#071011");
   assert.ok(manifest.icons.some((icon) => icon.purpose.includes("maskable")));
+  assert.ok(manifest.shortcuts.some((shortcut) => shortcut.name === "Voice Command Centre"));
   assert.match(worker, /offline\.html/);
+  assert.match(worker, /alfred-splash\.svg/);
+  assert.match(html, /rel="icon"/);
+  assert.match(html, /apple-touch-startup-image/);
+  assert.equal(readiness.favicon, "/icons/alfred-icon.svg");
+  assert.equal(readiness.splashScreen, "/icons/alfred-splash.svg");
+  assert.match(readiness.iconStrategy, /command-centre/i);
   assert.equal(readiness.installReady, true);
 });
 
