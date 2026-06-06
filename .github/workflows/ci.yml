@@ -57,6 +57,9 @@ jobs:
       - name: Check project intelligence syntax
         run: node --check project-intelligence.js
 
+      - name: Check Sarah specialist syntax
+        run: node --check sarah.js
+
       - name: Check order book importer syntax
         run: node --check excel-orderbook.js
 

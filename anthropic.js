@@ -231,6 +231,164 @@ export const PROJECT_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+const sarahOpportunitySchema = {
+  type: "object",
+  properties: {
+    opportunity: { type: "string" },
+    estimatedValue: { type: "string" },
+    businessImpact: { type: "string" },
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    reasoning: { type: "string" },
+    sourceReference: { type: "string" },
+  },
+  required: ["opportunity", "estimatedValue", "businessImpact", "confidence", "reasoning", "sourceReference"],
+  additionalProperties: false,
+};
+
+export const SARAH_PROJECT_ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    executiveSummary: { type: "string" },
+    bimObservations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          observation: { type: "string" },
+          implication: { type: "string" },
+          confidence: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["observation", "implication", "confidence", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    informationManagementObservations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          observation: { type: "string" },
+          implication: { type: "string" },
+          confidence: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["observation", "implication", "confidence", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    digitalConstructionOpportunities: { type: "array", items: sarahOpportunitySchema },
+    keyRisks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          risk: { type: "string" },
+          impact: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["risk", "impact", "severity", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    missingInformation: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          item: { type: "string" },
+          whyItMatters: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["item", "whyItMatters", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    recommendations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          recommendation: { type: "string" },
+          rationale: { type: "string" },
+          approvalRequiredBeforeAction: { type: "boolean" },
+          sourceReference: { type: "string" },
+        },
+        required: ["recommendation", "rationale", "approvalRequiredBeforeAction", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    confirmedFacts: { type: "array", items: { type: "string" } },
+    assumptions: { type: "array", items: { type: "string" } },
+    confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+    sourceRecordReferences: { type: "array", items: sourceReferenceSchema },
+  },
+  required: [
+    "executiveSummary",
+    "bimObservations",
+    "informationManagementObservations",
+    "digitalConstructionOpportunities",
+    "keyRisks",
+    "missingInformation",
+    "recommendations",
+    "confirmedFacts",
+    "assumptions",
+    "confidenceLevel",
+    "sourceRecordReferences",
+  ],
+  additionalProperties: false,
+};
+
+export const SARAH_CLIENT_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    projectPortfolioSummary: { type: "string" },
+    clientRisks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          risk: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["risk", "severity", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    opportunities: { type: "array", items: sarahOpportunitySchema },
+    strategicRecommendations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          recommendation: { type: "string" },
+          why: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["recommendation", "why", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    nextDiscussionPoints: { type: "array", items: { type: "string" } },
+    assumptions: { type: "array", items: { type: "string" } },
+    confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+    sourceRecordReferences: { type: "array", items: sourceReferenceSchema },
+  },
+  required: [
+    "projectPortfolioSummary",
+    "clientRisks",
+    "opportunities",
+    "strategicRecommendations",
+    "nextDiscussionPoints",
+    "assumptions",
+    "confidenceLevel",
+    "sourceRecordReferences",
+  ],
+  additionalProperties: false,
+};
+
 function createConfigurationError() {
   const error = new Error("Anthropic is not configured. Set ANTHROPIC_API_KEY and restart Alfred.");
   error.statusCode = 503;
@@ -286,6 +444,26 @@ export class AnthropicClient {
       instruction: "Analyse the supplied project intelligence and digital construction context for Patrick. Distinguish confirmed facts, inferred associations, assumptions and missing information. Identify practical project risks and opportunities. Do not claim full documents were read unless fullDocumentContentsRetrieved is true. Do not recommend or imply any external write action has been executed.",
       input,
       schema: PROJECT_OUTPUT_SCHEMA,
+      maxTokens: 2200,
+    });
+  }
+
+  async analyzeSarahProject(input) {
+    return this.requestStructured({
+      analysisType: "sarah_project_analysis",
+      instruction: "Act as Sarah, Digitize's advisory-only AI Digital Construction Director reporting to Alfred. Analyse the supplied project intelligence, memory, Microsoft metadata and Olivia context. Provide BIM and information management observations, opportunities, risks, missing information and recommendations. Clearly distinguish facts, assumptions and recommendations. Never claim to execute or modify anything.",
+      input,
+      schema: SARAH_PROJECT_ANALYSIS_SCHEMA,
+      maxTokens: 2400,
+    });
+  }
+
+  async analyzeSarahClient(input) {
+    return this.requestStructured({
+      analysisType: "sarah_client_review",
+      instruction: "Act as Sarah, Digitize's advisory-only AI Digital Construction Director reporting to Alfred. Review the supplied client portfolio context and recommend what Patrick should discuss next. Include source references and do not propose any autonomous sales, Microsoft, file, calendar or financial write action.",
+      input,
+      schema: SARAH_CLIENT_REVIEW_SCHEMA,
       maxTokens: 2200,
     });
   }

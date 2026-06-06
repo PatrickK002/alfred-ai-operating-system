@@ -822,6 +822,34 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS sarah_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS sarah_team_placeholders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    expertise TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'Placeholder',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -1235,11 +1263,21 @@ const PROJECT_TAG_SEEDS = [
 ];
 
 const AGENT_SEEDS = [
-  ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Lead BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform delivery for Digitize. Placeholder only; no runtime or autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Planned"],
+  ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Executive Specialist reporting to Alfred. Provides advisory-only BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform intelligence for Digitize. No autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Active"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
   ["olivia", "Olivia", "Chief Financial Officer", null, "Finance", "Act as Group CFO across Alfred-managed businesses, producing read-only revenue, forecast, debtor, cashflow, KPI and board-reporting intelligence.", [], "Planned"],
+];
+
+const SARAH_TEAM_PLACEHOLDER_SEEDS = [
+  ["bim-consultant", "BIM Consultant", "BIM Consultant", ["BIM Strategy", "BIM Execution Plans", "BIM Delivery", "BIM Governance"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["information-manager", "Information Manager", "Information Manager", ["ISO 19650", "CDE", "Information Delivery", "Information Requirements"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["cobie-specialist", "COBie Specialist", "COBie Specialist", ["COBie Structure", "COBie Quality", "Asset Information", "Information Completeness"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["gis-consultant", "GIS Consultant", "GIS Consultant", ["GIS Strategy", "Spatial Information", "Asset Mapping", "Geospatial Data"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["digital-twin-consultant", "Digital Twin Consultant", "Digital Twin Consultant", ["Digital Twin Strategy", "Operational Data", "Asset Performance", "Smart Asset Management"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["building-safety-consultant", "Building Safety Consultant", "Building Safety Consultant", ["Golden Thread", "Building Safety Act", "Information Assurance", "Compliance Information"], "Future placeholder only. No runtime or autonomous behaviour."],
+  ["power-platform-consultant", "Power Platform Consultant", "Power Platform Consultant", ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint"], "Future placeholder only. No runtime or autonomous behaviour."],
 ];
 
 const INTEGRATION_SEEDS = [
@@ -1414,6 +1452,7 @@ export function seedDatabase(db) {
     updateDigitalConstructionDomains(db);
     updateProjectTags(db);
     updateAgentDefinitions(db);
+    updateSarahTeamPlaceholders(db);
     updateIntegrationDefinitions(db);
     return;
   }
@@ -1465,6 +1504,7 @@ export function seedDatabase(db) {
     for (const agent of AGENT_SEEDS) {
       insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     }
+    updateSarahTeamPlaceholders(db);
 
     const insertMemory = db.prepare(`
       INSERT INTO memories (type, title, detail, company_id, recorded_at)
@@ -1496,6 +1536,23 @@ function updateAgentDefinitions(db) {
   for (const agent of AGENT_SEEDS) {
     insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     updateAgent.run(agent[1], agent[2], agent[3], agent[4], agent[5], JSON.stringify(agent[6]), agent[0]);
+  }
+}
+
+function updateSarahTeamPlaceholders(db) {
+  const insertPlaceholder = db.prepare(`
+    INSERT OR IGNORE INTO sarah_team_placeholders (id, name, role, expertise, notes)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const updatePlaceholder = db.prepare(`
+    UPDATE sarah_team_placeholders
+    SET name = ?, role = ?, expertise = ?, status = 'Placeholder',
+        notes = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const placeholder of SARAH_TEAM_PLACEHOLDER_SEEDS) {
+    insertPlaceholder.run(placeholder[0], placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4]);
+    updatePlaceholder.run(placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4], placeholder[0]);
   }
 }
 
