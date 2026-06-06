@@ -13,6 +13,7 @@ import {
   importOrderBookSheets,
   importOrderBookWorkbook,
   listFinancialAudit,
+  listFinancialBusinessEntities,
   saveMondayFinancialSummaries,
 } from "../financial.js";
 import { mapMondayItemToInvoiceSummary, MondayFinanceClient, MONDAY_API_URL } from "../monday-finance.js";
@@ -140,6 +141,48 @@ test("imports Excel order book sheets, validates rows and flags duplicates", () 
   });
 });
 
+test("financial model is scoped for group, division and business reporting", () => {
+  withDatabase((db) => {
+    const entities = listFinancialBusinessEntities(db);
+    assert.ok(entities.some((entity) => entity.id === "group" && entity.entityType === "group"));
+    assert.ok(entities.some((entity) => entity.id === "digitize" && entity.parentEntityId === "group"));
+    assert.ok(entities.some((entity) => entity.id === "council-assurance-platform"));
+
+    for (const table of ["order_book_entries", "revenue_lines", "cost_lines", "forecasts", "budgets", "kpi_records"]) {
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name);
+      assert.ok(columns.includes("business_entity_id"), `${table} should be business-entity scoped`);
+    }
+
+    importOrderBookSheets(db, {
+      fileName: "Digitize Order Book.xlsx",
+      sheets: [{
+        name: "FY2026-27",
+        rows: [{ __rowNumber: 2, Client: "Westminster", Project: "Assurance Review", Status: "Secured", Amount: "100000", Probability: "100%" }],
+      }],
+    });
+    importOrderBookSheets(db, {
+      fileName: "Council Platform Forecast.xlsx",
+      businessEntityId: "council-assurance-platform",
+      sheets: [{
+        name: "FY2026-27",
+        rows: [{ __rowNumber: 2, Client: "Pilot Council", Project: "CAP Subscription", Status: "Pipeline", Amount: "60000", Probability: "50%" }],
+      }],
+    });
+
+    const groupDashboard = getFinancialDashboardData(db, { scopeType: "group", scopeId: "group" });
+    const digitizeDashboard = getFinancialDashboardData(db, { scopeType: "business", scopeId: "digitize" });
+    const productDashboard = getFinancialDashboardData(db, { scopeType: "product", scopeId: "council-assurance-platform" });
+    const report = generateBoardReport(db, { scopeType: "product", scopeId: "council-assurance-platform", quarter: "Q1" });
+
+    assert.equal(groupDashboard.metrics.weightedForecastRevenue, 130000);
+    assert.equal(digitizeDashboard.metrics.weightedForecastRevenue, 100000);
+    assert.equal(productDashboard.metrics.weightedForecastRevenue, 30000);
+    assert.equal(productDashboard.scope.label, "Council Assurance Platform");
+    assert.match(report.title, /Council Assurance Platform/);
+    assert.equal(report.scopeId, "council-assurance-platform");
+  });
+});
+
 test("parses a minimal XLSX workbook import", () => {
   withDatabase((db) => {
     const result = importOrderBookWorkbook(db, {
@@ -226,6 +269,7 @@ test("Monday summaries feed debtor dashboard without external writes", () => {
 
     assert.equal(dashboard.metrics.outstandingDebtors, 10000);
     assert.equal(dashboard.metrics.overdueDebtors, 10000);
+    assert.equal(dashboard.debtors[0].businessEntityId, "digitize");
     assert.equal(dashboard.boundary.paymentCapability, false);
     assert.equal(listFinancialAudit(db)[0].eventType, "monday_financial_refresh");
   });

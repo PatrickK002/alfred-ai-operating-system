@@ -271,6 +271,18 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS semantic_memory_source
   ON semantic_memory(source_type, source_id);
 
+  CREATE TABLE IF NOT EXISTS financial_business_entities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('group', 'division', 'business', 'product', 'venture')),
+    parent_entity_id TEXT REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    status TEXT NOT NULL DEFAULT 'planned',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS financial_years (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     label TEXT NOT NULL UNIQUE,
@@ -293,6 +305,7 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_type TEXT NOT NULL,
     source_name TEXT NOT NULL,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     source_hash TEXT NOT NULL,
     status TEXT NOT NULL CHECK(status IN ('imported', 'dry_run', 'pending_overwrite', 'failed')),
     rows_total INTEGER NOT NULL DEFAULT 0,
@@ -319,6 +332,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS order_book_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     financial_year_id INTEGER NOT NULL REFERENCES financial_years(id),
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     company_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES companies(id),
     client_name TEXT NOT NULL DEFAULT '',
     project_name TEXT NOT NULL DEFAULT '',
@@ -350,17 +364,19 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS forecast_periods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     financial_year_id INTEGER NOT NULL REFERENCES financial_years(id),
     period_type TEXT NOT NULL CHECK(period_type IN ('month', 'quarter', 'year')),
     period_label TEXT NOT NULL,
     start_date TEXT NOT NULL DEFAULT '',
     end_date TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(financial_year_id, period_type, period_label)
+    UNIQUE(business_entity_id, financial_year_id, period_type, period_label)
   );
 
   CREATE TABLE IF NOT EXISTS forecasts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     financial_year_id INTEGER NOT NULL REFERENCES financial_years(id),
     forecast_period_id INTEGER REFERENCES forecast_periods(id),
     scenario TEXT NOT NULL CHECK(scenario IN ('best_case', 'expected_case', 'worst_case', 'probability_weighted', 'resource_revenue')),
@@ -372,6 +388,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS revenue_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     financial_year_id INTEGER REFERENCES financial_years(id),
     client_name TEXT NOT NULL DEFAULT '',
     project_name TEXT NOT NULL DEFAULT '',
@@ -382,8 +399,51 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS cost_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL REFERENCES financial_business_entities(id),
+    financial_year_id INTEGER REFERENCES financial_years(id),
+    cost_category TEXT NOT NULL DEFAULT '',
+    supplier_name TEXT NOT NULL DEFAULT '',
+    project_name TEXT NOT NULL DEFAULT '',
+    amount_gbp REAL NOT NULL DEFAULT 0,
+    period_label TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual_summary',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL REFERENCES financial_business_entities(id),
+    financial_year_id INTEGER REFERENCES financial_years(id),
+    budget_type TEXT NOT NULL CHECK(budget_type IN ('revenue', 'cost', 'cashflow', 'margin', 'kpi')),
+    period_label TEXT NOT NULL DEFAULT '',
+    amount_gbp REAL NOT NULL DEFAULT 0,
+    target_value REAL,
+    unit TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual_summary',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS kpi_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL REFERENCES financial_business_entities(id),
+    financial_year_id INTEGER REFERENCES financial_years(id),
+    kpi_name TEXT NOT NULL,
+    kpi_value REAL NOT NULL DEFAULT 0,
+    unit TEXT NOT NULL DEFAULT '',
+    period_label TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual_summary',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS invoice_summaries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     source_system TEXT NOT NULL DEFAULT 'monday',
     external_id TEXT NOT NULL,
     client_name TEXT NOT NULL DEFAULT '',
@@ -398,11 +458,12 @@ const SCHEMA = `
     last_refreshed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(source_system, external_id)
+    UNIQUE(business_entity_id, source_system, external_id)
   );
 
   CREATE TABLE IF NOT EXISTS debtor_summaries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     source_system TEXT NOT NULL DEFAULT 'monday',
     client_name TEXT NOT NULL,
     amount_outstanding_gbp REAL NOT NULL DEFAULT 0,
@@ -412,11 +473,12 @@ const SCHEMA = `
     last_refreshed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(source_system, client_name)
+    UNIQUE(business_entity_id, source_system, client_name)
   );
 
   CREATE TABLE IF NOT EXISTS cashflow_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES financial_business_entities(id),
     snapshot_date TEXT NOT NULL,
     expected_inflow_gbp REAL NOT NULL DEFAULT 0,
     overdue_gbp REAL NOT NULL DEFAULT 0,
@@ -427,6 +489,9 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS board_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT REFERENCES financial_business_entities(id),
+    scope_type TEXT NOT NULL DEFAULT 'group' CHECK(scope_type IN ('group', 'division', 'business', 'product', 'venture')),
+    scope_id TEXT NOT NULL DEFAULT 'group',
     financial_year_id INTEGER REFERENCES financial_years(id),
     quarter TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
@@ -439,6 +504,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS financial_insights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
     insight_type TEXT NOT NULL,
     title TEXT NOT NULL,
     detail TEXT NOT NULL,
@@ -449,6 +515,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS financial_risks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
     title TEXT NOT NULL,
     detail TEXT NOT NULL,
     severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low', 'medium', 'high')),
@@ -461,6 +528,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS financial_opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
     title TEXT NOT NULL,
     detail TEXT NOT NULL,
     value_gbp REAL NOT NULL DEFAULT 0,
@@ -473,6 +541,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS financial_audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
     event_type TEXT NOT NULL,
     actor TEXT NOT NULL DEFAULT 'Olivia',
     source TEXT NOT NULL DEFAULT '',
@@ -488,6 +557,16 @@ const COMPANY_SEEDS = [
   ["media", "Media Studio", "Media", "MS", "#e2b46b", "Build automated YouTube and content businesses", "Discovery", ["Target: £5,000+ monthly income"]],
 ];
 
+const FINANCIAL_BUSINESS_ENTITY_SEEDS = [
+  ["group", "Patrick King Group", "group", null, null, "active", "Consolidated reporting scope for all Alfred-managed businesses."],
+  ["digitize", "Digitize Consultants", "business", "group", "digitize", "active", "Digital construction consultancy and current order book source."],
+  ["council-assurance-platform", "Council Assurance Platform", "product", "group", "product", "planned", "Future SaaS product for council construction assurance."],
+  ["media-businesses", "Media Businesses", "division", "group", "media", "planned", "Media Studio and automated content businesses."],
+  ["ai-businesses", "AI Businesses", "division", "group", "venture", "planned", "AI Venture Studio and AI-led businesses."],
+  ["future-saas-products", "Future SaaS Products", "division", "group", "product", "planned", "Future software products managed by Alfred."],
+  ["future-ventures", "Future Ventures", "venture", "group", "venture", "planned", "Future venture businesses and recurring-income experiments."],
+];
+
 const CLIENT_SEEDS = [
   ["digitize", "KSPF"],
   ["digitize", "Westminster City Council"],
@@ -500,7 +579,7 @@ const AGENT_SEEDS = [
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
-  ["olivia", "Olivia", "Chief Financial Officer", "digitize", "Finance", "Build the read-only financial operating system for revenue forecasting, order book management, cashflow insight, debtor analysis and board reporting.", [], "Planned"],
+  ["olivia", "Olivia", "Chief Financial Officer", null, "Finance", "Act as Group CFO across Alfred-managed businesses, producing read-only revenue, forecast, debtor, cashflow, KPI and board-reporting intelligence.", [], "Planned"],
 ];
 
 const INTEGRATION_SEEDS = [
@@ -556,6 +635,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   db.exec(SCHEMA);
   ensureDefaultSettings(db);
   migrateApprovalSchema(db);
+  migrateFinancialBusinessSchema(db);
   seedDatabase(db);
   return db;
 }
@@ -627,9 +707,36 @@ function migrateApprovalSchema(db) {
   `);
 }
 
+function migrateFinancialBusinessSchema(db) {
+  const columnsFor = (table) => new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  const addColumn = (table, definition) => {
+    const name = definition.trim().split(/\s+/)[0];
+    if (!columnsFor(table).has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  };
+
+  for (const table of ["financial_imports", "order_book_entries", "forecasts", "revenue_lines", "invoice_summaries", "debtor_summaries", "cashflow_snapshots"]) {
+    addColumn(table, "business_entity_id TEXT NOT NULL DEFAULT 'digitize'");
+  }
+  addColumn("forecast_periods", "business_entity_id TEXT NOT NULL DEFAULT 'digitize'");
+  addColumn("board_reports", "business_entity_id TEXT");
+  addColumn("board_reports", "scope_type TEXT NOT NULL DEFAULT 'group'");
+  addColumn("board_reports", "scope_id TEXT NOT NULL DEFAULT 'group'");
+  for (const table of ["financial_insights", "financial_risks", "financial_opportunities", "financial_audit_events"]) {
+    addColumn(table, "business_entity_id TEXT NOT NULL DEFAULT 'group'");
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS invoice_summaries_business_source_external_unique
+    ON invoice_summaries(business_entity_id, source_system, external_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS debtor_summaries_business_source_client_unique
+    ON debtor_summaries(business_entity_id, source_system, client_name);
+  `);
+}
+
 export function seedDatabase(db) {
   const companyCount = db.prepare("SELECT COUNT(*) AS count FROM companies").get().count;
   if (companyCount > 0) {
+    updateFinancialBusinessEntities(db);
     updateAgentDefinitions(db);
     updateIntegrationDefinitions(db);
     return;
@@ -647,6 +754,8 @@ export function seedDatabase(db) {
 
     const insertClient = db.prepare("INSERT INTO clients (company_id, name) VALUES (?, ?)");
     for (const client of CLIENT_SEEDS) insertClient.run(...client);
+
+    updateFinancialBusinessEntities(db);
 
     db.prepare(`
       INSERT INTO projects (company_id, name, purpose, status)
@@ -713,6 +822,25 @@ function updateAgentDefinitions(db) {
   for (const agent of AGENT_SEEDS) {
     insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     updateAgent.run(agent[1], agent[2], agent[3], agent[4], agent[5], JSON.stringify(agent[6]), agent[0]);
+  }
+}
+
+function updateFinancialBusinessEntities(db) {
+  const insertEntity = db.prepare(`
+    INSERT OR IGNORE INTO financial_business_entities (
+      id, name, entity_type, parent_entity_id, company_id, status, notes
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateEntity = db.prepare(`
+    UPDATE financial_business_entities
+    SET name = ?, entity_type = ?, parent_entity_id = ?, company_id = ?,
+        status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const entity of FINANCIAL_BUSINESS_ENTITY_SEEDS) {
+    insertEntity.run(...entity);
+    updateEntity.run(entity[1], entity[2], entity[3], entity[4], entity[5], entity[6], entity[0]);
   }
 }
 

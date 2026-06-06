@@ -177,9 +177,13 @@
             <div>
               <p class="eyebrow">CFO FINANCIAL INTELLIGENCE</p>
               <h2>Olivia Finance Dashboard</h2>
-              <p>Read-only order book, forecast, debtor and board reporting intelligence. No invoices, payments or accounting records can be changed.</p>
+              <p>Group CFO view across businesses, divisions, products and ventures. No invoices, payments or accounting records can be changed.</p>
             </div>
             <div class="finance-actions">
+              <label class="finance-scope">
+                <span>Reporting scope</span>
+                <select id="finance-scope"></select>
+              </label>
               <input id="order-book-file" type="file" accept=".xlsx,.csv" hidden />
               <button class="secondary-button" id="import-order-book">Import order book</button>
               <button class="secondary-button" id="refresh-monday-finance">Refresh Monday read-only</button>

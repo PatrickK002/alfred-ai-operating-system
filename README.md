@@ -21,7 +21,7 @@ npm start
 
 Open [http://localhost:4173](http://localhost:4173).
 
-For automatic server restarts during development:
+For automatic server restarts when `server.js` changes:
 
 ```bash
 npm run dev
@@ -85,12 +85,12 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
-| `GET` | `/api/financial/dashboard` | Olivia's consolidated CFO dashboard |
-| `GET` | `/api/financial/forecast` | Monthly, quarterly, annual and scenario forecasts |
-| `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables |
+| `GET` | `/api/financial/dashboard?scopeType=group&scopeId=group` | Olivia's scoped CFO dashboard |
+| `GET` | `/api/financial/forecast?scopeType=business&scopeId=digitize` | Monthly, quarterly, annual and scenario forecasts for a reporting scope |
+| `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables for a `businessEntityId` |
 | `GET` | `/api/financial/imports` | Order book import history and validation summaries |
 | `GET` | `/api/financial/monday/status` | Monday.com finance connector status |
-| `POST` | `/api/financial/monday/refresh` | Read Monday invoice/debtor summaries and store local summaries |
+| `POST` | `/api/financial/monday/refresh` | Read Monday invoice/debtor summaries and store local summaries for a `businessEntityId` |
 | `GET` | `/api/financial/board-reports` | List generated board reports |
 | `POST` | `/api/financial/board-reports` | Generate a quarterly board report markdown snapshot |
 | `POST` | `/api/financial/olivia-analysis` | Generate Olivia CFO insights and recommendations |
@@ -432,7 +432,19 @@ Claude receives these records as context only. Voyage memory retrieval does not 
 
 ## Olivia CFO Financial Intelligence
 
-Olivia is Alfred's planned Chief Financial Officer for Digitize Consultants and future Alfred-managed businesses.
+Olivia is Alfred's planned Group Chief Financial Officer across Alfred-managed businesses, products, divisions and ventures.
+
+The finance model is multi-entity by design. Every revenue, cost, forecast, budget and KPI record belongs to a `financial_business_entities` record so Alfred can produce business-level, division-level and group-level reporting without a future database redesign.
+
+Seeded reporting entities include:
+
+- Patrick King Group
+- Digitize Consultants
+- Council Assurance Platform
+- Media Businesses
+- AI Businesses
+- Future SaaS Products
+- Future Ventures
 
 This is a financial intelligence layer, not an accounting system. Olivia can analyse and recommend, but cannot:
 
@@ -448,7 +460,7 @@ All finance workflows are read-only. The existing approval framework can record 
 
 ### Order Book Import
 
-Olivia can import Digitize order book `.xlsx` or `.csv` files into local SQLite tables. The importer:
+Olivia can import order book `.xlsx` or `.csv` files into local SQLite tables against a selected business entity. Digitize Consultants is the default current source, but the same importer supports future products, media businesses, AI businesses and ventures. The importer:
 
 - Detects financial year worksheets such as `FY2026-27`
 - Preserves source file, sheet and row references
@@ -480,18 +492,19 @@ The connector is designed for:
 
 ### CFO Dashboard and Reports
 
-The Finance view shows:
+The Finance view includes a reporting scope selector for group, division, business, product and venture views. The dashboard shows:
 
 - Secured revenue
 - Pipeline revenue
 - Weighted forecast revenue
+- Revenue by business entity
 - Revenue by financial year, quarter, client, project and service line
 - Invoice status
 - Outstanding and overdue debtors
 - Forecast variance/gap analysis
 - Financial risks and opportunities
 
-Board reports are generated as dashboard markdown snapshots with placeholders for future Word, PDF and PowerPoint export.
+Board reports are generated as scoped dashboard markdown snapshots with placeholders for future Word, PDF and PowerPoint export.
 
 ## Executive Briefing V2
 

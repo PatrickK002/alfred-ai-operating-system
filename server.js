@@ -110,6 +110,14 @@ async function readJson(request) {
   }
 }
 
+function financialScopeFromSearch(searchParams) {
+  return {
+    scopeType: searchParams.get("scopeType") || "",
+    scopeId: searchParams.get("scopeId") || "",
+    businessEntityId: searchParams.get("businessEntityId") || "",
+  };
+}
+
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
     return sendJson(response, 200, { status: "ok", database: "connected" });
@@ -153,10 +161,10 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, result);
   }
   if (url.pathname === "/api/financial/dashboard" && request.method === "GET") {
-    return sendJson(response, 200, getFinancialDashboardData(db));
+    return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)));
   }
   if (url.pathname === "/api/financial/forecast" && request.method === "GET") {
-    return sendJson(response, 200, getFinancialDashboardData(db).forecast);
+    return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)).forecast);
   }
   if (url.pathname === "/api/financial/order-book/import" && request.method === "POST") {
     const result = importOrderBookWorkbook(db, await readJson(request));
@@ -170,8 +178,9 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, syncMondayFinanceStatus());
   }
   if (url.pathname === "/api/financial/monday/refresh" && request.method === "POST") {
+    const body = await readJson(request);
     const summaries = await mondayFinance.fetchFinancialSummaries();
-    const result = saveMondayFinancialSummaries(db, summaries);
+    const result = saveMondayFinancialSummaries(db, { ...summaries, businessEntityId: body.businessEntityId });
     setIntegrationStatus(db, "monday", "Connected");
     await tryIndexSemanticMemory();
     return sendJson(response, 200, { ...result, boundary: FINANCIAL_READ_ONLY_BOUNDARY });
@@ -186,7 +195,7 @@ async function handleApi(request, response, url) {
     return report ? sendJson(response, 200, report) : sendJson(response, 404, { error: "Board report not found" });
   }
   if (url.pathname === "/api/financial/olivia-analysis" && request.method === "POST") {
-    return sendJson(response, 200, generateOliviaAnalysis(db));
+    return sendJson(response, 200, generateOliviaAnalysis(db, await readJson(request)));
   }
   if (url.pathname === "/api/financial/audit" && request.method === "GET") {
     return sendJson(response, 200, listFinancialAudit(db, url.searchParams.get("limit") || 50));

@@ -36,6 +36,10 @@ const MONTHS = {
   december: "12",
 };
 
+const DEFAULT_BUSINESS_ENTITY_ID = "digitize";
+const DEFAULT_GROUP_ENTITY_ID = "group";
+const SCOPE_TYPES = new Set(["group", "division", "business", "product", "venture"]);
+
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -75,6 +79,112 @@ function normalizeProbability(value, status = "") {
 
 function normalizeText(value, fallback = "") {
   return String(value ?? fallback).replace(/\s+/g, " ").trim();
+}
+
+function mapBusinessEntity(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    entityType: row.entity_type,
+    parentEntityId: row.parent_entity_id,
+    companyId: row.company_id,
+    status: row.status,
+    notes: row.notes,
+  };
+}
+
+export function listFinancialBusinessEntities(db) {
+  return db.prepare(`
+    SELECT *
+    FROM financial_business_entities
+    ORDER BY
+      CASE entity_type
+        WHEN 'group' THEN 0
+        WHEN 'division' THEN 1
+        WHEN 'business' THEN 2
+        WHEN 'product' THEN 3
+        WHEN 'venture' THEN 4
+        ELSE 5
+      END,
+      name ASC
+  `).all().map(mapBusinessEntity);
+}
+
+function getFinancialBusinessEntity(db, id = DEFAULT_BUSINESS_ENTITY_ID) {
+  const requested = normalizeText(id || DEFAULT_BUSINESS_ENTITY_ID);
+  const row = db.prepare("SELECT * FROM financial_business_entities WHERE id = ?").get(requested);
+  if (row) return mapBusinessEntity(row);
+  const fallback = db.prepare("SELECT * FROM financial_business_entities WHERE id = ?").get(DEFAULT_BUSINESS_ENTITY_ID)
+    || db.prepare("SELECT * FROM financial_business_entities WHERE id = ?").get(DEFAULT_GROUP_ENTITY_ID);
+  return fallback ? mapBusinessEntity(fallback) : {
+    id: DEFAULT_BUSINESS_ENTITY_ID,
+    name: "Digitize Consultants",
+    entityType: "business",
+    parentEntityId: DEFAULT_GROUP_ENTITY_ID,
+    companyId: "digitize",
+    status: "active",
+    notes: "",
+  };
+}
+
+function descendantEntityIds(entities, rootId) {
+  const ids = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const entity of entities) {
+      if (entity.parentEntityId && ids.has(entity.parentEntityId) && !ids.has(entity.id)) {
+        ids.add(entity.id);
+        changed = true;
+      }
+    }
+  }
+  return [...ids];
+}
+
+function normalizeFinancialScope(db, options = {}) {
+  const entities = listFinancialBusinessEntities(db);
+  const requestedId = normalizeText(options.businessEntityId || options.scopeId || DEFAULT_GROUP_ENTITY_ID);
+  const root = entities.find((entity) => entity.id === requestedId)
+    || entities.find((entity) => entity.id === DEFAULT_GROUP_ENTITY_ID)
+    || entities[0]
+    || {
+      id: DEFAULT_GROUP_ENTITY_ID,
+      name: "Patrick King Group",
+      entityType: "group",
+      parentEntityId: null,
+      companyId: null,
+      status: "active",
+      notes: "",
+    };
+  const requestedScopeType = normalizeText(options.scopeType || root.entityType || "group").toLowerCase();
+  const scopeType = SCOPE_TYPES.has(requestedScopeType) ? requestedScopeType : root.entityType || "group";
+  const entityIds = scopeType === "group" && root.id === DEFAULT_GROUP_ENTITY_ID
+    ? entities.map((entity) => entity.id)
+    : descendantEntityIds(entities, root.id);
+  return {
+    scopeType,
+    scopeId: root.id,
+    label: root.name,
+    root,
+    entityIds: entityIds.length ? entityIds : [root.id],
+    businessEntities: entities,
+  };
+}
+
+function scopeWhereClause(alias, entityIds) {
+  const column = alias ? `${alias}.business_entity_id` : "business_entity_id";
+  const ids = entityIds?.length ? entityIds : [DEFAULT_GROUP_ENTITY_ID];
+  return {
+    clause: `${column} IN (${ids.map(() => "?").join(", ")})`,
+    params: ids,
+  };
+}
+
+function importBusinessEntity(db, businessEntityId) {
+  const requested = normalizeText(businessEntityId || DEFAULT_BUSINESS_ENTITY_ID);
+  const entity = getFinancialBusinessEntity(db, requested === DEFAULT_GROUP_ENTITY_ID ? DEFAULT_BUSINESS_ENTITY_ID : requested);
+  return entity.entityType === "group" ? getFinancialBusinessEntity(db, DEFAULT_BUSINESS_ENTITY_ID) : entity;
 }
 
 function classifyEntryType(status = "") {
@@ -176,25 +286,27 @@ export function recordFinancialAudit(db, {
   eventType,
   actor = "Olivia",
   source = "",
+  businessEntityId = DEFAULT_GROUP_ENTITY_ID,
   metadata = {},
 }) {
   const result = db.prepare(`
-    INSERT INTO financial_audit_events (event_type, actor, source, metadata)
-    VALUES (?, ?, ?, ?)
-  `).run(String(eventType), String(actor), String(source), JSON.stringify(metadata));
-  return { id: Number(result.lastInsertRowid), eventType, actor, source, metadata };
+    INSERT INTO financial_audit_events (business_entity_id, event_type, actor, source, metadata)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(String(businessEntityId || DEFAULT_GROUP_ENTITY_ID), String(eventType), String(actor), String(source), JSON.stringify(metadata));
+  return { id: Number(result.lastInsertRowid), businessEntityId, eventType, actor, source, metadata };
 }
 
 function createImportRecord(db, payload) {
   const result = db.prepare(`
     INSERT INTO financial_imports (
-      source_type, source_name, source_hash, status, rows_total, rows_imported,
+      source_type, source_name, business_entity_id, source_hash, status, rows_total, rows_imported,
       rows_updated, duplicates_count, validation_errors_count, overwrite_approved, summary
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     payload.sourceType,
     payload.sourceName,
+    payload.businessEntityId || DEFAULT_BUSINESS_ENTITY_ID,
     payload.sourceHash,
     payload.status,
     payload.rowsTotal,
@@ -218,6 +330,7 @@ function recordImportChange(db, importId, { changeType, sourceRef, before = {}, 
 function entrySnapshot(entry) {
   return {
     financialYearId: entry.financial_year_id,
+    businessEntityId: entry.business_entity_id,
     clientName: entry.client_name,
     projectName: entry.project_name,
     serviceLine: entry.service_line,
@@ -234,15 +347,18 @@ function entrySnapshot(entry) {
   };
 }
 
-function normalizeImportEntry({ row, financialYear, sheetName, rowNumber, fileName, importId }) {
+function normalizeImportEntry({ row, financialYear, sheetName, rowNumber, fileName, importId, businessEntity }) {
   const mapped = mapRow(row);
   const classification = classifyEntryType(mapped.status);
   const probability = normalizeProbability(mapped.probability, mapped.status || classification.entryType);
   const forecastMonth = inferMonth(mapped.forecastMonth, financialYear);
   const forecastQuarter = mapped.forecastQuarter || quarterForMonth(forecastMonth);
   const title = mapped.title || mapped.projectName || `${mapped.clientName} order book row`;
+  const entity = businessEntity || { id: DEFAULT_BUSINESS_ENTITY_ID, companyId: "digitize" };
   const normalized = {
-    companyId: "digitize",
+    businessEntityId: entity.id,
+    businessEntityName: entity.name || entity.id,
+    companyId: entity.companyId || "digitize",
     clientName: mapped.clientName,
     projectName: mapped.projectName || title,
     serviceLine: mapped.serviceLine || "Unassigned",
@@ -258,13 +374,14 @@ function normalizeImportEntry({ row, financialYear, sheetName, rowNumber, fileNa
     sourceFile: fileName,
     sourceSheet: sheetName,
     sourceRow: rowNumber,
-    sourceRef: `excel_order_book:${fileName}:${sheetName}:${rowNumber}`,
+    sourceRef: `excel_order_book:${entity.id}:${fileName}:${sheetName}:${rowNumber}`,
     notes: mapped.notes,
     importId,
   };
   return {
     ...normalized,
     duplicateKey: sha256([
+      normalized.businessEntityId,
       financialYear.label,
       normalized.clientName.toLowerCase(),
       normalized.projectName.toLowerCase(),
@@ -300,13 +417,14 @@ function upsertOrderBookEntry(db, financialYearRow, entry, { overwriteApproved, 
   if (existing) {
     db.prepare(`
       UPDATE order_book_entries
-      SET financial_year_id = ?, company_id = ?, client_name = ?, project_name = ?, service_line = ?,
+      SET financial_year_id = ?, business_entity_id = ?, company_id = ?, client_name = ?, project_name = ?, service_line = ?,
           title = ?, entry_type = ?, status = ?, amount_gbp = ?, probability = ?,
           weighted_amount_gbp = ?, forecast_month = ?, forecast_quarter = ?, source_hash = ?,
           duplicate_key = ?, import_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       financialYearRow.id,
+      entry.businessEntityId,
       entry.companyId,
       entry.clientName,
       entry.projectName,
@@ -336,14 +454,15 @@ function upsertOrderBookEntry(db, financialYearRow, entry, { overwriteApproved, 
 
   db.prepare(`
     INSERT INTO order_book_entries (
-      financial_year_id, company_id, client_name, project_name, service_line, title,
+      financial_year_id, business_entity_id, company_id, client_name, project_name, service_line, title,
       entry_type, status, amount_gbp, probability, weighted_amount_gbp,
       forecast_month, forecast_quarter, source_type, source_file, source_sheet,
       source_row, source_ref, source_hash, duplicate_key, import_id, notes
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     financialYearRow.id,
+    entry.businessEntityId,
     entry.companyId,
     entry.clientName,
     entry.projectName,
@@ -375,8 +494,10 @@ export function importOrderBookSheets(db, {
   sheets = [],
   overwriteApproved = false,
   dryRun = false,
+  businessEntityId = DEFAULT_BUSINESS_ENTITY_ID,
 } = {}) {
-  const sourceHash = sha256(stableJson({ fileName, sheets }));
+  const businessEntity = importBusinessEntity(db, businessEntityId);
+  const sourceHash = sha256(stableJson({ businessEntityId: businessEntity.id, fileName, sheets }));
   const rows = [];
   for (const sheet of sheets) {
     const financialYear = detectFinancialYear(sheet.name);
@@ -395,6 +516,7 @@ export function importOrderBookSheets(db, {
       rowNumber: item.rowNumber,
       fileName,
       importId: null,
+      businessEntity,
     });
     return {
       ...item,
@@ -411,6 +533,7 @@ export function importOrderBookSheets(db, {
   const importId = createImportRecord(db, {
     sourceType: "excel_order_book",
     sourceName: fileName,
+    businessEntityId: businessEntity.id,
     sourceHash,
     status: dryRun ? "dry_run" : "imported",
     rowsTotal: rows.length,
@@ -419,12 +542,14 @@ export function importOrderBookSheets(db, {
     duplicatesCount: duplicates.length,
     validationErrorsCount: prepared.filter((item) => item.validationErrors.length).length,
     overwriteApproved,
-    summary: { sheets: sheets.map((sheet) => sheet.name), duplicates },
+    summary: { businessEntityId: businessEntity.id, businessEntityName: businessEntity.name, sheets: sheets.map((sheet) => sheet.name), duplicates },
   });
 
   const stats = {
     importId,
     sourceName: fileName,
+    businessEntityId: businessEntity.id,
+    businessEntityName: businessEntity.name,
     status: dryRun ? "dry_run" : "imported",
     rowsTotal: rows.length,
     rowsImported: 0,
@@ -482,6 +607,7 @@ export function importOrderBookSheets(db, {
     recordFinancialAudit(db, {
       eventType: dryRun ? "order_book_import_dry_run" : stats.approvalRequired ? "order_book_import_pending_overwrite" : "order_book_import",
       source: fileName,
+      businessEntityId: businessEntity.id,
       metadata: stats,
     });
     db.exec("COMMIT");
@@ -507,6 +633,7 @@ export function importOrderBookWorkbook(db, payload = {}) {
     sheets: parsed.sheets,
     overwriteApproved: Boolean(payload.overwriteApproved),
     dryRun: Boolean(payload.dryRun),
+    businessEntityId: payload.businessEntityId || DEFAULT_BUSINESS_ENTITY_ID,
   });
 }
 
@@ -520,6 +647,7 @@ export function listFinancialImports(db, limit = 20) {
     id: row.id,
     sourceType: row.source_type,
     sourceName: row.source_name,
+    businessEntityId: row.business_entity_id,
     status: row.status,
     rowsTotal: row.rows_total,
     rowsImported: row.rows_imported,
@@ -532,16 +660,24 @@ export function listFinancialImports(db, limit = 20) {
   }));
 }
 
-function listOrderBookEntries(db) {
+function listOrderBookEntries(db, scope) {
+  const where = scopeWhereClause("e", scope?.entityIds);
   return db.prepare(`
-    SELECT e.*, y.label AS financial_year, y.start_date, y.end_date
+    SELECT e.*, y.label AS financial_year, y.start_date, y.end_date,
+           b.name AS business_entity_name, b.entity_type AS business_entity_type
     FROM order_book_entries e
     JOIN financial_years y ON y.id = e.financial_year_id
+    LEFT JOIN financial_business_entities b ON b.id = e.business_entity_id
+    WHERE ${where.clause}
     ORDER BY y.start_date ASC, e.client_name ASC, e.project_name ASC
-  `).all().map((row) => ({
+  `).all(...where.params).map((row) => ({
     id: row.id,
     financialYearId: row.financial_year_id,
     financialYear: row.financial_year,
+    businessEntityId: row.business_entity_id,
+    businessEntityName: row.business_entity_name || row.business_entity_id,
+    businessEntityType: row.business_entity_type || "",
+    companyId: row.company_id,
     clientName: row.client_name,
     projectName: row.project_name,
     serviceLine: row.service_line,
@@ -574,9 +710,19 @@ function groupSum(entries, key, amountKey = "amountGbp") {
     .sort((a, b) => b.amountGbp - a.amountGbp);
 }
 
-function listInvoices(db) {
-  return db.prepare("SELECT * FROM invoice_summaries ORDER BY due_date ASC, id ASC").all().map((row) => ({
+function listInvoices(db, scope) {
+  const where = scopeWhereClause("i", scope?.entityIds);
+  return db.prepare(`
+    SELECT i.*, b.name AS business_entity_name, b.entity_type AS business_entity_type
+    FROM invoice_summaries i
+    LEFT JOIN financial_business_entities b ON b.id = i.business_entity_id
+    WHERE ${where.clause}
+    ORDER BY i.due_date ASC, i.id ASC
+  `).all(...where.params).map((row) => ({
     id: row.id,
+    businessEntityId: row.business_entity_id,
+    businessEntityName: row.business_entity_name || row.business_entity_id,
+    businessEntityType: row.business_entity_type || "",
     sourceSystem: row.source_system,
     externalId: row.external_id,
     clientName: row.client_name,
@@ -592,9 +738,19 @@ function listInvoices(db) {
   }));
 }
 
-function listDebtors(db) {
-  return db.prepare("SELECT * FROM debtor_summaries ORDER BY amount_overdue_gbp DESC, amount_outstanding_gbp DESC").all().map((row) => ({
+function listDebtors(db, scope) {
+  const where = scopeWhereClause("d", scope?.entityIds);
+  return db.prepare(`
+    SELECT d.*, b.name AS business_entity_name, b.entity_type AS business_entity_type
+    FROM debtor_summaries d
+    LEFT JOIN financial_business_entities b ON b.id = d.business_entity_id
+    WHERE ${where.clause}
+    ORDER BY d.amount_overdue_gbp DESC, d.amount_outstanding_gbp DESC
+  `).all(...where.params).map((row) => ({
     id: row.id,
+    businessEntityId: row.business_entity_id,
+    businessEntityName: row.business_entity_name || row.business_entity_id,
+    businessEntityType: row.business_entity_type || "",
     sourceSystem: row.source_system,
     clientName: row.client_name,
     amountOutstandingGbp: row.amount_outstanding_gbp,
@@ -622,6 +778,7 @@ export function calculateForecast(entries) {
     expectedCase: weightedForecastRevenue,
     worstCase: securedRevenue + pipelineRevenue * 0.25,
     probabilityWeighted: weightedForecastRevenue,
+    byBusiness: groupSum(entries, "businessEntityName", "weightedAmountGbp"),
     resourceRevenue: groupSum(entries, "serviceLine", "weightedAmountGbp"),
     monthly,
     quarterly,
@@ -639,16 +796,21 @@ export function calculateForecast(entries) {
   };
 }
 
-export function saveMondayFinancialSummaries(db, { invoiceSummaries = [], source = "monday" } = {}) {
+export function saveMondayFinancialSummaries(db, {
+  invoiceSummaries = [],
+  source = "monday",
+  businessEntityId = DEFAULT_BUSINESS_ENTITY_ID,
+} = {}) {
   const now = new Date().toISOString();
+  const businessEntity = importBusinessEntity(db, businessEntityId);
   const upsertInvoice = db.prepare(`
     INSERT INTO invoice_summaries (
-      source_system, external_id, client_name, project_name, invoice_reference,
+      business_entity_id, source_system, external_id, client_name, project_name, invoice_reference,
       amount_gbp, issued_date, due_date, paid_date, status, raw_summary,
       last_refreshed_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(source_system, external_id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(business_entity_id, source_system, external_id) DO UPDATE SET
       client_name = excluded.client_name,
       project_name = excluded.project_name,
       invoice_reference = excluded.invoice_reference,
@@ -663,6 +825,7 @@ export function saveMondayFinancialSummaries(db, { invoiceSummaries = [], source
   `);
   for (const invoice of invoiceSummaries) {
     upsertInvoice.run(
+      businessEntity.id,
       source,
       String(invoice.externalId),
       normalizeText(invoice.clientName),
@@ -678,8 +841,8 @@ export function saveMondayFinancialSummaries(db, { invoiceSummaries = [], source
     );
   }
 
-  db.prepare("DELETE FROM debtor_summaries WHERE source_system = ?").run(source);
-  const invoices = listInvoices(db).filter((invoice) => invoice.sourceSystem === source);
+  db.prepare("DELETE FROM debtor_summaries WHERE source_system = ? AND business_entity_id = ?").run(source, businessEntity.id);
+  const invoices = listInvoices(db, { entityIds: [businessEntity.id] }).filter((invoice) => invoice.sourceSystem === source);
   const byClient = new Map();
   for (const invoice of invoices.filter((item) => item.status !== "paid")) {
     const client = invoice.clientName || "Unassigned";
@@ -697,27 +860,41 @@ export function saveMondayFinancialSummaries(db, { invoiceSummaries = [], source
   }
   const insertDebtor = db.prepare(`
     INSERT INTO debtor_summaries (
-      source_system, client_name, amount_outstanding_gbp, amount_overdue_gbp,
+      business_entity_id, source_system, client_name, amount_outstanding_gbp, amount_overdue_gbp,
       invoice_count, oldest_due_date, last_refreshed_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const [clientName, debtor] of byClient.entries()) {
-    insertDebtor.run(source, clientName, debtor.amountOutstandingGbp, debtor.amountOverdueGbp, debtor.invoiceCount, debtor.oldestDueDate, now);
+    insertDebtor.run(businessEntity.id, source, clientName, debtor.amountOutstandingGbp, debtor.amountOverdueGbp, debtor.invoiceCount, debtor.oldestDueDate, now);
   }
 
   recordFinancialAudit(db, {
     eventType: "monday_financial_refresh",
     source,
-    metadata: { invoicesRead: invoiceSummaries.length, externalWritesEnabled: false },
+    businessEntityId: businessEntity.id,
+    metadata: {
+      businessEntityId: businessEntity.id,
+      businessEntityName: businessEntity.name,
+      invoicesRead: invoiceSummaries.length,
+      externalWritesEnabled: false,
+    },
   });
-  return { invoicesStored: invoiceSummaries.length, debtorsStored: byClient.size, refreshedAt: now, readOnly: true };
+  return {
+    businessEntityId: businessEntity.id,
+    businessEntityName: businessEntity.name,
+    invoicesStored: invoiceSummaries.length,
+    debtorsStored: byClient.size,
+    refreshedAt: now,
+    readOnly: true,
+  };
 }
 
-export function getFinancialDashboardData(db) {
-  const entries = listOrderBookEntries(db);
-  const invoices = listInvoices(db);
-  const debtors = listDebtors(db);
+export function getFinancialDashboardData(db, options = {}) {
+  const scope = normalizeFinancialScope(db, options);
+  const entries = listOrderBookEntries(db, scope);
+  const invoices = listInvoices(db, scope);
+  const debtors = listDebtors(db, scope);
   const forecast = calculateForecast(entries);
   const invoiceStatus = Object.fromEntries(["issued", "paid", "overdue", "draft", "unknown"].map((status) => [
     status,
@@ -727,6 +904,13 @@ export function getFinancialDashboardData(db) {
   const opportunities = generateFinancialOpportunities({ entries, forecast });
   return {
     boundary: FINANCIAL_READ_ONLY_BOUNDARY,
+    businessEntities: scope.businessEntities,
+    scope: {
+      type: scope.scopeType,
+      id: scope.scopeId,
+      label: scope.label,
+      entityIds: scope.entityIds,
+    },
     metrics: {
       securedRevenue: forecast.securedRevenue,
       pipelineRevenue: forecast.pipelineRevenue,
@@ -738,6 +922,7 @@ export function getFinancialDashboardData(db) {
     },
     revenueByFinancialYear: forecast.annual,
     revenueByQuarter: forecast.quarterly,
+    revenueByBusiness: forecast.byBusiness,
     revenueByClient: groupSum(entries, "clientName", "weightedAmountGbp"),
     revenueByProject: groupSum(entries, "projectName", "weightedAmountGbp"),
     revenueByServiceLine: forecast.resourceRevenue,
@@ -812,8 +997,8 @@ function generateFinancialOpportunities({ entries, forecast }) {
   return opportunities;
 }
 
-export function generateOliviaAnalysis(db) {
-  const dashboard = getFinancialDashboardData(db);
+export function generateOliviaAnalysis(db, options = {}) {
+  const dashboard = getFinancialDashboardData(db, options);
   const insights = [
     ...dashboard.risks.map((risk) => ({
       type: "risk",
@@ -838,20 +1023,26 @@ export function generateOliviaAnalysis(db) {
     insights.push({
       type: "baseline",
       title: "Financial intelligence baseline",
-      detail: "Import the order book and refresh Monday invoice summaries to unlock richer CFO analysis.",
+      detail: `Import order book and read-only invoice summaries for ${dashboard.scope.label} to unlock richer CFO analysis.`,
       severity: "low",
-      recommendation: "Start with Digitize order book import and a read-only Monday refresh.",
+      recommendation: "Start with the relevant business order book import and a read-only Monday refresh.",
       sourceRef: "financial_dashboard",
     });
   }
   recordFinancialAudit(db, {
     eventType: "olivia_analysis_generated",
     source: "financial_dashboard",
-    metadata: { insightCount: insights.length, externalWritesEnabled: false },
+    businessEntityId: dashboard.scope.id,
+    metadata: {
+      scope: dashboard.scope,
+      insightCount: insights.length,
+      externalWritesEnabled: false,
+    },
   });
   return {
     generatedAt: new Date().toISOString(),
     role: "Olivia - Chief Financial Officer",
+    scope: dashboard.scope,
     boundary: FINANCIAL_READ_ONLY_BOUNDARY,
     executiveSummary: insights.slice(0, 3).map((item) => item.title).join("; "),
     insights,
@@ -867,17 +1058,25 @@ export function generateOliviaAnalysis(db) {
   };
 }
 
-export function generateBoardReport(db, { financialYearId = null, quarter = "" } = {}) {
-  const dashboard = getFinancialDashboardData(db);
+export function generateBoardReport(db, {
+  financialYearId = null,
+  quarter = "",
+  scopeType = "group",
+  scopeId = DEFAULT_GROUP_ENTITY_ID,
+  businessEntityId = "",
+} = {}) {
+  const dashboard = getFinancialDashboardData(db, { scopeType, scopeId, businessEntityId });
   const year = financialYearId
     ? db.prepare("SELECT * FROM financial_years WHERE id = ?").get(financialYearId)
     : db.prepare("SELECT * FROM financial_years ORDER BY start_date DESC LIMIT 1").get();
-  const title = `${year?.label || "Financial"} ${quarter || "Board"} Report`;
-  const olivia = generateOliviaAnalysis(db);
+  const title = `${dashboard.scope.label} ${year?.label || "Financial"} ${quarter || "Board"} Report`;
+  const olivia = generateOliviaAnalysis(db, { scopeType: dashboard.scope.type, scopeId: dashboard.scope.id });
   const lines = [
     `# ${title}`,
     "",
     "## Executive Summary",
+    `Reporting scope: ${dashboard.scope.label} (${dashboard.scope.type}).`,
+    "",
     olivia.executiveSummary || "No material financial exceptions detected.",
     "",
     "## Revenue Performance",
@@ -917,6 +1116,7 @@ export function generateBoardReport(db, { financialYearId = null, quarter = "" }
     "_Read-only financial intelligence report. No invoices, payments, accounting records or external systems were modified._",
   ];
   const summary = {
+    scope: dashboard.scope,
     securedRevenue: dashboard.metrics.securedRevenue,
     weightedForecastRevenue: dashboard.metrics.weightedForecastRevenue,
     outstandingDebtors: dashboard.metrics.outstandingDebtors,
@@ -925,13 +1125,25 @@ export function generateBoardReport(db, { financialYearId = null, quarter = "" }
     opportunityCount: dashboard.opportunities.length,
   };
   const result = db.prepare(`
-    INSERT INTO board_reports (financial_year_id, quarter, title, summary, markdown)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(year?.id || null, String(quarter || ""), title, JSON.stringify(summary), lines.join("\n"));
+    INSERT INTO board_reports (
+      business_entity_id, scope_type, scope_id, financial_year_id, quarter, title, summary, markdown
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    dashboard.scope.id,
+    dashboard.scope.type,
+    dashboard.scope.id,
+    year?.id || null,
+    String(quarter || ""),
+    title,
+    JSON.stringify(summary),
+    lines.join("\n"),
+  );
   recordFinancialAudit(db, {
     eventType: "board_report_generated",
     source: title,
-    metadata: { reportId: Number(result.lastInsertRowid), externalWritesEnabled: false },
+    businessEntityId: dashboard.scope.id,
+    metadata: { reportId: Number(result.lastInsertRowid), scope: dashboard.scope, externalWritesEnabled: false },
   });
   return getBoardReport(db, Number(result.lastInsertRowid));
 }
@@ -941,6 +1153,9 @@ export function getBoardReport(db, id) {
   if (!row) return null;
   return {
     id: row.id,
+    businessEntityId: row.business_entity_id,
+    scopeType: row.scope_type,
+    scopeId: row.scope_id,
     financialYearId: row.financial_year_id,
     quarter: row.quarter,
     title: row.title,
@@ -959,6 +1174,9 @@ export function listBoardReports(db, limit = 20) {
     LIMIT ?
   `).all(Math.min(Math.max(Number(limit) || 20, 1), 100)).map((row) => ({
     id: row.id,
+    businessEntityId: row.business_entity_id,
+    scopeType: row.scope_type,
+    scopeId: row.scope_id,
     financialYearId: row.financial_year_id,
     quarter: row.quarter,
     title: row.title,
@@ -976,6 +1194,7 @@ export function listFinancialAudit(db, limit = 50) {
     LIMIT ?
   `).all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map((row) => ({
     id: row.id,
+    businessEntityId: row.business_entity_id,
     eventType: row.event_type,
     actor: row.actor,
     source: row.source,

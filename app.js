@@ -170,9 +170,9 @@ const seedData = {
       id: "olivia",
       name: "Olivia",
       role: "Chief Financial Officer",
-      companyId: "digitize",
+      companyId: "group",
       department: "Finance",
-      mission: "Build the read-only financial operating system for order book, forecasts, debtors, cashflow insight and board reporting.",
+      mission: "Act as Group CFO across Alfred-managed businesses with read-only revenue, forecast, debtor, KPI and board reporting intelligence.",
       tools: [],
       status: "Framework only",
     },
@@ -200,6 +200,16 @@ const seedData = {
     executionEnabled: false,
   },
   financial: {
+    businessEntities: [
+      { id: "group", name: "Patrick King Group", entityType: "group", parentEntityId: null, companyId: null, status: "active" },
+      { id: "digitize", name: "Digitize Consultants", entityType: "business", parentEntityId: "group", companyId: "digitize", status: "active" },
+      { id: "council-assurance-platform", name: "Council Assurance Platform", entityType: "product", parentEntityId: "group", companyId: "product", status: "planned" },
+      { id: "media-businesses", name: "Media Businesses", entityType: "division", parentEntityId: "group", companyId: "media", status: "planned" },
+      { id: "ai-businesses", name: "AI Businesses", entityType: "division", parentEntityId: "group", companyId: "venture", status: "planned" },
+      { id: "future-saas-products", name: "Future SaaS Products", entityType: "division", parentEntityId: "group", companyId: "product", status: "planned" },
+      { id: "future-ventures", name: "Future Ventures", entityType: "venture", parentEntityId: "group", companyId: "venture", status: "planned" },
+    ],
+    scope: { type: "group", id: "group", label: "Patrick King Group", entityIds: ["group", "digitize"] },
     metrics: {
       securedRevenue: 0,
       pipelineRevenue: 0,
@@ -211,6 +221,7 @@ const seedData = {
     },
     revenueByFinancialYear: [],
     revenueByQuarter: [],
+    revenueByBusiness: [],
     revenueByClient: [],
     revenueByProject: [],
     revenueByServiceLine: [],
@@ -232,6 +243,7 @@ let currentBrief = null;
 let memoryFilter = "all";
 let semanticMemoryStatus = null;
 let currentBoardReportMarkdown = "";
+let financeScope = { type: "group", id: "group" };
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -690,8 +702,49 @@ function renderFinanceList(records, empty = "No financial data yet.") {
     : `<div class="empty-state finance-empty">${empty}</div>`;
 }
 
+function financeScopeValue(entity) {
+  return `${entity.entityType || "business"}:${entity.id}`;
+}
+
+function selectedFinanceEntity() {
+  const finance = state.financial || seedData.financial;
+  const entities = finance.businessEntities?.length ? finance.businessEntities : seedData.financial.businessEntities;
+  return entities.find((entity) => entity.id === financeScope.id)
+    || entities.find((entity) => entity.id === finance.scope?.id)
+    || entities.find((entity) => entity.id === "group")
+    || entities[0];
+}
+
+function selectedOperationalBusinessEntityId() {
+  const entity = selectedFinanceEntity();
+  if (!entity || entity.entityType === "group") return "digitize";
+  return entity.id;
+}
+
+function financeScopeQuery() {
+  const entity = selectedFinanceEntity();
+  const type = entity?.entityType || financeScope.type || "group";
+  const id = entity?.id || financeScope.id || "group";
+  return `scopeType=${encodeURIComponent(type)}&scopeId=${encodeURIComponent(id)}`;
+}
+
+function renderFinanceScopeSelector() {
+  const select = $("#finance-scope");
+  if (!select) return;
+  const finance = state.financial || seedData.financial;
+  const entities = finance.businessEntities?.length ? finance.businessEntities : seedData.financial.businessEntities;
+  const selected = selectedFinanceEntity() || entities[0];
+  financeScope = { type: selected?.entityType || "group", id: selected?.id || "group" };
+  select.innerHTML = entities.map((entity) => `
+    <option value="${escapeHTML(financeScopeValue(entity))}" ${entity.id === financeScope.id ? "selected" : ""}>
+      ${escapeHTML(entity.name)} (${escapeHTML(entity.entityType)})
+    </option>
+  `).join("");
+}
+
 function renderFinance() {
   const finance = state.financial || seedData.financial;
+  renderFinanceScopeSelector();
   const metrics = finance.metrics || {};
   $("#finance-metrics").innerHTML = [
     ["SECURED REVENUE", metrics.securedRevenue],
@@ -717,6 +770,8 @@ function renderFinance() {
     ${renderFinanceList(finance.revenueByQuarter || [], "Import the order book to see quarterly revenue.")}
   `;
   $("#finance-clients").innerHTML = `
+    <h4>Business entities</h4>
+    ${renderFinanceList(finance.revenueByBusiness || [], "No business-level revenue imported yet.")}
     ${renderFinanceList(finance.revenueByClient || [], "No client revenue imported yet.")}
     <h4>Service lines</h4>
     ${renderFinanceList(finance.revenueByServiceLine || [], "No service line revenue imported yet.")}
@@ -1193,9 +1248,15 @@ async function refreshFinancialDashboard() {
     showToast("Finance dashboard requires the backend");
     return;
   }
-  state.financial = await apiRequest("/api/financial/dashboard");
+  state.financial = await apiRequest(`/api/financial/dashboard?${financeScopeQuery()}`);
   persist();
   renderFinance();
+}
+
+async function changeFinanceScope(event) {
+  const [type, id] = String(event.target.value || "group:group").split(":");
+  financeScope = { type: type || "group", id: id || "group" };
+  await refreshFinancialDashboard();
 }
 
 function readFileAsBase64(file) {
@@ -1219,7 +1280,7 @@ async function importOrderBookFile(event) {
     const dataBase64 = await readFileAsBase64(file);
     const result = await apiRequest("/api/financial/order-book/import", {
       method: "POST",
-      body: JSON.stringify({ fileName: file.name, dataBase64 }),
+      body: JSON.stringify({ fileName: file.name, dataBase64, businessEntityId: selectedOperationalBusinessEntityId() }),
     });
     await refreshFinancialDashboard();
     showToast(`Imported ${result.rowsImported} order book row(s)`);
@@ -1238,7 +1299,10 @@ async function refreshMondayFinance() {
     return;
   }
   try {
-    const result = await apiRequest("/api/financial/monday/refresh", { method: "POST", body: "{}" });
+    const result = await apiRequest("/api/financial/monday/refresh", {
+      method: "POST",
+      body: JSON.stringify({ businessEntityId: selectedOperationalBusinessEntityId() }),
+    });
     await refreshFinancialDashboard();
     showToast(`Monday read-only refresh stored ${result.invoicesStored} invoice(s)`);
   } catch (error) {
@@ -1252,7 +1316,11 @@ async function generateBoardReportView() {
     return;
   }
   try {
-    const report = await apiRequest("/api/financial/board-reports", { method: "POST", body: "{}" });
+    const entity = selectedFinanceEntity();
+    const report = await apiRequest("/api/financial/board-reports", {
+      method: "POST",
+      body: JSON.stringify({ scopeType: entity?.entityType || "group", scopeId: entity?.id || "group" }),
+    });
     currentBoardReportMarkdown = report.markdown;
     $("#board-report-output").textContent = report.markdown;
     await refreshFinancialDashboard();
@@ -1268,7 +1336,11 @@ async function askOlivia() {
     return;
   }
   try {
-    const analysis = await apiRequest("/api/financial/olivia-analysis", { method: "POST", body: "{}" });
+    const entity = selectedFinanceEntity();
+    const analysis = await apiRequest("/api/financial/olivia-analysis", {
+      method: "POST",
+      body: JSON.stringify({ scopeType: entity?.entityType || "group", scopeId: entity?.id || "group" }),
+    });
     $("#finance-insights").innerHTML = `
       <div class="ai-boundary">Olivia analysed local financial records only. No invoices, payments, Monday boards, bank feeds or accounting records were modified.</div>
       <section class="ai-summary">
@@ -1528,6 +1600,7 @@ $("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
 $("#import-order-book").addEventListener("click", () => $("#order-book-file").click());
 $("#order-book-file").addEventListener("change", importOrderBookFile);
+$("#finance-scope").addEventListener("change", changeFinanceScope);
 $("#refresh-monday-finance").addEventListener("click", refreshMondayFinance);
 $("#generate-board-report").addEventListener("click", generateBoardReportView);
 $("#ask-olivia").addEventListener("click", askOlivia);
