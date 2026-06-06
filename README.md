@@ -75,7 +75,7 @@ PWA install:
 - iPhone Safari: Share -> **Add to Home Screen**.
 - iPad Pro Safari: Share -> **Add to Home Screen**.
 
-The PWA includes `manifest.json`, `service-worker.js`, icon placeholders and `offline.html`. Offline mode only provides the installed shell; live executive data, approvals, voice, memory and integrations still require the backend.
+The PWA includes `manifest.json`, `service-worker.js`, icon placeholders, local executive avatar assets and `offline.html`. Offline mode only provides the installed shell; live executive data, approvals, voice, memory and integrations still require the backend.
 
 Production security notes:
 
@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Sarah as an active advisory Executive Specialist, the Westbridge Property Director as an active advisory Investment Director, plus Alex, Maya, James and Olivia as planned agent definitions
+- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Maya, Alex, Ethan, Liam and James as planned future identities
 
 Database files are excluded from Git.
 
@@ -339,6 +339,41 @@ Voice transcripts are local sensitive business data. Voice audit records log met
 - Mobile/PWA/native app packaging is not included. The layout is prepared for MacBook, iPhone Safari and future PWA work.
 - Voice commands do not create external actions. Any future write action must go through the existing approval framework and a separate executor review.
 
+## Agent Avatar System
+
+Alfred includes a local executive avatar identity layer for:
+
+- Alfred
+- Olivia
+- Sarah
+- Westbridge Property Director
+- Maya
+- Alex
+- Ethan
+- Liam
+- James
+
+The source of truth is `agent-avatars.js`. It stores each agent's name, title, business area, department, local avatar path, fallback initials, accent colour, voice persona placeholder, expertise tags, status and reporting line.
+
+Avatar assets live in:
+
+```text
+assets/avatars/
+```
+
+Rules:
+
+- Use local controlled SVG or lightweight image assets only.
+- Do not hotlink external images.
+- Do not use copyrighted characters, celebrity likenesses or brand-derived faces.
+- Keep artwork executive, premium, futuristic, dark-theme compatible and non-cartoonish.
+- If an avatar image is missing or fails to load, the UI falls back to a styled initials badge.
+- Future brand artwork can replace the placeholder SVGs by keeping the same local paths.
+
+The avatar layer is visual identity only. It does not add autonomous agents, write actions, external integrations, email sending, calendar updates, Microsoft writes, Monday writes, financial writes or property actions.
+
+Voice persona fields are placeholders for future multi-voice support. Alfred remains the only primary voice in the current voice phase.
+
 ## Integration States
 
 The database contains honest placeholders for:
@@ -367,12 +402,13 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence and the Voice Command Centre.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre and the Agent Avatar System.
 
 ## Architecture
 
 - `server.js` - HTTP server, REST routes and static frontend hosting
 - `app-metadata.js` - app version, release metadata, environment validation, PWA readiness and health response model
+- `agent-avatars.js` - executive avatar metadata, local path validation, fallback initials and roster helpers
 - `db.js` - schema, seed data, resource persistence and briefing queries
 - `anthropic.js` - Claude Messages API client, CEO system prompt and structured output schemas
 - `ai.js` - read-only AI reasoning service and audit wrapper
@@ -386,6 +422,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
 - `manifest.json` / `service-worker.js` / `offline.html` - installable PWA shell, static cache and offline fallback
+- `assets/avatars/` - local abstract executive avatar placeholders
 - `index.html` / `styles.css` - executive command centre interface and responsive iPad/iPhone layouts
 - `test/db.test.js` - database and workflow tests
 

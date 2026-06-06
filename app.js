@@ -1,3 +1,11 @@
+import {
+  AGENT_AVATAR_PROFILES,
+  buildAgentAvatarRenderModel,
+  buildExecutiveTeamRoster,
+  getAgentAvatarProfile,
+  isLocalAvatarPath,
+} from "./agent-avatars.js";
+
 const STORAGE_KEY = "alfred-core-v1";
 
 const seedData = {
@@ -136,68 +144,16 @@ const seedData = {
       date: "2026-06-05",
     },
   ],
-  agents: [
-    {
-      id: "sarah",
-      name: "Sarah",
-      role: "Digital Construction Director",
-      companyId: "digitize",
-      department: "Delivery",
-      mission: "Lead BIM, GIS, Digital Twin and ISO 19650 delivery for Digitize.",
-      tools: [],
-      status: "Framework only",
-    },
-    {
-      id: "westbridge-property-director",
-      name: "Westbridge Property Director",
-      role: "AI Investment Director",
-      companyId: "westbridge",
-      department: "Property Investment",
-      mission: "Analyse Westbridge acquisition pipeline, portfolio cashflow, due diligence and investment risks. Advisory only.",
-      tools: [],
-      status: "Framework only",
-    },
-    {
-      id: "alex",
-      name: "Alex",
-      role: "Growth Director",
-      companyId: "group",
-      department: "Growth",
-      mission: "Find and qualify revenue opportunities across the group.",
-      tools: [],
-      status: "Framework only",
-    },
-    {
-      id: "maya",
-      name: "Maya",
-      role: "Media Director",
-      companyId: "media",
-      department: "Media",
-      mission: "Build content businesses with repeatable production and monetisation systems.",
-      tools: [],
-      status: "Framework only",
-    },
-    {
-      id: "james",
-      name: "James",
-      role: "Product CEO",
-      companyId: "product",
-      department: "Product",
-      mission: "Validate, build and operate scalable SaaS products.",
-      tools: [],
-      status: "Framework only",
-    },
-    {
-      id: "olivia",
-      name: "Olivia",
-      role: "Chief Financial Officer",
-      companyId: "group",
-      department: "Finance",
-      mission: "Act as Group CFO across Alfred-managed businesses with read-only revenue, forecast, debtor, KPI and board reporting intelligence.",
-      tools: [],
-      status: "Framework only",
-    },
-  ],
+  agents: AGENT_AVATAR_PROFILES.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    role: profile.title,
+    companyId: profile.companyId,
+    department: profile.department,
+    mission: profile.mission,
+    tools: [],
+    status: profile.status,
+  })),
   integrations: [
     { id: "outlook", name: "Microsoft Outlook", symbol: "O", description: "Read and search Outlook email for briefings. Sending and drafting are disabled.", status: "Not connected" },
     { id: "calendar", name: "Outlook Calendar", symbol: "C", description: "Read upcoming meetings for preparation and briefings. Calendar changes are disabled.", status: "Not connected" },
@@ -517,6 +473,72 @@ function escapeHTML(value = "") {
     .replaceAll("'", "&#039;");
 }
 
+function executiveTeamRoster(records = state.agents || []) {
+  return buildExecutiveTeamRoster(records);
+}
+
+function agentIdentity(agentOrId) {
+  if (typeof agentOrId === "string") {
+    const profile = getAgentAvatarProfile(agentOrId);
+    return buildAgentAvatarRenderModel(profile || { id: agentOrId, name: agentOrId });
+  }
+  return buildAgentAvatarRenderModel(agentOrId || {});
+}
+
+function expertiseChips(tags = [], limit = 4) {
+  return tags
+    .slice(0, limit)
+    .map((tag) => `<span class="chip agent-chip">${escapeHTML(tag)}</span>`)
+    .join("");
+}
+
+function renderAgentAvatar(identity, className = "") {
+  const model = buildAgentAvatarRenderModel(identity);
+  const image = model.avatarPath && isLocalAvatarPath(model.avatarPath)
+    ? `<img class="agent-avatar-image" src="${escapeHTML(model.avatarPath)}" alt="${escapeHTML(`${model.name} avatar`)}" loading="lazy" />`
+    : "";
+  return `
+    <span
+      class="agent-avatar-frame ${className}"
+      style="--agent-accent:${escapeHTML(model.accentColor)}"
+      data-agent-avatar="${escapeHTML(model.id)}"
+      data-fallback-initials="${escapeHTML(model.fallbackInitials)}"
+      aria-hidden="true"
+    >
+      ${image}
+      <span class="agent-avatar-initials">${escapeHTML(model.fallbackInitials)}</span>
+    </span>
+  `;
+}
+
+function renderAgentIdentitySummary(agentOrId, options = {}) {
+  const identity = agentIdentity(agentOrId);
+  const compact = options.compact ? " compact" : "";
+  return `
+    <article class="specialist-identity${compact}" style="--agent-accent:${escapeHTML(identity.accentColor)}">
+      ${renderAgentAvatar(identity, "large")}
+      <div>
+        <span class="agent-status status-${escapeHTML(identity.statusCategory)}">${escapeHTML(identity.status)}</span>
+        <h3>${escapeHTML(identity.name)}</h3>
+        <p>${escapeHTML(identity.title)}</p>
+        <small>${escapeHTML(identity.businessArea)} · reports to ${escapeHTML(identity.reportingLine)}</small>
+        <div class="agent-chip-row">${expertiseChips(identity.expertiseTags, options.tagLimit || 4)}</div>
+      </div>
+    </article>
+  `;
+}
+
+function enhanceAvatarFallbacks(root = document) {
+  root.querySelectorAll(".agent-avatar-image").forEach((image) => {
+    if (image.dataset.fallbackBound) return;
+    image.dataset.fallbackBound = "true";
+    image.addEventListener("error", () => {
+      image.closest(".agent-avatar-frame")?.classList.add("missing-image");
+      image.remove();
+    }, { once: true });
+  });
+}
+
 function companyFor(id) {
   return state.companies.find((company) => company.id === id);
 }
@@ -628,6 +650,7 @@ function renderVoiceCommandCentre() {
   const voice = state.voice || seedData.voice;
   const status = voice.status || seedData.voice.status;
   const settings = status.settings || seedData.voice.status.settings;
+  const alfred = agentIdentity("alfred");
   const deepgram = status.providers?.deepgram || {};
   const elevenlabs = status.providers?.elevenlabs || {};
   const setup = status.setup || seedData.voice.status.setup;
@@ -635,6 +658,8 @@ function renderVoiceCommandCentre() {
   const last = voice.lastResult;
   const voiceEnabled = Boolean(settings.enabled);
 
+  $("#voice-agent-identity").innerHTML = renderAgentIdentitySummary(alfred, { compact: true, tagLimit: 3 });
+  $("#voice-button").style.setProperty("--agent-accent", alfred.accentColor);
   $("#voice-status-pill").textContent = voiceEnabled ? "Voice ready" : "Voice disabled";
   $("#voice-status-pill").classList.toggle("disabled", !voiceEnabled);
   $("#deepgram-status").textContent = deepgram.state || (deepgram.configured ? "Planned" : "Not connected");
@@ -668,7 +693,10 @@ function renderVoiceCommandCentre() {
   if (last) {
     $("#voice-response").innerHTML = `
       <div class="voice-answer">
-        <strong>Alfred</strong>
+        <div class="voice-answer-agent">
+          ${renderAgentAvatar(alfred, "small")}
+          <strong>Alfred</strong>
+        </div>
         <p>${escapeHTML(last.response || last.message || "")}</p>
         <small>
           Intent: ${escapeHTML(last.detectedIntent?.intent || last.detectedIntent || "unknown")}
@@ -678,13 +706,19 @@ function renderVoiceCommandCentre() {
       </div>
       ${(last.specialistContributions || []).length ? `
         <div class="voice-specialists">
-          ${(last.specialistContributions || []).map((item) => `
-            <article>
-              <strong>${escapeHTML(item.agent)}</strong>
+          ${(last.specialistContributions || []).map((item) => {
+            const specialist = agentIdentity(item.agent);
+            return `
+            <article style="--agent-accent:${escapeHTML(specialist.accentColor)}">
+              <div class="voice-answer-agent">
+                ${renderAgentAvatar(specialist, "small")}
+                <strong>${escapeHTML(item.agent)}</strong>
+              </div>
               <span>${escapeHTML(item.assessment)}</span>
               <small>${escapeHTML(item.sourceReference || "")}</small>
             </article>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
       ` : ""}
     `;
@@ -847,26 +881,43 @@ function renderRelatedMemory(records = []) {
 }
 
 function renderAgents() {
-  $("#agent-grid").innerHTML = state.agents
+  const roster = executiveTeamRoster();
+  $("#executive-team-identity").innerHTML = roster
+    .map((identity) => `
+      <article class="executive-identity-card status-${escapeHTML(identity.statusCategory)}" style="--agent-accent:${escapeHTML(identity.accentColor)}">
+        ${renderAgentAvatar(identity, "large")}
+        <div>
+          <span>${escapeHTML(identity.status)}</span>
+          <h3>${escapeHTML(identity.name)}</h3>
+          <p>${escapeHTML(identity.title)}</p>
+          <small>${escapeHTML(identity.businessArea)}</small>
+        </div>
+      </article>
+    `)
+    .join("");
+
+  $("#agent-grid").innerHTML = roster
     .map((agent) => {
       const company = companyFor(agent.companyId);
       return `
-        <article class="agent-card">
+        <article class="agent-card status-${escapeHTML(agent.statusCategory)}" style="--agent-accent:${escapeHTML(agent.accentColor)}">
           <header>
             <div class="agent-identity">
-              <span class="agent-avatar">${escapeHTML(agent.name.slice(0, 1))}</span>
+              ${renderAgentAvatar(agent)}
               <div>
                 <h3>${escapeHTML(agent.name)}</h3>
-                <p>${escapeHTML(agent.role)}</p>
+                <p>${escapeHTML(agent.title)}</p>
               </div>
             </div>
             <span class="agent-status">${escapeHTML(agent.status)}</span>
           </header>
           <p class="agent-mission">${escapeHTML(agent.mission)}</p>
+          <div class="agent-chip-row">${expertiseChips(agent.expertiseTags, 5)}</div>
           <div class="agent-meta">
-            <div><small>Company</small><strong>${escapeHTML(company?.shortName || "Group")}</strong></div>
+            <div><small>Business area</small><strong>${escapeHTML(agent.businessArea || company?.shortName || "Group")}</strong></div>
             <div><small>Department</small><strong>${escapeHTML(agent.department)}</strong></div>
-            <div><small>Tools</small><strong>${agent.tools.length} connected</strong></div>
+            <div><small>Reports to</small><strong>${escapeHTML(agent.reportingLine)}</strong></div>
+            <div><small>Voice persona</small><strong>${escapeHTML(agent.voicePersonaPlaceholder)}</strong></div>
           </div>
         </article>
       `;
@@ -949,6 +1000,7 @@ function renderSettings() {
   const security = deployment.security || seedData.deployment.security;
   const property = state.property || seedData.property;
   const financial = state.financial || seedData.financial;
+  const roster = executiveTeamRoster();
 
   $("#deployment-warning").innerHTML = warnings.length
     ? warnings.map((warning) => `
@@ -1010,6 +1062,22 @@ function renderSettings() {
       <span>${escapeHTML(typeof value === "boolean" ? (value ? "Yes" : "No") : value)}</span>
     </article>
   `).join("");
+
+  $("#settings-avatar-summary").innerHTML = `
+    <div class="settings-avatar-strip">
+      ${roster.slice(0, 9).map((agent) => renderAgentAvatar(agent, "small")).join("")}
+    </div>
+    <div class="settings-facts compact">
+      ${factRows([
+        ["Avatar assets", "/assets/avatars/"],
+        ["Current identities", roster.filter((agent) => agent.statusCategory === "active").length],
+        ["Planned identities", roster.filter((agent) => agent.statusCategory === "planned").length],
+        ["Fallback", "Styled initials badge"],
+        ["External images", "Blocked by policy"],
+        ["Multi-voice", "Metadata placeholders only"],
+      ])}
+    </div>
+  `;
 }
 
 function renderApprovals() {
@@ -1135,6 +1203,7 @@ function renderFinanceScopeSelector() {
 
 function renderFinance() {
   const finance = state.financial || seedData.financial;
+  $("#finance-agent-identity").innerHTML = renderAgentIdentitySummary("olivia");
   renderFinanceScopeSelector();
   const metrics = finance.metrics || {};
   $("#finance-metrics").innerHTML = [
@@ -1238,6 +1307,7 @@ function renderPropertyAnalysis(result = null) {
 function renderProperty() {
   const property = state.property || seedData.property;
   const metrics = property.metrics || {};
+  $("#property-agent-identity").innerHTML = renderAgentIdentitySummary("westbridge-property-director");
   $("#property-metrics").innerHTML = [
     ["TOTAL PROPERTIES", metrics.totalProperties],
     ["PORTFOLIO VALUE", metrics.portfolioValue],
@@ -1437,6 +1507,7 @@ function sarahList(records, empty, formatter) {
 function renderSarah() {
   const sarah = state.sarah || seedData.sarah;
   const metrics = sarah.metrics || {};
+  $("#sarah-agent-identity").innerHTML = renderAgentIdentitySummary("sarah");
   $("#sarah-metrics").innerHTML = [
     ["PROJECTS NEEDING ATTENTION", metrics.projectsRequiringAttention],
     ["INFORMATION RISKS", metrics.informationRisks],
@@ -1497,6 +1568,7 @@ function renderAll() {
   renderApprovals();
   renderIntegrations();
   renderSettings();
+  enhanceAvatarFallbacks();
 }
 
 function navigate(view) {
@@ -1547,6 +1619,32 @@ function registerServiceWorker() {
 function navigateFromUrl() {
   const view = new URLSearchParams(window.location.search).get("view");
   if (view && $(`#${view}-view`)) navigate(view);
+}
+
+function renderBriefAgentStatus(agents = []) {
+  const roster = executiveTeamRoster((agents || []).map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    role: agent.role,
+    status: agent.status,
+  })));
+  return `
+    <section class="brief-section agent-brief-section">
+      <h4>11. AGENT STATUS</h4>
+      <div class="brief-agent-grid">
+        ${roster.map((agent) => `
+          <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
+            ${renderAgentAvatar(agent, "small")}
+            <div>
+              <strong>${escapeHTML(agent.name)}</strong>
+              <span>${escapeHTML(agent.title)}</span>
+              <small>${escapeHTML(agent.status)} · reports to ${escapeHTML(agent.reportingLine)}</small>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
 }
 
 function buildBrief(brief) {
@@ -1603,8 +1701,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${renderBriefAgentStatus(brief.agents || [])}
   `;
+  enhanceAvatarFallbacks($("#brief-dialog"));
 }
 
 async function generateBrief() {
@@ -1623,6 +1722,7 @@ async function generateBrief() {
     coreState.textContent = "BRIEF READY";
     coreMessage.textContent = `Briefing compiled from ${backendAvailable ? "the SQLite operating database" : "browser fallback data"}.`;
     $("#brief-dialog").showModal();
+    enhanceAvatarFallbacks($("#brief-dialog"));
   } catch (error) {
     core.classList.remove("working");
     coreState.textContent = "ALERT";
@@ -1827,6 +1927,7 @@ function showAiAnalysis({ title, meta, html }) {
   $("#ai-analysis-meta").textContent = meta;
   $("#ai-analysis-content").innerHTML = html;
   if (!$("#ai-dialog").open) $("#ai-dialog").showModal();
+  enhanceAvatarFallbacks($("#ai-dialog"));
 }
 
 function showAiLoading(title) {

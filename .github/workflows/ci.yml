@@ -36,6 +36,9 @@ jobs:
       - name: Check app metadata syntax
         run: node --check app-metadata.js
 
+      - name: Check agent avatar metadata syntax
+        run: node --check agent-avatars.js
+
       - name: Check database syntax
         run: node --check db.js
 

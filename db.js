@@ -1470,12 +1470,15 @@ const PROJECT_TAG_SEEDS = [
 ];
 
 const AGENT_SEEDS = [
+  ["alfred", "Alfred", "AI Chief of Staff / Operating Partner", null, "Executive Operations", "Protect Patrick's time, coordinate the executive team and keep recommendations factual, sourced and approval-led. Advisory only; no autonomous execution.", ["Executive Briefings", "Prioritisation", "Risk Review", "Decision Support"], "Active"],
+  ["olivia", "Olivia", "Chief Financial Officer", null, "Finance", "Act as Group CFO across Alfred-managed businesses, producing read-only revenue, forecast, debtor, cashflow, KPI and board-reporting intelligence.", ["Forecasting", "Order Book", "Debtors", "Board Reporting"], "Active"],
   ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Executive Specialist reporting to Alfred. Provides advisory-only BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform intelligence for Digitize. No autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Active"],
   ["westbridge-property-director", "Westbridge Property Director", "AI Investment Director", "westbridge", "Property Investment", "Board-level investment director for Westbridge Property Group. Analyses acquisition pipeline, portfolio cashflow, due diligence, refinance potential and investment risks. Advisory only; no purchases, offers, legal instructions, communications or external execution.", ["Portfolio Metrics", "Deal Analysis", "Westbridge Rules", "Due Diligence", "Refinance Scenarios", "Property Memory"], "Active"],
-  ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
+  ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
+  ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
+  ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
-  ["olivia", "Olivia", "Chief Financial Officer", null, "Finance", "Act as Group CFO across Alfred-managed businesses, producing read-only revenue, forecast, debtor, cashflow, KPI and board-reporting intelligence.", [], "Planned"],
 ];
 
 const SARAH_TEAM_PLACEHOLDER_SEEDS = [
@@ -1799,12 +1802,12 @@ function updateAgentDefinitions(db) {
   `);
   const updateAgent = db.prepare(`
     UPDATE agents
-    SET name = ?, role = ?, company_id = ?, department = ?, mission = ?, tools = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, role = ?, company_id = ?, department = ?, mission = ?, tools = ?, status = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `);
   for (const agent of AGENT_SEEDS) {
     insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
-    updateAgent.run(agent[1], agent[2], agent[3], agent[4], agent[5], JSON.stringify(agent[6]), agent[0]);
+    updateAgent.run(agent[1], agent[2], agent[3], agent[4], agent[5], JSON.stringify(agent[6]), agent[7], agent[0]);
   }
 }
 
