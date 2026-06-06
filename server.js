@@ -105,6 +105,17 @@ import {
   recordMeetingFeedback,
   searchMeetingKnowledge,
 } from "./meeting-intelligence.js";
+import {
+  MONDAY_OPERATING_BOUNDARY,
+  getMondayOperatingDashboard,
+  listMondayAudit,
+  listMondayOperatingCollection,
+  mondayOperatingBriefForDaily,
+  mondayOperatingCollection,
+  searchMondayOperatingSystem,
+  syncMeetingFollowupsToWorkItems,
+  updateWorkItem,
+} from "./monday-operating-system.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -348,6 +359,51 @@ async function handleApi(request, response, url) {
       });
       await tryIndexSemanticMemory();
       return sendJson(response, 201, detail);
+    }
+  }
+  if (url.pathname === "/api/monday-os/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getMondayOperatingDashboard(db));
+  }
+  if (url.pathname === "/api/monday-os/search" && request.method === "GET") {
+    const result = searchMondayOperatingSystem(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: MONDAY_OPERATING_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/monday-os/sync-meeting-followups" && request.method === "POST") {
+    const result = syncMeetingFollowupsToWorkItems(db);
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, result);
+  }
+  if (url.pathname === "/api/monday-os/briefing" && request.method === "GET") {
+    return sendJson(response, 200, mondayOperatingBriefForDaily(db));
+  }
+  if (url.pathname === "/api/monday-os/audit" && request.method === "GET") {
+    return sendJson(response, 200, listMondayAudit(db, url.searchParams.get("limit") || 50));
+  }
+  const mondayCollectionMatch = url.pathname.match(/^\/api\/monday-os\/(work-items|deliverables|risks|opportunities|decisions|feedback|board-mappings|sync-status)$/);
+  if (mondayCollectionMatch) {
+    const collection = mondayCollectionMatch[1];
+    if (request.method === "GET") {
+      return sendJson(response, 200, listMondayOperatingCollection(db, collection, url.searchParams.get("limit") || 50));
+    }
+    if (request.method === "POST" && !["board-mappings", "sync-status"].includes(collection)) {
+      const record = mondayOperatingCollection(db, collection, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
+    }
+  }
+  const mondayWorkItemMatch = url.pathname.match(/^\/api\/monday-os\/work-items\/(\d+)$/);
+  if (mondayWorkItemMatch) {
+    if (request.method === "PATCH" || request.method === "PUT") {
+      const record = updateWorkItem(db, Number(mondayWorkItemMatch[1]), await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
     }
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
@@ -669,6 +725,7 @@ async function handleApi(request, response, url) {
         "briefing_history",
         context.propertyBrief?.items?.length ? "westbridge_property" : "",
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
+        context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -927,7 +984,15 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.sarah = sarahBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
+  brief.mondayOperating = mondayOperatingBriefForDaily(db);
   brief.executivePriorities = [
+    ...brief.mondayOperating.items.map((item, index) => ({
+      ...item,
+      id: `monday-os-${index + 1}`,
+      rank: index + 1,
+      category: "monday-os",
+      score: item.priority === "Critical" ? 90 : item.priority === "High" ? 86 : 60,
+    })),
     ...brief.meetingIntelligence.items.map((item, index) => ({
       ...item,
       id: `meeting-intelligence-${index + 1}`,
@@ -975,6 +1040,12 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.meetingActions = brief.meetingIntelligence.metrics.openActions;
   brief.summary.meetingRisks = brief.meetingIntelligence.metrics.risks;
   brief.summary.meetingTranscriptUnavailable = brief.meetingIntelligence.metrics.transcriptUnavailable;
+  brief.summary.mondayOperatingSignals = brief.mondayOperating.items.length;
+  brief.summary.mondayActiveWorkItems = brief.mondayOperating.metrics.activeWorkItems;
+  brief.summary.mondayBlockedWork = brief.mondayOperating.metrics.blockedItems;
+  brief.summary.mondayOverdueWork = brief.mondayOperating.metrics.overdueItems;
+  brief.summary.mondayDecisionsAwaitingApproval = brief.mondayOperating.metrics.decisionsAwaitingApproval;
+  brief.summary.mondayMeetingFollowups = brief.mondayOperating.metrics.meetingFollowups;
   brief.summary.propertySignals = brief.property.items.length;
   brief.summary.propertyActiveOpportunities = brief.property.metrics.activeOpportunities;
   brief.summary.propertyMonthlyCashflow = brief.property.metrics.monthlyCashflow;
@@ -1044,6 +1115,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Meeting intelligence signal",
       category: "meeting_intelligence",
     })),
+    ...compactRecords(context.mondayOperatingBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `monday-os:${record.title}`,
+      label: record.title || "Monday Operating System signal",
+      category: "monday_operating_system",
+    })),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
       reference: record.sourceReference || `sarah:${record.title}`,
@@ -1112,6 +1188,7 @@ function memoryQueryForBriefing(context) {
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -1200,6 +1277,14 @@ function buildAiBriefingContext(briefing, body = {}) {
       items: compactRecords(briefing.meetingIntelligence?.items || [], ["title", "detail", "priority", "sourceReference"], 8),
       boundary: briefing.meetingIntelligence?.boundary || MEETING_READ_ONLY_BOUNDARY,
     },
+    mondayOperatingBrief: {
+      title: briefing.mondayOperating?.title || "Monday Operating System",
+      summary: briefing.mondayOperating?.summary || "",
+      metrics: compactValue(briefing.mondayOperating?.metrics || {}),
+      topWorkloads: compactRecords(briefing.mondayOperating?.topWorkloads || [], ["agentId", "agentName", "activeItems", "blockedItems", "overdueItems", "workloadStatus"], 8),
+      items: compactRecords(briefing.mondayOperating?.items || [], ["type", "title", "detail", "ownerAgentName", "priority", "status", "sourceReference"], 10),
+      boundary: briefing.mondayOperating?.boundary || MONDAY_OPERATING_BOUNDARY,
+    },
     sarahDigitalConstructionBrief: {
       title: briefing.sarah?.title || "Daily Digital Construction Brief",
       summary: briefing.sarah?.summary || "",
@@ -1213,6 +1298,7 @@ function buildAiBriefingContext(briefing, body = {}) {
       executionAvailable: false,
       approvalExecutionAvailable: false,
       microsoftWritePermissions: false,
+      mondayWritePermissions: false,
     },
   };
   return {

@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.5" />
+    <link rel="stylesheet" href="styles.css?v=0.4.6" />
   </head>
   <body>
     <div class="shell">
@@ -48,6 +48,9 @@
           </button>
           <button class="nav-item" data-view="meetings">
             <span class="nav-icon">T</span> Meetings
+          </button>
+          <button class="nav-item" data-view="monday">
+            <span class="nav-icon">M</span> Monday
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -572,6 +575,105 @@
           </section>
         </section>
 
+        <section class="view" id="monday-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">MONDAY OPERATING SYSTEM</p>
+              <h2>Internal work command board</h2>
+              <p>Alfred's structured operating layer for work items, agent workloads, deliverables, decisions, follow-ups and feedback. Future Monday.com sync remains disabled.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="sync-monday-followups">Sync meeting follow-ups</button>
+              <button class="secondary-button" id="refresh-monday-os">Refresh board</button>
+            </div>
+          </div>
+          <div class="approval-boundary monday-boundary">
+            <strong>Internal-only operating mode</strong>
+            <span>These records live in Alfred's SQLite database. Alfred does not create Monday boards, create Monday items, send updates, write to Microsoft, modify finance/property records or execute autonomous actions.</span>
+          </div>
+          <div class="monday-metrics" id="monday-dashboard-metrics"></div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">WORKLOAD</p>
+                  <h3>Agent workload overview</h3>
+                </div>
+              </div>
+              <div id="monday-agent-workloads"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">QUEUE</p>
+                  <h3>Internal work queue</h3>
+                </div>
+              </div>
+              <div id="monday-work-queue"></div>
+            </section>
+          </div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DELIVERABLES</p>
+                  <h3>Due and planned outputs</h3>
+                </div>
+              </div>
+              <div id="monday-deliverables"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RISKS & OPPORTUNITIES</p>
+                  <h3>Operational signals</h3>
+                </div>
+              </div>
+              <div id="monday-risks-opportunities"></div>
+            </section>
+          </div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DECISIONS</p>
+                  <h3>Review queue</h3>
+                </div>
+              </div>
+              <div id="monday-decisions"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">MEETINGS</p>
+                  <h3>Meeting follow-ups</h3>
+                </div>
+              </div>
+              <div id="monday-meeting-followups"></div>
+            </section>
+          </div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FEEDBACK LOOP</p>
+                  <h3>Output feedback</h3>
+                </div>
+              </div>
+              <div id="monday-feedback"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FUTURE MONDAY</p>
+                  <h3>Board mappings & sync state</h3>
+                </div>
+              </div>
+              <div id="monday-board-mappings"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="view" id="sarah-view">
           <div class="section-intro">
             <div>
@@ -1008,6 +1110,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.5"></script>
+    <script type="module" src="app.js?v=0.4.6"></script>
   </body>
 </html>
