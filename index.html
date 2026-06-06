@@ -189,6 +189,14 @@
                   <article><small>ElevenLabs</small><strong id="elevenlabs-status">Checking</strong></article>
                   <article><small>Microphone</small><strong id="microphone-status">Not requested</strong></article>
                 </div>
+                <div class="voice-setup">
+                  <div class="voice-setup-header">
+                    <strong>Provider setup</strong>
+                    <button class="text-button" id="voice-run-diagnostics" type="button">Run setup check</button>
+                  </div>
+                  <div id="voice-setup-summary" class="voice-setup-summary">Checking provider readiness.</div>
+                  <div id="voice-setup-checklist" class="voice-setup-checklist"></div>
+                </div>
                 <div class="voice-response" id="voice-response">
                   <div class="empty-state">Alfred's spoken response will appear here.</div>
                 </div>
@@ -205,6 +213,11 @@
                     <input id="voice-speech-speed" type="range" min="0.5" max="1.5" step="0.05" />
                     <small id="voice-speed-label">1.00x</small>
                   </label>
+                  <label>
+                    <span>Retention Days</span>
+                    <input id="voice-retention-days" type="number" min="1" max="3650" step="1" />
+                    <small>Local transcripts only</small>
+                  </label>
                 </details>
               </section>
             </div>
@@ -214,6 +227,7 @@
                   <p class="eyebrow">CONVERSATION HISTORY</p>
                   <h3>Recent voice turns</h3>
                 </div>
+                <button class="text-button" id="voice-purge-history" type="button">Purge old turns</button>
               </div>
               <div id="voice-history" class="voice-history">
                 <div class="empty-state">No voice conversations yet.</div>

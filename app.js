@@ -347,6 +347,7 @@ const seedData = {
         transcriptLoggingEnabled: true,
         voiceSelection: "alfred",
         speechSpeed: 1,
+        transcriptRetentionDays: 30,
       },
       personas: [],
       supportedCommands: [
@@ -358,6 +359,21 @@ const seedData = {
       providers: {
         deepgram: { state: "Not connected", configured: false },
         elevenlabs: { state: "Not connected", configured: false },
+      },
+      setup: {
+        readyForTypedCommands: true,
+        readyForMicrophone: false,
+        readyForSpokenOutput: false,
+        rawAudioStored: false,
+        secretsExposed: false,
+        checklist: [],
+        summary: "Voice works with typed transcript fallback.",
+      },
+      retention: {
+        transcriptLoggingEnabled: true,
+        transcriptRetentionDays: 30,
+        rawAudioStored: false,
+        localSensitiveBusinessData: true,
       },
       microphone: { rawAudioStored: false },
       boundary: { readOnly: true, voiceExecutionEnabled: false },
@@ -576,6 +592,7 @@ function renderVoiceCommandCentre() {
   const settings = status.settings || seedData.voice.status.settings;
   const deepgram = status.providers?.deepgram || {};
   const elevenlabs = status.providers?.elevenlabs || {};
+  const setup = status.setup || seedData.voice.status.setup;
   const conversations = voice.conversations || [];
   const last = voice.lastResult;
   const voiceEnabled = Boolean(settings.enabled);
@@ -591,6 +608,20 @@ function renderVoiceCommandCentre() {
   $("#voice-selection").value = settings.voiceSelection || "alfred";
   $("#voice-speech-speed").value = settings.speechSpeed || 1;
   $("#voice-speed-label").textContent = `${Number(settings.speechSpeed || 1).toFixed(2)}x`;
+  $("#voice-retention-days").value = settings.transcriptRetentionDays || status.retention?.transcriptRetentionDays || 30;
+  $("#voice-setup-summary").textContent = setup.summary || "Provider setup status unavailable.";
+  $("#voice-setup-checklist").innerHTML = (setup.checklist || []).length
+    ? setup.checklist.map((item) => `
+        <article class="voice-setup-item ${item.connected ? "connected" : item.configured ? "planned" : "missing"}">
+          <span></span>
+          <div>
+            <strong>${escapeHTML(item.label)}</strong>
+            <small>${escapeHTML(item.state)} · ${escapeHTML(item.nextStep || "")}</small>
+            ${(item.missingEnv || []).length ? `<em>Missing: ${item.missingEnv.map((env) => escapeHTML(env)).join(", ")}</em>` : ""}
+          </div>
+        </article>
+      `).join("")
+    : '<div class="empty-state">Run setup check to review provider readiness.</div>';
   $("#voice-command-examples").innerHTML = (status.supportedCommands || seedData.voice.status.supportedCommands)
     .slice(0, 6)
     .map((command) => `<button type="button" class="voice-example" data-voice-command="${escapeHTML(command)}">${escapeHTML(command)}</button>`)
@@ -2553,6 +2584,7 @@ async function updateVoiceSettings() {
     transcriptLoggingEnabled: $("#voice-transcript-logging-toggle").checked,
     voiceSelection: $("#voice-selection").value.trim() || "alfred",
     speechSpeed: Number($("#voice-speech-speed").value || 1),
+    transcriptRetentionDays: Number($("#voice-retention-days").value || 30),
   };
   $("#voice-speed-label").textContent = `${settings.speechSpeed.toFixed(2)}x`;
   try {
@@ -2718,6 +2750,46 @@ async function submitRecord(event) {
   }
 }
 
+async function runVoiceDiagnostics() {
+  if (!backendAvailable) {
+    showToast("Voice setup check requires the backend");
+    return;
+  }
+  $("#voice-setup-summary").textContent = "Checking local provider configuration...";
+  try {
+    const result = await apiRequest("/api/voice/diagnostics", {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:voice:setup-diagnostics" }),
+    });
+    state.voice.status = result;
+    renderVoiceCommandCentre();
+    showToast(result.setup?.readyForMicrophone && result.setup?.readyForSpokenOutput
+      ? "Voice providers configured"
+      : "Voice setup check complete");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function purgeOldVoiceTurns() {
+  if (!backendAvailable) {
+    showToast("Voice history purge requires the backend");
+    return;
+  }
+  const days = Number($("#voice-retention-days").value || state.voice?.status?.settings?.transcriptRetentionDays || 30);
+  try {
+    const result = await apiRequest("/api/voice/conversations/purge", {
+      method: "POST",
+      body: JSON.stringify({ olderThanDays: days, userAction: "ui:voice:purge-old-turns" }),
+    });
+    state.voice.conversations = await apiRequest("/api/voice/conversations?limit=8").catch(() => state.voice?.conversations || []);
+    renderVoiceCommandCentre();
+    showToast(`Purged ${result.deletedCount || 0} old voice turn(s)`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function runCommand(command) {
   const normalized = command.toLowerCase().trim();
   if (!normalized) return;
@@ -2815,6 +2887,9 @@ $("#voice-transcript-form").addEventListener("submit", submitVoiceTranscript);
 $("#voice-enabled-toggle").addEventListener("change", updateVoiceSettings);
 $("#voice-transcript-logging-toggle").addEventListener("change", updateVoiceSettings);
 $("#voice-selection").addEventListener("change", updateVoiceSettings);
+$("#voice-retention-days").addEventListener("change", updateVoiceSettings);
+$("#voice-run-diagnostics").addEventListener("click", runVoiceDiagnostics);
+$("#voice-purge-history").addEventListener("click", purgeOldVoiceTurns);
 $("#voice-speech-speed").addEventListener("input", () => {
   $("#voice-speed-label").textContent = `${Number($("#voice-speech-speed").value || 1).toFixed(2)}x`;
 });

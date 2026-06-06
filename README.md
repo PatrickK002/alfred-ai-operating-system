@@ -88,11 +88,13 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
 | `GET` | `/api/voice/status` | Voice settings, provider status, personas, supported commands and advisory boundary |
-| `GET` | `/api/voice/settings` | Read voice enablement, transcript logging, voice selection and speech speed |
+| `GET` | `/api/voice/settings` | Read voice enablement, transcript logging, retention, voice selection and speech speed |
 | `PATCH` | `/api/voice/settings` | Update local voice settings |
+| `POST` | `/api/voice/diagnostics` | Run local voice setup diagnostics without exposing secrets or calling providers |
 | `POST` | `/api/voice/sessions` | Create a local voice session |
 | `POST` | `/api/voice/command` | Process a transcript or microphone audio command through Alfred |
 | `GET` | `/api/voice/conversations?limit=20` | List locally stored voice conversation turns |
+| `POST` | `/api/voice/conversations/purge` | Delete local voice conversation turns older than the configured retention threshold |
 | `GET` | `/api/voice/audit?limit=50` | Metadata-only voice audit events |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
@@ -234,10 +236,12 @@ ELEVENLABS_VOICE_ID="your-elevenlabs-voice-id"
 ELEVENLABS_MODEL="eleven_multilingual_v2"
 VOICE_ENABLED=true
 VOICE_TRANSCRIPT_LOGGING_ENABLED=true
+VOICE_TRANSCRIPT_RETENTION_DAYS=30
 VOICE_AI_TIMEOUT_MS=12000
 ```
 
 `VOICE_ENABLED` controls the local voice interface. `VOICE_TRANSCRIPT_LOGGING_ENABLED=false` prevents transcript content from being persisted in `voice_conversation_turns`.
+`VOICE_TRANSCRIPT_RETENTION_DAYS` sets the local purge threshold for stored transcript turns. The Voice Command Centre includes a setup checklist, a local diagnostics button and a purge control for old local voice turns.
 `VOICE_AI_TIMEOUT_MS` caps how long voice commands wait for Claude before using deterministic local fallback.
 
 ### Supported Commands
@@ -271,13 +275,14 @@ Voice cannot:
 
 No raw audio is stored by default. Microphone audio is sent to Deepgram only for transcription when the user starts recording and a Deepgram key is configured. ElevenLabs receives only Alfred's final response text for speech synthesis when configured. If ElevenLabs is unavailable, the UI falls back to text and may use local browser speech synthesis.
 
-Voice transcripts are local sensitive business data. Voice audit records log metadata only: timestamp, user action, data categories, provider/model, success/error status and whether execution was attempted. API keys and raw audio are never logged.
+Voice transcripts are local sensitive business data. Voice audit records log metadata only: timestamp, user action, data categories, provider/model, success/error status and whether execution was attempted. API keys and raw audio are never logged. Voice setup diagnostics are local configuration checks only; they do not send test audio to Deepgram or test text to ElevenLabs.
 
 ### Voice Limitations
 
 - Alfred voice is the only active voice persona in this phase.
 - Sarah, Olivia and Westbridge are routed advisory specialists; they do not have separate voices yet.
 - Deepgram and ElevenLabs show `Connected` only after a successful provider call.
+- Provider setup diagnostics confirm local configuration and missing environment variables, but they do not perform live provider probes.
 - Mobile/PWA/native app packaging is not included. The layout is prepared for MacBook, iPhone Safari and future PWA work.
 - Voice commands do not create external actions. Any future write action must go through the existing approval framework and a separate executor review.
 
@@ -339,7 +344,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 6. Add retention controls, encryption and role-based access for financial intelligence tables.
 7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.
 8. Add retrieval evaluation and retention controls for semantic memory.
-9. Add provider health probes and retention controls for voice transcripts.
+9. Add explicit-consent live provider probes for Deepgram and ElevenLabs once test-call behaviour is reviewed.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 

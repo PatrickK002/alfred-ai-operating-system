@@ -82,6 +82,44 @@ test("voice session creation stores local session metadata", () => {
     assert.equal(session.status, "created");
     assert.equal(session.metadata.source, "test");
     assert.equal(service.status().boundary.voiceExecutionEnabled, false);
+    assert.equal(service.status().setup.readyForTypedCommands, true);
+    assert.equal(service.status().retention.transcriptRetentionDays, 30);
+  });
+});
+
+test("voice provider diagnostics report setup without secrets or external calls", () => {
+  withDatabase((db) => {
+    const service = serviceFor(db, {
+      speechToText: new DeepgramSpeechClient({
+        apiKey: "dg-test-secret",
+        fetchImpl: async () => { throw new Error("diagnostics must not call Deepgram"); },
+      }),
+      textToSpeech: {
+        status: () => ({
+          provider: "elevenlabs",
+          configured: false,
+          apiKeyConfigured: true,
+          voiceIdConfigured: false,
+          model: "test-tts",
+        }),
+        synthesize: async () => { throw new Error("diagnostics must not call ElevenLabs"); },
+      },
+    });
+
+    const result = service.diagnostics({ userAction: "test:voice:diagnostics" });
+    const elevenlabs = result.setup.checklist.find((item) => item.id === "elevenlabs");
+    const audit = listVoiceAudit(db);
+
+    assert.equal(result.externalCallsMade, false);
+    assert.equal(result.executionAttempted, false);
+    assert.equal(result.setup.secretsExposed, false);
+    assert.equal(result.setup.readyForMicrophone, true);
+    assert.equal(result.setup.readyForSpokenOutput, false);
+    assert.deepEqual(elevenlabs.missingEnv, ["ELEVENLABS_VOICE_ID"]);
+    assert.doesNotMatch(JSON.stringify(result), /dg-test-secret/);
+    assert.equal(audit[0].eventType, "voice_setup_diagnostics");
+    assert.equal(audit[0].executionAttempted, false);
+    assert.equal(audit[0].metadata.secretsExposed, false);
   });
 });
 
@@ -135,6 +173,28 @@ test("transcript logging disabled does not persist transcript content", async ()
     assert.equal(result.transcript, "");
     assert.equal(turns[0].transcript, "");
     assert.equal(turns[0].transcriptLogged, false);
+  });
+});
+
+test("voice retention purge deletes only old local conversation turns", async () => {
+  await withDatabase(async (db) => {
+    setVoiceSettings(db, { transcriptRetentionDays: 7 });
+    const service = serviceFor(db);
+    const oldTurn = await service.handleCommand({ transcript: "Alfred, brief me", userAction: "test:voice:old-turn" });
+    const currentTurn = await service.handleCommand({ transcript: "Ask Olivia for revenue forecast", userAction: "test:voice:current-turn" });
+
+    db.prepare("UPDATE voice_conversation_turns SET created_at = datetime('now', '-10 days') WHERE id = ?").run(oldTurn.turn.id);
+    const result = service.purgeConversations({ userAction: "test:voice:purge" });
+    const turns = listVoiceConversationTurns(db);
+    const audit = listVoiceAudit(db);
+
+    assert.equal(result.deletedCount, 1);
+    assert.equal(result.olderThanDays, 7);
+    assert.equal(result.executionAttempted, false);
+    assert.deepEqual(turns.map((turn) => turn.id), [currentTurn.turn.id]);
+    assert.equal(audit[0].eventType, "voice_retention_purge");
+    assert.equal(audit[0].executionAttempted, false);
+    assert.equal(audit[0].metadata.deletedCount, 1);
   });
 });
 

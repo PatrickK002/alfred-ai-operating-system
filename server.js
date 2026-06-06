@@ -223,8 +223,14 @@ async function handleApi(request, response, url) {
       return sendJson(response, 200, voiceCommandCentre.setSettings(await readJson(request)));
     }
   }
+  if (url.pathname === "/api/voice/diagnostics" && request.method === "POST") {
+    return sendJson(response, 200, voiceCommandCentre.diagnostics(await readJson(request)));
+  }
   if (url.pathname === "/api/voice/sessions" && request.method === "POST") {
     return sendJson(response, 201, voiceCommandCentre.createSession(await readJson(request)));
+  }
+  if (url.pathname === "/api/voice/conversations/purge" && request.method === "POST") {
+    return sendJson(response, 200, voiceCommandCentre.purgeConversations(await readJson(request)));
   }
   if (url.pathname === "/api/voice/conversations" && request.method === "GET") {
     return sendJson(response, 200, voiceCommandCentre.listConversations(url.searchParams.get("limit") || 20));
