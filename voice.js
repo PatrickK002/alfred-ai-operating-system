@@ -15,6 +15,7 @@ import { getFinancialDashboardData } from "./financial.js";
 import { getProjectDashboard, searchProjectKnowledge } from "./project-intelligence.js";
 import { getSarahDashboard, SARAH_READ_ONLY_BOUNDARY } from "./sarah.js";
 import { getPropertyDashboardData, PROPERTY_READ_ONLY_BOUNDARY, searchPropertyKnowledge } from "./property.js";
+import { AGENT_AVATAR_PROFILES } from "./agent-avatars.js";
 
 export const VOICE_READ_ONLY_BOUNDARY = {
   advisoryOnly: true,
@@ -33,16 +34,13 @@ export const VOICE_READ_ONLY_BOUNDARY = {
   legalInstructionEnabled: false,
 };
 
-export const VOICE_PERSONAS = [
-  { id: "alfred", name: "Alfred", role: "AI Chief of Staff / Operating Partner", status: "Primary voice" },
-  { id: "sarah", name: "Sarah", role: "Digital Construction Director", status: "Routable advisory specialist" },
-  { id: "olivia", name: "Olivia", role: "Chief Financial Officer", status: "Routable advisory specialist" },
-  { id: "westbridge-property-director", name: "Westbridge Property Director", role: "AI Investment Director", status: "Routable advisory specialist" },
-  { id: "maya", name: "Maya", role: "Media Director", status: "Placeholder" },
-  { id: "alex", name: "Alex", role: "Growth Director", status: "Placeholder" },
-  { id: "ethan", name: "Ethan", role: "Chief Technology Officer", status: "Placeholder" },
-  { id: "liam", name: "Liam", role: "Power Platform Director", status: "Placeholder" },
-];
+export const VOICE_PERSONAS = AGENT_AVATAR_PROFILES.map((agent) => ({
+  id: agent.id,
+  name: agent.name,
+  role: agent.title,
+  status: agent.id === "alfred" ? "Primary voice" : agent.statusCategory === "active" ? "Routable advisory specialist" : "Placeholder",
+  voicePersonaPlaceholder: agent.voicePersonaPlaceholder,
+}));
 
 export const SUPPORTED_VOICE_COMMANDS = [
   "Alfred, brief me",

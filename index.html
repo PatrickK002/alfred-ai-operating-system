@@ -215,6 +215,7 @@
             </div>
             <div class="voice-layout">
               <section class="voice-console">
+                <div id="voice-agent-identity" class="voice-agent-identity"></div>
                 <button class="voice-button" id="voice-button" type="button" aria-pressed="false">
                   <span class="voice-ring"></span>
                   <span class="voice-mark">A</span>
@@ -323,6 +324,7 @@
             <strong>Advisory-only investment mode</strong>
             <span>The Westbridge Property Director can analyse and recommend. Alfred cannot buy property, make offers, issue legal instructions, communicate externally or provide regulated financial advice.</span>
           </div>
+          <div id="property-agent-identity" class="specialist-identity-shell"></div>
           <div class="property-metrics" id="property-metrics"></div>
           <section class="panel property-panel">
             <div class="panel-heading compact">
@@ -493,6 +495,7 @@
             <strong>Sarah is advisory only</strong>
             <span>Sarah reports to Alfred. She can analyse and recommend, but cannot send emails, edit files, update calendars, modify SharePoint/OneDrive, create apps, publish documents or change finance records.</span>
           </div>
+          <div id="sarah-agent-identity" class="specialist-identity-shell"></div>
           <div class="sarah-metrics" id="sarah-metrics"></div>
           <div class="sarah-grid">
             <section class="panel sarah-panel">
@@ -594,6 +597,7 @@
             <strong>Read-only finance mode</strong>
             <span>Olivia analyses and recommends only. Alfred cannot raise invoices, chase debtors, process payments, update Monday.com or modify accounting systems.</span>
           </div>
+          <div id="finance-agent-identity" class="specialist-identity-shell"></div>
           <div class="finance-metrics" id="finance-metrics"></div>
           <div class="finance-grid">
             <section class="panel finance-panel">
@@ -702,6 +706,16 @@
               <small>AI Operating Partner</small>
             </div>
           </div>
+          <section class="panel executive-team-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">EXECUTIVE IDENTITY SYSTEM</p>
+                <h3>Board-level AI team</h3>
+              </div>
+              <span class="live-label"><i></i> VISUAL ONLY</span>
+            </div>
+            <div id="executive-team-identity" class="executive-team-identity"></div>
+          </section>
           <div class="agent-grid" id="agent-grid"></div>
         </section>
 
@@ -792,6 +806,15 @@
                 </div>
               </div>
               <div class="security-list" id="security-boundary-list"></div>
+            </article>
+            <article class="panel settings-panel settings-panel-wide">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">AGENT AVATARS</p>
+                  <h3>Executive identity system</h3>
+                </div>
+              </div>
+              <div id="settings-avatar-summary"></div>
             </article>
             <article class="panel settings-panel settings-panel-wide">
               <div class="panel-heading compact">
@@ -892,6 +915,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
