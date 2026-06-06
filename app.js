@@ -240,6 +240,8 @@ const seedData = {
       overdueActions: 0,
       recentlyUpdatedProjects: 0,
       projectsWithMissingInformation: 0,
+      financialRiskIndicators: 0,
+      informationQualityIndicators: 0,
     },
     projects: [],
     highRiskProjects: [],
@@ -842,6 +844,28 @@ function renderProjectDetail(detail) {
       <strong>${health.score ?? 0}/100</strong>
       <span>${escapeHTML(health.explanation || "No health score calculated.")}</span>
     </div>
+    <div class="project-domain-strip">
+      ${(detail.tags || []).length
+        ? detail.tags.map((tag) => `<span>${escapeHTML(tag.domainLabel || tag.tag)} <small>${escapeHTML(tag.confidence || "confirmed")}</small></span>`).join("")
+        : "<span>No digital construction tags yet</span>"}
+    </div>
+    <div class="project-intelligence-signals">
+      <article>
+        <small>INFORMATION QUALITY</small>
+        <strong>${escapeHTML(detail.informationQuality?.status || "unknown")}</strong>
+        <span>${escapeHTML(detail.informationQuality?.explanation || "No quality assessment available.")}</span>
+      </article>
+      <article>
+        <small>KNOWLEDGE GRAPH</small>
+        <strong>${detail.knowledgeLinks?.length || 0}</strong>
+        <span>Project relationships across records, memory and Microsoft metadata.</span>
+      </article>
+      <article>
+        <small>SARAH READINESS</small>
+        <strong>${detail.digitalConstruction?.domains?.length || 0} domain(s)</strong>
+        <span>${escapeHTML(detail.digitalConstruction?.sarahStatus || "Prepared data structures only.")}</span>
+      </article>
+    </div>
     <p>${escapeHTML(profile.summary || "No project summary recorded yet.")}</p>
     <div class="project-detail-grid">
       <section>
@@ -859,7 +883,7 @@ function renderProjectDetail(detail) {
       <section>
         <h4>Documents</h4>
         ${renderProjectItems(detail.documents || [], "No Microsoft document metadata linked yet.", (document) => `
-          <article><strong>${escapeHTML(document.name)}</strong><small>${escapeHTML(document.classification)} · ${escapeHTML(document.associationReason || "metadata")}</small><span>${escapeHTML(document.path || document.webUrl || "No path captured")}</span></article>
+          <article><strong>${escapeHTML(document.name)}</strong><small>${escapeHTML(document.classification)} · ${escapeHTML(document.ownerName || "owner unknown")}</small><span>${escapeHTML(document.path || document.webUrl || document.location || "No path captured")}</span></article>
         `)}
       </section>
       <section>
@@ -872,6 +896,10 @@ function renderProjectDetail(detail) {
     <div class="project-finance-summary">
       <h4>Olivia financial link</h4>
       <span>${detail.financialSummary?.linkedOrderBookEntries || 0} order book link(s) · secured ${formatMoney(detail.financialSummary?.securedRevenue || 0)} · weighted ${formatMoney(detail.financialSummary?.weightedForecastRevenue || 0)}</span>
+    </div>
+    <div class="project-finance-summary">
+      <h4>Digital construction placeholders</h4>
+      <span>COBie: ${detail.digitalConstruction?.placeholders?.cobie?.length || 0} · GIS: ${detail.digitalConstruction?.placeholders?.gis?.length || 0} · Digital Twin: ${detail.digitalConstruction?.placeholders?.digitalTwin?.length || 0}. No specialist Sarah analysis has been run.</span>
     </div>
     <div id="project-analysis-output"></div>
   `;
@@ -886,6 +914,8 @@ function renderProjectIntelligence() {
     ["OVERDUE ACTIONS", metrics.overdueActions],
     ["RECENTLY UPDATED", metrics.recentlyUpdatedProjects],
     ["MISSING INFO", metrics.projectsWithMissingInformation],
+    ["FINANCIAL RISK", metrics.financialRiskIndicators],
+    ["INFO QUALITY", metrics.informationQualityIndicators],
   ].map(([label, value]) => `
     <article>
       <small>${label}</small>
@@ -902,7 +932,9 @@ function renderProjectIntelligence() {
             <h3>${escapeHTML(project.profile.projectName)}</h3>
             <p>${escapeHTML(project.profile.clientName || "Internal / product")} · ${escapeHTML(project.profile.currentPhase || "Unknown phase")}</p>
           </div>
-          <small>${project.documentCount || 0} docs · ${project.riskCount || 0} risks · ${project.actionCount || 0} actions</small>
+          <small>${project.documentCount || 0} docs · ${project.riskCount || 0} risks · ${project.actionCount || 0} actions · ${project.tagCount || 0} tag(s)</small>
+          <span class="project-card-domains">${(project.domains || []).slice(0, 4).map((domain) => escapeHTML(domain)).join(" · ") || "No domains tagged"}</span>
+          <span class="project-card-quality">Info quality: ${escapeHTML(project.informationQuality?.status || "unknown")}</span>
           <button class="text-button project-select" data-project-id="${project.profile.id}">Open project →</button>
         </article>
       `).join("")}</div>`
@@ -1545,12 +1577,47 @@ async function searchProjects(event) {
       ${renderList("Relevant documents", result.relevantDocuments, (document) => `
         <strong>${escapeHTML(document.name)}</strong>
         <span>${escapeHTML(document.classification || "Unknown")} · ${escapeHTML(document.projectName || "")}</span>
-        <small>${escapeHTML(document.path || document.webUrl || "")}</small>
+        <small>${escapeHTML(document.sourceReference || "")} · ${escapeHTML(document.path || document.webUrl || "")}</small>
+      `)}
+      ${renderList("Risks", result.relatedRisks || [], (risk) => `
+        <strong>${escapeHTML(risk.title)}</strong>
+        <span>${escapeHTML(risk.projectName || "")} · ${escapeHTML(risk.severity || risk.priority || "")}</span>
+        <small>${escapeHTML(risk.sourceReference || "")}</small>
+      `)}
+      ${renderList("Actions", result.relatedActions || [], (action) => `
+        <strong>${escapeHTML(action.title)}</strong>
+        <span>${escapeHTML(action.projectName || "")} · ${escapeHTML(action.status || "")}</span>
+        <small>${escapeHTML(action.sourceReference || "")} · ${escapeHTML(action.due || "")}</small>
+      `)}
+      ${renderList("Decisions", result.relatedDecisions || [], (decision) => `
+        <strong>${escapeHTML(decision.title)}</strong>
+        <span>${escapeHTML(decision.projectName || "")} · ${escapeHTML(decision.status || "")}</span>
+        <small>${escapeHTML(decision.sourceReference || "")}</small>
+      `)}
+      ${renderList("Meetings", result.relatedMeetings || [], (meeting) => `
+        <strong>${escapeHTML(meeting.title)}</strong>
+        <span>${escapeHTML(meeting.projectName || "")} · ${escapeHTML(meeting.startDatetime || "")}</span>
+        <small>${escapeHTML(meeting.sourceReference || "")}</small>
+      `)}
+      ${renderList("Emails", result.relatedEmails || [], (email) => `
+        <strong>${escapeHTML(email.subject)}</strong>
+        <span>${escapeHTML(email.projectName || "")} · ${escapeHTML(email.fromName || email.fromEmail || "")}</span>
+        <small>${escapeHTML(email.sourceReference || "")}</small>
+      `)}
+      ${renderList("Digital construction tags", result.matchingTags || [], (tag) => `
+        <strong>${escapeHTML(tag.domainLabel || tag.tag)}</strong>
+        <span>${escapeHTML(tag.projectName || "")} · ${escapeHTML(tag.confidence || "")}</span>
+        <small>${escapeHTML(tag.sourceReference || "")}</small>
       `)}
       ${renderList("Memory references", result.semanticMemory || result.memoryReferences || [], (memory) => `
         <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
         <span>${escapeHTML(memory.shortSummary || memory.summary || "")}</span>
         <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+      ${renderList("Source references", result.sourceReferences || [], (source) => `
+        <strong>${escapeHTML(source.reference)}</strong>
+        <span>${escapeHTML(source.label || "")}</span>
+        <small>${escapeHTML(source.category || "")}</small>
       `)}
     `;
   } catch (error) {
@@ -1580,6 +1647,17 @@ async function askProjectAnalysis(projectId) {
         <strong>${escapeHTML(risk.title)}</strong>
         <span>${escapeHTML(risk.assessment)}</span>
         <small>${escapeHTML(risk.severity)} · ${escapeHTML(risk.sourceReference)}</small>
+      `)}
+      ${renderList("Key opportunities", analysis.keyOpportunities || [], (opportunity) => `
+        <strong>${escapeHTML(opportunity.title)}</strong>
+        <span>${escapeHTML(opportunity.assessment)}</span>
+        <small>${escapeHTML(opportunity.sourceReference)}</small>
+      `)}
+      ${renderList("Confirmed facts", analysis.confirmedFacts || [], (fact) => `
+        <strong>${escapeHTML(fact)}</strong>
+      `)}
+      ${renderList("Inferred information", analysis.inferredInformation || [], (item) => `
+        <strong>${escapeHTML(item)}</strong>
       `)}
       ${renderList("Missing information", analysis.missingInformation || [], (item) => `
         <strong>${escapeHTML(item.item)}</strong>

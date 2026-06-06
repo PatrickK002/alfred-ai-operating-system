@@ -243,7 +243,7 @@ export class MicrosoftGraphClient {
 
   async listFiles({ search = "", limit = 20 } = {}) {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
-    const select = "$select=id,name,webUrl,size,createdDateTime,lastModifiedDateTime,file,folder,parentReference";
+    const select = "$select=id,name,webUrl,size,createdDateTime,lastModifiedDateTime,createdBy,lastModifiedBy,file,folder,parentReference";
     const path = search
       ? `/me/drive/root/search(q='${encodeURIComponent(search.replaceAll("'", "''"))}')?$top=${safeLimit}&${select}`
       : `/me/drive/root/children?$top=${safeLimit}&${select}`;

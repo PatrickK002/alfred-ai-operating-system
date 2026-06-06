@@ -91,11 +91,12 @@ Health and aggregate workflows:
 | `POST` | `/api/project-intelligence/projects` | Create a local Alfred project profile |
 | `GET` | `/api/project-intelligence/projects/:id` | Project detail with risks, actions, documents, meetings, email signals, memory and finance context |
 | `PATCH` | `/api/project-intelligence/projects/:id` | Update a local Alfred project profile |
+| `GET` | `/api/project-intelligence/domains` | Digital Construction domain catalog and Sarah placeholder status |
 | `POST` | `/api/project-intelligence/projects/:id/documents` | Import read-only Microsoft file metadata for a project |
 | `POST` | `/api/project-intelligence/projects/:id/emails` | Import compact read-only Outlook email signals for a project |
 | `POST` | `/api/project-intelligence/projects/:id/meetings` | Import read-only calendar meeting metadata for a project |
 | `POST` | `/api/project-intelligence/discover-microsoft` | Discover project file/email/calendar metadata using existing Microsoft read-only access |
-| `GET` | `/api/projects/search?q=Westminster` | Project-aware search across profiles, document metadata, project risks/actions/decisions and memory |
+| `GET` | `/api/projects/search?q=Westminster` | Project-aware search across profiles, documents, risks, actions, decisions, meetings, emails, tags, memory and source references |
 | `POST` | `/api/ai/project-analysis` | Claude project analysis with bounded Voyage memory and Olivia finance context |
 | `GET` | `/api/financial/dashboard?scopeType=group&scopeId=group` | Olivia's scoped CFO dashboard |
 | `GET` | `/api/financial/forecast?scopeType=business&scopeId=digitize` | Monthly, quarterly, annual and scenario forecasts for a reporting scope |
@@ -465,13 +466,57 @@ The project discovery workflow uses the existing Microsoft delegated read scopes
 
 Alfred can list OneDrive file metadata, search Outlook message summaries and read calendar metadata. It does not download or index full document contents in this phase, and it does not send email, update calendars, edit files, write to SharePoint/OneDrive or modify Monday.com.
 
-Document metadata is classified as EIR, AIR, BEP, MIDP, TIDP, COBie, IFC, Drawings, Meeting minutes, Reports, Proposals, Contracts, Commercial or Unknown.
+Document metadata stores file name, path, type, modified date, owner, location, web URL, parent folder, size and association reason. Alfred classifies metadata as EIR, AIR, BEP, MIDP, TIDP, COBie, IFC, Drawings, Meeting Minutes, Reports, Risk Registers, Asset Information, Digital Twin Documents, GIS Documents, Building Safety Documents, Proposals, Contracts, Commercial Documents or Unknown.
 
 Email and calendar associations are inferred from client names, project names, known contacts, keywords, subject lines and meeting attendees. Inferred associations are stored with confidence/reason metadata and should be reviewed before acting.
 
+### Digital Construction Knowledge Layer
+
+Alfred now stores Digital Construction domain tags for projects:
+
+- BIM
+- GIS
+- COBie
+- ISO 19650
+- Asset Information
+- Digital Twin
+- Building Safety
+- Information Management
+- Power Platform
+
+The schema includes placeholder tables for future Sarah workflows only:
+
+- COBie: facilities, floors, spaces, zones, types, components, systems, documents, attributes, issues and validation results
+- GIS: assets, locations, coordinates, layers, spatial datasets, issues and opportunities
+- Digital Twin: assets, sensors, systems, models, twin records, issues and opportunities
+
+These structures are preparation only. Alfred does not run COBie validation, GIS analysis or Digital Twin analysis yet.
+
+### Project Knowledge Graph
+
+Project relationships are recorded in `project_knowledge_links`. Alfred links projects to clients, documents, meetings, emails, actions, risks, decisions, memories and financial source references where available. Each link stores a relationship, confidence level and explanation so Alfred can distinguish confirmed records from inferred associations.
+
+`project_emails` is exposed as a read-only compatibility view over `project_email_signals`.
+
+### Project Search
+
+`GET /api/projects/search?q=...` searches:
+
+- Projects
+- Documents
+- Risks
+- Decisions
+- Actions
+- Meetings
+- Emails
+- Memory links
+- Digital construction tags
+
+Results include source references such as `project_profile:1`, `project_document:2`, `project_email:3`, `project_tag:4` and `project_knowledge_link:5`.
+
 ### Project Health Score
 
-Project health is calculated from risk level, open and overdue actions, document metadata completeness, recent activity, client responsiveness signals and Olivia financial context where available.
+Project health is calculated from risk level, open and overdue actions, document metadata completeness, recent activity, meeting frequency, client responsiveness signals, information quality, domain tags and Olivia financial context where available.
 
 Health outputs are `green`, `amber` or `red` with a plain-English explanation and source records. Missing information is reported explicitly rather than hidden.
 
@@ -479,11 +524,17 @@ Health outputs are `green`, `amber` or `red` with a plain-English explanation an
 
 `POST /api/ai/project-analysis` sends Claude a bounded project context: project profile, linked risks/actions/decisions, document metadata only, meeting and email signals, relevant Voyage memory and Olivia financial summary.
 
+Claude also receives project tags, knowledge graph links, Digital Construction placeholders and information quality. Claude must return executive summary, current status, key risks, key opportunities, confirmed facts, inferred information, missing information, recommended actions, decisions required, confidence level and source references.
+
 Claude must distinguish confirmed records, inferred associations, assumptions and missing information. It must not claim full documents were read unless a future feature actually retrieves full document content.
+
+### Dashboard Indicators
+
+The Project Intelligence dashboard shows active projects, projects at risk, overdue project actions, recently updated projects, missing information, financial risk indicators and information quality indicators.
 
 ### Future Sarah Preparation
 
-Sarah remains a role placeholder only. The project outputs are shaped so Sarah can later analyse BIM risks, ISO 19650 compliance, COBie gaps, GIS issues, Digital Twin opportunities and asset information requirements, but no Sarah runtime or autonomous execution exists in this phase.
+Sarah remains a role placeholder only. Her planned expertise is BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform. The project outputs are shaped so Sarah can later analyse BIM risks, ISO 19650 compliance, COBie gaps, GIS issues, Digital Twin opportunities and asset information requirements, but no Sarah runtime or autonomous execution exists in this phase.
 
 ## Olivia CFO Financial Intelligence
 

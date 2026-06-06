@@ -26,7 +26,8 @@ function scoreLexical(record, query) {
   if (!terms.length) return 0;
   const haystack = `${record.sourceType} ${record.sourceId} ${record.title || ""} ${record.summary}`.toLowerCase();
   const matches = terms.filter((term) => haystack.includes(term)).length;
-  return matches / terms.length;
+  const sourceBoost = record.sourceType === "memory" && matches ? 0.1 : 0;
+  return matches / terms.length + sourceBoost;
 }
 
 function searchLexically(records, query, limit) {
