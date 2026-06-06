@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 2796" role="img" aria-label="Alfred AI Operating System launch screen">
+  <defs>
+    <radialGradient id="splashGlow" cx="64%" cy="24%" r="72%">
+      <stop offset="0" stop-color="#2431a8" stop-opacity="0.55"/>
+      <stop offset="0.34" stop-color="#0b4f5a" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#04090a"/>
+    </radialGradient>
+    <linearGradient id="splashStroke" x1="392" y1="1016" x2="898" y2="1530" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#62ead5"/>
+      <stop offset="0.52" stop-color="#7fa9e2"/>
+      <stop offset="1" stop-color="#b18ae2"/>
+    </linearGradient>
+    <filter id="splashBlur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.38 0 0 0 0 0.92 0 0 0 0 0.84 0 0 0 0.58 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+  <rect width="1290" height="2796" fill="url(#splashGlow)"/>
+  <circle cx="645" cy="1280" r="234" fill="rgba(255,255,255,0.035)" stroke="url(#splashStroke)" stroke-width="10" filter="url(#splashBlur)"/>
+  <circle cx="645" cy="1280" r="160" fill="none" stroke="#62ead5" stroke-width="4" stroke-opacity="0.22"/>
+  <path d="M506 1418 626 1140h39l120 278h-45l-25-61H576l-25 61h-45Zm88-99h104l-52-128-52 128Z" fill="#e6efec"/>
+  <path d="M575 1449h140" stroke="#62ead5" stroke-linecap="round" stroke-width="10"/>
+  <text x="645" y="1652" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="700" fill="#e6efec" letter-spacing="8">ALFRED</text>
+  <text x="645" y="1710" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#78908d" letter-spacing="5">AI EXECUTIVE OPERATING SYSTEM</text>
+</svg>

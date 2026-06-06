@@ -1,6 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Alfred maskable app icon">
-  <rect width="512" height="512" fill="#071011"/>
-  <circle cx="256" cy="256" r="196" fill="#0d191a"/>
-  <circle cx="256" cy="256" r="154" fill="none" stroke="#62ead5" stroke-width="12"/>
-  <text x="256" y="311" text-anchor="middle" font-family="Arial, sans-serif" font-size="154" font-weight="700" fill="#62ead5">A</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Alfred AI Operating System maskable app icon">
+  <defs>
+    <radialGradient id="maskBg" cx="70%" cy="16%" r="84%">
+      <stop offset="0" stop-color="#2832b8" stop-opacity="0.72"/>
+      <stop offset="0.38" stop-color="#0b5360" stop-opacity="0.48"/>
+      <stop offset="1" stop-color="#071011"/>
+    </radialGradient>
+    <linearGradient id="maskStroke" x1="94" y1="92" x2="424" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#62ead5"/>
+      <stop offset="0.5" stop-color="#7fa9e2"/>
+      <stop offset="1" stop-color="#b18ae2"/>
+    </linearGradient>
+    <filter id="maskGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.38 0 0 0 0 0.92 0 0 0 0 0.84 0 0 0 0.7 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#maskBg)"/>
+  <circle cx="256" cy="256" r="172" fill="rgba(255,255,255,0.035)" stroke="url(#maskStroke)" stroke-width="9" filter="url(#maskGlow)"/>
+  <circle cx="256" cy="256" r="118" fill="none" stroke="#62ead5" stroke-width="3" stroke-opacity="0.22"/>
+  <path d="M256 86a170 170 0 0 1 157 105M256 426A170 170 0 0 1 99 321" fill="none" stroke="#b18ae2" stroke-linecap="round" stroke-width="10" stroke-opacity="0.64"/>
+  <path d="M165 340 244 150h32l80 190h-37l-16-41h-94l-16 41h-28Zm56-70h70l-35-88-35 88Z" fill="#e6efec"/>
+  <path d="M208 358h96" stroke="#62ead5" stroke-linecap="round" stroke-width="9"/>
+  <circle cx="394" cy="154" r="13" fill="#62ead5"/>
+  <circle cx="118" cy="334" r="10" fill="#b18ae2"/>
 </svg>

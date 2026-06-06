@@ -13,14 +13,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Alfred Core</title>
     <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icons/alfred-icon.svg" />
     <link rel="apple-touch-icon" href="/icons/alfred-icon.svg" />
+    <link rel="apple-touch-startup-image" href="/icons/alfred-splash.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.7" />
+    <link rel="stylesheet" href="styles.css?v=0.4.10" />
   </head>
   <body>
     <div class="shell">
@@ -75,6 +77,8 @@
             <span class="nav-icon">⚙</span> Settings
           </button>
         </nav>
+
+        <div class="sidebar-executive-team" id="sidebar-executive-team" aria-label="Executive team presence"></div>
 
         <div class="sidebar-foot">
           <div class="system-status">
@@ -170,6 +174,39 @@
             </section>
           </div>
 
+          <section class="executive-operating-deck" aria-label="Executive operating deck">
+            <section class="panel command-deck-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CURRENT TOPICS</p>
+                  <h3>What Alfred is tracking</h3>
+                </div>
+                <span class="live-label"><i></i> BOARD VIEW</span>
+              </div>
+              <div id="current-topics-panel" class="current-topics-panel"></div>
+            </section>
+            <section class="panel command-deck-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SUGGESTED ACTIONS</p>
+                  <h3>Advisory next moves</h3>
+                </div>
+                <span class="live-label advisory-label"><i></i> ADVISORY</span>
+              </div>
+              <div id="suggested-actions-panel" class="suggested-actions-panel"></div>
+            </section>
+            <section class="panel command-deck-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">AGENT PRESENCE</p>
+                  <h3>Executive team online</h3>
+                </div>
+                <span class="live-label visual-label"><i></i> VISUAL</span>
+              </div>
+              <div id="command-agent-presence" class="command-agent-presence"></div>
+            </section>
+          </section>
+
           <section class="ipad-executive-mode panel" aria-label="iPad executive mode" data-layout-marker="ipad-executive-mode">
             <div class="panel-heading compact">
               <div>
@@ -217,7 +254,7 @@
             </div>
             <div class="approval-boundary voice-boundary">
               <strong>Advisory-only voice mode</strong>
-              <span>Voice can brief, analyse and route to Sarah, Olivia or Westbridge. It cannot send emails, update calendars, edit files, modify finance/property records or bypass approvals.</span>
+              <span>Voice can brief, analyse and route to Sarah, Olivia, Westbridge or Sentinel. It cannot send emails, update calendars, edit files, modify finance/property records or bypass approvals.</span>
             </div>
             <div class="voice-layout">
               <section class="voice-console">
@@ -226,10 +263,14 @@
                   <span class="voice-ring"></span>
                   <span class="voice-mark">A</span>
                 </button>
+                <div class="voice-waveform" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
                 <div class="voice-state">
                   <strong id="voice-state-label">Ready</strong>
                   <span id="voice-state-detail">Press the microphone, or type a transcript below.</span>
                 </div>
+                <div class="voice-avatar-presence" id="voice-avatar-presence"></div>
                 <form class="voice-transcript-form" id="voice-transcript-form">
                   <input id="voice-transcript-input" placeholder='Try “Alfred, brief me” or “Ask Olivia for revenue forecast”' />
                   <button class="secondary-button" type="submit">Ask Alfred</button>
@@ -240,6 +281,7 @@
                 <div class="voice-provider-grid">
                   <article><small>Deepgram</small><strong id="deepgram-status">Checking</strong></article>
                   <article><small>ElevenLabs</small><strong id="elevenlabs-status">Checking</strong></article>
+                  <article><small>Avatar</small><strong id="avatar-provider-status">Planned</strong></article>
                   <article><small>Microphone</small><strong id="microphone-status">Not requested</strong></article>
                 </div>
                 <div class="voice-setup">
@@ -1007,6 +1049,16 @@
             <article class="panel settings-panel settings-panel-wide">
               <div class="panel-heading compact">
                 <div>
+                  <p class="eyebrow">VISION ALIGNMENT</p>
+                  <h3>Executive OS compass</h3>
+                </div>
+                <span class="live-label visual-label"><i></i> ON TRACK</span>
+              </div>
+              <div id="vision-alignment-panel"></div>
+            </article>
+            <article class="panel settings-panel settings-panel-wide">
+              <div class="panel-heading compact">
+                <div>
                   <p class="eyebrow">SECURITY</p>
                   <h3>Production boundary</h3>
                 </div>
@@ -1121,6 +1173,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.6"></script>
+    <script type="module" src="app.js?v=0.4.10"></script>
   </body>
 </html>
