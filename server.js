@@ -1281,7 +1281,7 @@ function buildAiBriefingContext(briefing, body = {}) {
       title: briefing.mondayOperating?.title || "Monday Operating System",
       summary: briefing.mondayOperating?.summary || "",
       metrics: compactValue(briefing.mondayOperating?.metrics || {}),
-      topWorkloads: compactRecords(briefing.mondayOperating?.topWorkloads || [], ["agentId", "agentName", "activeItems", "blockedItems", "overdueItems", "workloadStatus"], 8),
+      topWorkloads: compactRecords(briefing.mondayOperating?.topWorkloads || [], ["agentId", "agentName", "activeItems", "blockedItems", "overdueItems", "deliverablesDue", "workloadScore", "healthStatus", "workloadStatus"], 8),
       items: compactRecords(briefing.mondayOperating?.items || [], ["type", "title", "detail", "ownerAgentName", "priority", "status", "sourceReference"], 10),
       boundary: briefing.mondayOperating?.boundary || MONDAY_OPERATING_BOUNDARY,
     },

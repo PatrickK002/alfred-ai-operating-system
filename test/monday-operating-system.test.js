@@ -117,6 +117,11 @@ test("supports work item CRUD, source links, audit logging and workload calculat
     assert.equal(updated.sourceReference.includes("Project Intelligence"), true);
     assert.ok(sarahWorkload.activeItems >= 1);
     assert.ok(sarahWorkload.priorityItems >= 1);
+    assert.equal(typeof sarahWorkload.workloadScore, "number");
+    assert.equal(sarahWorkload.healthStatus, "Red");
+    assert.ok(sarahWorkload.deliverablesDue >= 0);
+    assert.ok(dashboard.workloadMetrics.some((item) => item.agentId === "sarah" && item.healthStatus === "Red"));
+    assert.equal(dashboard.metrics.workloadHealth.red >= 1, true);
     assert.equal(audit.some((event) => event.eventType === "work_item_created"), true);
     assert.equal(audit.some((event) => event.eventType === "work_item_updated"), true);
     assert.equal(audit.every((event) => event.executionAttempted === false && event.externalWriteAttempted === false), true);
@@ -132,6 +137,8 @@ test("stores deliverables, operational risks, opportunities, decisions and feedb
       priority: "High",
       sourceType: "financial",
       sourceId: "board-report-q1",
+      linkedBusinessId: "group",
+      linkedMemoryReference: "memory:board-report-q1",
     });
     const risk = createOperationalRisk(db, {
       title: "Forecast dependency risk",
@@ -170,6 +177,8 @@ test("stores deliverables, operational risks, opportunities, decisions and feedb
     const search = searchMondayOperatingSystem(db, "board");
 
     assert.equal(deliverable.businessEntityId, "group");
+    assert.equal(deliverable.linkedBusinessId, "group");
+    assert.equal(deliverable.linkedMemoryReference, "memory:board-report-q1");
     assert.equal(risk.sourceReference.includes("Olivia"), true);
     assert.equal(opportunity.ownerAgentId, "sarah");
     assert.equal(decision.approvalRequired, true);
@@ -246,14 +255,18 @@ test("frontend, API and executive briefing pipeline expose Monday OS safely", ()
   const server = readFileSync(new URL("../server.js", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const schema = readFileSync(new URL("../db.js", import.meta.url), "utf8");
   const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 
   assert.match(server, /\/api\/monday-os\/dashboard/);
   assert.match(server, /brief\.mondayOperating = mondayOperatingBriefForDaily/);
   assert.match(server, /monday_operating_system/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS workload_metrics/);
   assert.match(app, /renderMondayOperating/);
   assert.match(app, /mondayOperating/);
+  assert.match(app, /workloadMetrics/);
   assert.match(html, /id="monday-view"/);
+  assert.match(html, /monday-workload-health/);
   assert.match(html, /Internal-only operating mode/);
   assert.match(workflow, /node --check monday-operating-system\.js/);
 });

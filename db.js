@@ -456,6 +456,9 @@ const SCHEMA = `
     overdue_items INTEGER NOT NULL DEFAULT 0,
     blocked_items INTEGER NOT NULL DEFAULT 0,
     priority_items INTEGER NOT NULL DEFAULT 0,
+    deliverables_due INTEGER NOT NULL DEFAULT 0,
+    workload_score INTEGER NOT NULL DEFAULT 0,
+    health_status TEXT NOT NULL DEFAULT 'Green',
     workload_status TEXT NOT NULL DEFAULT 'Available',
     capacity INTEGER NOT NULL DEFAULT 8,
     notes TEXT NOT NULL DEFAULT '',
@@ -478,6 +481,10 @@ const SCHEMA = `
     priority TEXT NOT NULL DEFAULT 'Medium',
     due_date TEXT NOT NULL DEFAULT '',
     linked_file_placeholder TEXT NOT NULL DEFAULT '',
+    linked_meeting_id INTEGER REFERENCES meeting_records(id) ON DELETE SET NULL,
+    linked_project_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    linked_business_id TEXT NOT NULL DEFAULT '',
+    linked_memory_reference TEXT NOT NULL DEFAULT '',
     feedback_status TEXT NOT NULL DEFAULT 'unreviewed',
     source_type TEXT NOT NULL DEFAULT 'manual',
     source_id TEXT NOT NULL DEFAULT '',
@@ -485,6 +492,23 @@ const SCHEMA = `
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS workload_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    open_items INTEGER NOT NULL DEFAULT 0,
+    high_priority_items INTEGER NOT NULL DEFAULT 0,
+    overdue_items INTEGER NOT NULL DEFAULT 0,
+    blocked_items INTEGER NOT NULL DEFAULT 0,
+    deliverables_due INTEGER NOT NULL DEFAULT 0,
+    workload_score INTEGER NOT NULL DEFAULT 0,
+    health_status TEXT NOT NULL DEFAULT 'Green',
+    calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id)
   );
 
   CREATE TABLE IF NOT EXISTS operational_risks (
@@ -646,6 +670,9 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS meeting_followups_status
   ON meeting_followups(status, priority);
+
+  CREATE INDEX IF NOT EXISTS workload_metrics_agent_health
+  ON workload_metrics(agent_id, health_status);
 
   CREATE TABLE IF NOT EXISTS project_email_signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2140,7 +2167,38 @@ function migrateMeetingIntelligenceSchema(db) {
 }
 
 function migrateMondayOperatingSchema(db) {
+  const columnsFor = (table) => new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  const addColumn = (table, definition) => {
+    const name = definition.trim().split(/\s+/)[0];
+    if (!columnsFor(table).has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  };
+
+  addColumn("agent_workloads", "deliverables_due INTEGER NOT NULL DEFAULT 0");
+  addColumn("agent_workloads", "workload_score INTEGER NOT NULL DEFAULT 0");
+  addColumn("agent_workloads", "health_status TEXT NOT NULL DEFAULT 'Green'");
+  addColumn("deliverables", "linked_meeting_id INTEGER");
+  addColumn("deliverables", "linked_project_id INTEGER");
+  addColumn("deliverables", "linked_business_id TEXT NOT NULL DEFAULT ''");
+  addColumn("deliverables", "linked_memory_reference TEXT NOT NULL DEFAULT ''");
+
   db.exec(`
+    CREATE TABLE IF NOT EXISTS workload_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      open_items INTEGER NOT NULL DEFAULT 0,
+      high_priority_items INTEGER NOT NULL DEFAULT 0,
+      overdue_items INTEGER NOT NULL DEFAULT 0,
+      blocked_items INTEGER NOT NULL DEFAULT 0,
+      deliverables_due INTEGER NOT NULL DEFAULT 0,
+      workload_score INTEGER NOT NULL DEFAULT 0,
+      health_status TEXT NOT NULL DEFAULT 'Green',
+      calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(agent_id)
+    );
+
     CREATE INDEX IF NOT EXISTS work_items_owner_status
     ON work_items(owner_agent_id, status, priority);
 
@@ -2152,6 +2210,9 @@ function migrateMondayOperatingSchema(db) {
 
     CREATE INDEX IF NOT EXISTS meeting_followups_status
     ON meeting_followups(status, priority);
+
+    CREATE INDEX IF NOT EXISTS workload_metrics_agent_health
+    ON workload_metrics(agent_id, health_status);
   `);
 }
 
@@ -3784,6 +3845,10 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         `Deliverable: ${row.title}.`,
         `Owner agent: ${row.owner_agent_name || row.owner_agent_id}.`,
         row.project_name ? `Project: ${row.project_name}.` : "",
+        row.linked_meeting_id ? `Linked meeting ID: ${row.linked_meeting_id}.` : "",
+        row.linked_project_id ? `Linked project ID: ${row.linked_project_id}.` : "",
+        row.linked_business_id ? `Linked business: ${row.linked_business_id}.` : "",
+        row.linked_memory_reference ? `Linked memory: ${row.linked_memory_reference}.` : "",
         `Status: ${row.status}. Feedback status: ${row.feedback_status}.`,
         row.linked_file_placeholder ? `File placeholder: ${row.linked_file_placeholder}.` : "",
         row.detail,

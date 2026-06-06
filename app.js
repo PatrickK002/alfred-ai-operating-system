@@ -265,10 +265,12 @@ const seedData = {
       decisionsAwaitingApproval: 0,
       meetingFollowups: 0,
       feedbackForReview: 0,
+      workloadHealth: { green: 0, amber: 0, red: 0 },
       mondayWritesEnabled: false,
     },
     agentBoards: [],
     agentWorkloads: [],
+    workloadMetrics: [],
     workItems: [],
     deliverables: [],
     operationalRisks: [],
@@ -1817,6 +1819,7 @@ function renderMondayOperating() {
     ["DECISIONS", metrics.decisionsAwaitingApproval],
     ["FOLLOW-UPS", metrics.meetingFollowups],
     ["FEEDBACK", metrics.feedbackForReview],
+    ["HEALTH", `${metrics.workloadHealth?.red || 0}R/${metrics.workloadHealth?.amber || 0}A`],
   ].map(([label, value]) => `
     <article>
       <small>${label}</small>
@@ -1827,10 +1830,19 @@ function renderMondayOperating() {
   $("#monday-agent-workloads").innerHTML = mondayList(monday.agentWorkloads || [], "No workload records calculated yet.", (item) => `
     <div class="monday-card-top">
       <strong>${escapeHTML(item.agentName)}</strong>
-      <span class="monday-status ${mondayStatusClass(item.workloadStatus)}">${escapeHTML(item.workloadStatus)}</span>
+      <span class="monday-status ${mondayStatusClass(item.healthStatus || item.workloadStatus)}">${escapeHTML(item.healthStatus || item.workloadStatus)}</span>
     </div>
-    <span>${escapeHTML(item.businessArea || "Group")} · ${item.activeItems || 0} active · ${item.blockedItems || 0} blocked · ${item.overdueItems || 0} overdue</span>
+    <span>${escapeHTML(item.businessArea || "Group")} · score ${item.workloadScore || 0}/100 · ${item.activeItems || 0} active · ${item.blockedItems || 0} blocked · ${item.overdueItems || 0} overdue · ${item.deliverablesDue || 0} deliverables due</span>
     <small>${escapeHTML(item.notes || "No external Monday sync is enabled.")}</small>
+  `, 12);
+
+  $("#monday-workload-health").innerHTML = mondayList(monday.workloadMetrics || [], "No workload health metrics calculated yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.agentName)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.healthStatus)}">${escapeHTML(item.healthStatus || "Green")}</span>
+    </div>
+    <span>Score ${item.workloadScore || 0}/100 · ${item.openItems || 0} open · ${item.highPriorityItems || 0} high priority</span>
+    <small>${item.blockedItems || 0} blocked · ${item.overdueItems || 0} overdue · ${item.deliverablesDue || 0} deliverables due</small>
   `, 12);
 
   $("#monday-work-queue").innerHTML = mondayList(monday.workItems || [], "No internal work items yet.", (item) => `
@@ -1847,8 +1859,8 @@ function renderMondayOperating() {
       <strong>${escapeHTML(item.title)}</strong>
       <span class="monday-status ${mondayStatusClass(item.status)}">${escapeHTML(item.status || "Planned")}</span>
     </div>
-    <span>${escapeHTML(item.ownerAgentName || "Alfred")} · ${escapeHTML(item.projectName || item.clientName || "Group")}</span>
-    <small>${escapeHTML(item.linkedFilePlaceholder || item.sourceReference || "No external file write.")}</small>
+    <span>${escapeHTML(item.ownerAgentName || "Alfred")} · ${escapeHTML(item.projectName || item.clientName || item.linkedBusinessId || "Group")}</span>
+    <small>${escapeHTML(item.linkedMemoryReference || item.linkedFilePlaceholder || item.sourceReference || "No external file write.")}</small>
   `);
 
   const riskOpportunityRows = [

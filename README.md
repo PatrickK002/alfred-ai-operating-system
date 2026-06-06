@@ -525,6 +525,7 @@ Internal entities:
 - `work_items`
 - `agent_workloads`
 - `deliverables`
+- `workload_metrics`
 - `operational_risks`
 - `operational_opportunities`
 - `operational_decisions`
@@ -539,6 +540,7 @@ Agent work board placeholders exist for Alfred, Sarah, Olivia, Westbridge Proper
 The dashboard shows:
 
 - Agent workload overview
+- Workload health with Green, Amber and Red capacity signals
 - Internal work queue
 - Deliverables
 - Operational risks and opportunities
@@ -552,6 +554,10 @@ Statuses are standardised as `New`, `Planned`, `In Progress`, `Waiting`, `Blocke
 Priorities are standardised as `Low`, `Medium`, `High` and `Critical`.
 
 Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Executive Briefing, Memory and future Monday IDs.
+
+Workload metrics are calculated locally from open work, high-priority items, overdue work, blocked items and deliverables due. The result is a `workload_score` from 0 to 100 with a Green, Amber or Red health label for each executive agent workspace.
+
+Deliverables can preserve linked meeting, project, business and memory references. These are metadata links only; Alfred does not create files, update Monday.com items or write back to external systems.
 
 Meeting Intelligence can sync extracted meeting actions, decisions, risks, opportunities and feedback into local Alfred work records. This creates internal SQLite records only.
 

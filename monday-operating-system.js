@@ -363,6 +363,9 @@ function mapWorkload(row) {
     overdueItems: row.overdue_items,
     blockedItems: row.blocked_items,
     priorityItems: row.priority_items,
+    deliverablesDue: row.deliverables_due,
+    workloadScore: row.workload_score,
+    healthStatus: row.health_status,
     workloadStatus: row.workload_status,
     capacity: row.capacity,
     notes: row.notes,
@@ -387,12 +390,35 @@ function mapDeliverable(row) {
     priority: row.priority,
     dueDate: row.due_date,
     linkedFilePlaceholder: row.linked_file_placeholder,
+    linkedMeetingId: row.linked_meeting_id,
+    linkedProjectId: row.linked_project_id,
+    linkedBusinessId: row.linked_business_id,
+    linkedMemoryReference: row.linked_memory_reference,
     feedbackStatus: row.feedback_status,
     sourceType: row.source_type,
     sourceId: row.source_id,
     sourceReference: row.source_reference,
     metadata: parseJson(row.metadata, {}),
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapWorkloadMetric(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    agentId: row.agent_id,
+    agentName: row.agent_name,
+    openItems: row.open_items,
+    highPriorityItems: row.high_priority_items,
+    overdueItems: row.overdue_items,
+    blockedItems: row.blocked_items,
+    deliverablesDue: row.deliverables_due,
+    workloadScore: row.workload_score,
+    healthStatus: row.health_status,
+    calculatedAt: row.calculated_at,
+    metadata: parseJson(row.metadata, {}),
     updatedAt: row.updated_at,
   };
 }
@@ -814,9 +840,10 @@ export function createDeliverable(db, payload = {}) {
     INSERT INTO deliverables (
       title, detail, owner_agent_id, owner_agent_name, business_entity_id, company_id,
       project_name, client_name, status, priority, due_date, linked_file_placeholder,
+      linked_meeting_id, linked_project_id, linked_business_id, linked_memory_reference,
       feedback_status, source_type, source_id, source_reference, metadata, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     clean(payload.title || "Untitled deliverable"),
     clean(payload.detail || ""),
@@ -830,6 +857,10 @@ export function createDeliverable(db, payload = {}) {
     normalizePriority(payload.priority),
     clean(payload.dueDate || payload.due_date || ""),
     clean(payload.linkedFilePlaceholder || payload.linked_file_placeholder),
+    payload.linkedMeetingId || payload.linked_meeting_id || null,
+    payload.linkedProjectId || payload.linked_project_id || null,
+    clean(payload.linkedBusinessId || payload.linked_business_id || businessEntityId),
+    clean(payload.linkedMemoryReference || payload.linked_memory_reference || payload.memoryReference || ""),
     clean(payload.feedbackStatus || payload.feedback_status || "unreviewed"),
     clean(payload.sourceType || payload.source_type || "manual"),
     String(payload.sourceId || payload.source_id || ""),
@@ -1313,17 +1344,30 @@ export function syncMeetingFollowupsToWorkItems(db) {
   return syncInternalOperatingSources(db, { userAction: "monday-os:sync-meeting-followups" });
 }
 
+function calculateWorkloadHealth({ activeItems, highPriorityItems, overdueItems, blockedItems, deliverablesDue, capacity }) {
+  const capacityScore = capacity ? Math.round(Math.min(activeItems / capacity, 2) * 35) : activeItems * 5;
+  const score = Math.min(100, capacityScore + (highPriorityItems * 8) + (overdueItems * 14) + (blockedItems * 22) + (deliverablesDue * 8));
+  const healthStatus = blockedItems || overdueItems || score >= 70
+    ? "Red"
+    : score >= 40 || highPriorityItems || deliverablesDue
+      ? "Amber"
+      : "Green";
+  return { workloadScore: score, healthStatus };
+}
+
 export function calculateAgentWorkloads(db) {
   ensureMondayBoardMappings(db);
   const today = todayIsoDate();
   const rows = db.prepare("SELECT * FROM work_items").all().map(mapWorkItem);
+  const deliverableRows = db.prepare("SELECT * FROM deliverables").all().map(mapDeliverable);
   const timestamp = nowIso();
   const upsert = db.prepare(`
     INSERT INTO agent_workloads (
       agent_id, agent_name, business_area, active_items, overdue_items,
-      blocked_items, priority_items, workload_status, capacity, notes, calculated_at, updated_at
+      blocked_items, priority_items, deliverables_due, workload_score, health_status,
+      workload_status, capacity, notes, calculated_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(agent_id) DO UPDATE SET
       agent_name = excluded.agent_name,
       business_area = excluded.business_area,
@@ -1331,10 +1375,33 @@ export function calculateAgentWorkloads(db) {
       overdue_items = excluded.overdue_items,
       blocked_items = excluded.blocked_items,
       priority_items = excluded.priority_items,
+      deliverables_due = excluded.deliverables_due,
+      workload_score = excluded.workload_score,
+      health_status = excluded.health_status,
       workload_status = excluded.workload_status,
       capacity = excluded.capacity,
       notes = excluded.notes,
       calculated_at = excluded.calculated_at,
+      updated_at = excluded.updated_at
+  `);
+  const upsertMetrics = db.prepare(`
+    INSERT INTO workload_metrics (
+      agent_id, agent_name, open_items, high_priority_items, overdue_items,
+      blocked_items, deliverables_due, workload_score, health_status, calculated_at,
+      metadata, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(agent_id) DO UPDATE SET
+      agent_name = excluded.agent_name,
+      open_items = excluded.open_items,
+      high_priority_items = excluded.high_priority_items,
+      overdue_items = excluded.overdue_items,
+      blocked_items = excluded.blocked_items,
+      deliverables_due = excluded.deliverables_due,
+      workload_score = excluded.workload_score,
+      health_status = excluded.health_status,
+      calculated_at = excluded.calculated_at,
+      metadata = excluded.metadata,
       updated_at = excluded.updated_at
   `);
   for (const agent of AGENT_BOARD_MODELS) {
@@ -1343,6 +1410,16 @@ export function calculateAgentWorkloads(db) {
     const overdue = active.filter((row) => row.dueDate && row.dueDate.slice(0, 10) < today);
     const blocked = active.filter((row) => row.status === "Blocked");
     const priority = active.filter((row) => ["High", "Critical"].includes(row.priority));
+    const activeDeliverables = deliverableRows.filter((row) => row.ownerAgentId === agent.agentId && !COMPLETE_STATUSES.has(row.status));
+    const dueDeliverables = activeDeliverables.filter((row) => row.dueDate && row.dueDate.slice(0, 10) <= today);
+    const health = calculateWorkloadHealth({
+      activeItems: active.length,
+      highPriorityItems: priority.length,
+      overdueItems: overdue.length,
+      blockedItems: blocked.length,
+      deliverablesDue: dueDeliverables.length,
+      capacity: agent.capacity,
+    });
     const status = blocked.length
       ? "Blocked"
       : active.length > agent.capacity
@@ -1354,8 +1431,10 @@ export function calculateAgentWorkloads(db) {
             : "Available";
     const notes = [
       `${active.length} active internal work item(s).`,
+      `Workload health: ${health.healthStatus} (${health.workloadScore}/100).`,
       overdue.length ? `${overdue.length} overdue.` : "",
       blocked.length ? `${blocked.length} blocked.` : "",
+      dueDeliverables.length ? `${dueDeliverables.length} deliverable(s) due.` : "",
       "No external Monday sync is enabled.",
     ].filter(Boolean).join(" ");
     upsert.run(
@@ -1366,10 +1445,31 @@ export function calculateAgentWorkloads(db) {
       overdue.length,
       blocked.length,
       priority.length,
+      dueDeliverables.length,
+      health.workloadScore,
+      health.healthStatus,
       status,
       agent.capacity,
       notes,
       timestamp,
+      timestamp,
+    );
+    upsertMetrics.run(
+      agent.agentId,
+      agent.agentName,
+      active.length,
+      priority.length,
+      overdue.length,
+      blocked.length,
+      dueDeliverables.length,
+      health.workloadScore,
+      health.healthStatus,
+      timestamp,
+      json({
+        capacity: agent.capacity,
+        businessArea: agent.businessArea,
+        boundary: MONDAY_OPERATING_BOUNDARY,
+      }),
       timestamp,
     );
   }
@@ -1463,9 +1563,25 @@ function getSyncStatus(db) {
     .map(mapSyncStatus);
 }
 
-function dashboardMetrics({ workItems, deliverables, risks, decisions, followups, feedback, boardMappings }) {
+function listWorkloadMetrics(db) {
+  return db.prepare(`
+    SELECT *
+    FROM workload_metrics
+    ORDER BY
+      CASE health_status WHEN 'Red' THEN 1 WHEN 'Amber' THEN 2 ELSE 3 END,
+      workload_score DESC,
+      agent_name ASC
+  `).all().map(mapWorkloadMetric);
+}
+
+function dashboardMetrics({ workItems, deliverables, risks, decisions, followups, feedback, boardMappings, workloadMetrics }) {
   const today = todayIsoDate();
   const active = workItems.filter((item) => !COMPLETE_STATUSES.has(item.status));
+  const workloadHealth = {
+    green: workloadMetrics.filter((item) => item.healthStatus === "Green").length,
+    amber: workloadMetrics.filter((item) => item.healthStatus === "Amber").length,
+    red: workloadMetrics.filter((item) => item.healthStatus === "Red").length,
+  };
   return {
     agents: AGENT_BOARD_MODELS.length,
     plannedBoards: boardMappings.length,
@@ -1478,6 +1594,7 @@ function dashboardMetrics({ workItems, deliverables, risks, decisions, followups
     decisionsAwaitingApproval: decisions.filter((item) => item.approvalRequired && !COMPLETE_STATUSES.has(item.status)).length,
     meetingFollowups: followups.filter((item) => !COMPLETE_STATUSES.has(item.status)).length,
     feedbackForReview: feedback.filter((item) => item.recommendationStatus === "unreviewed").length,
+    workloadHealth,
     mondayWritesEnabled: false,
   };
 }
@@ -1495,12 +1612,14 @@ export function getMondayOperatingDashboard(db) {
   const boardMappings = getBoardMappings(db);
   const syncStatus = getSyncStatus(db);
   const agentWorkloads = calculateAgentWorkloads(db);
+  const workloadMetrics = listWorkloadMetrics(db);
   return {
     title: "Monday Operating System",
     summary: "Internal Alfred work management foundation for future Monday.com boards. No live Monday.com read/write sync is active.",
-    metrics: dashboardMetrics({ workItems, deliverables, risks, decisions, followups: meetingFollowups, feedback, boardMappings }),
+    metrics: dashboardMetrics({ workItems, deliverables, risks, decisions, followups: meetingFollowups, feedback, boardMappings, workloadMetrics }),
     agentBoards: AGENT_BOARD_MODELS,
     agentWorkloads,
+    workloadMetrics,
     workItems,
     deliverables,
     operationalRisks: risks,
@@ -1549,7 +1668,7 @@ export function searchMondayOperatingSystem(db, query = "") {
   return {
     query: clean(query),
     workItems: search("work_items", mapWorkItem, ["title", "detail", "owner_agent_name", "project_name", "client_name", "source_reference"]),
-    deliverables: search("deliverables", mapDeliverable, ["title", "detail", "owner_agent_name", "project_name", "client_name", "source_reference"]),
+    deliverables: search("deliverables", mapDeliverable, ["title", "detail", "owner_agent_name", "project_name", "client_name", "linked_business_id", "linked_memory_reference", "source_reference"]),
     risks: search("operational_risks", mapOperationalSignal, ["title", "detail", "owner_agent_name", "business_impact", "source_reference"]),
     opportunities: search("operational_opportunities", mapOperationalSignal, ["title", "detail", "owner_agent_name", "business_impact", "source_reference"]),
     decisions: search("operational_decisions", mapDecision, ["title", "detail", "owner_agent_name", "source_reference"]),
