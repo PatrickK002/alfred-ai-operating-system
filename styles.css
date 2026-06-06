@@ -1861,7 +1861,7 @@ h3 {
 
 .monday-metrics {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }

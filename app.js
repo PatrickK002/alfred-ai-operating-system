@@ -266,6 +266,7 @@ const seedData = {
       meetingFollowups: 0,
       feedbackForReview: 0,
       workloadHealth: { green: 0, amber: 0, red: 0 },
+      readEnabledBoards: 0,
       mondayWritesEnabled: false,
     },
     agentBoards: [],
@@ -1819,6 +1820,7 @@ function renderMondayOperating() {
     ["DECISIONS", metrics.decisionsAwaitingApproval],
     ["FOLLOW-UPS", metrics.meetingFollowups],
     ["FEEDBACK", metrics.feedbackForReview],
+    ["READ BOARDS", metrics.readEnabledBoards],
     ["HEALTH", `${metrics.workloadHealth?.red || 0}R/${metrics.workloadHealth?.amber || 0}A`],
   ].map(([label, value]) => `
     <article>
@@ -1947,6 +1949,27 @@ async function syncMondayFollowups() {
     persist();
     renderMondayOperating();
     showToast(`Synced ${result.recordsCreated || 0} internal record(s)`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function refreshMondayReadOnly() {
+  if (!backendAvailable) {
+    showToast("Monday read-only sync requires the backend");
+    return;
+  }
+  try {
+    const result = await apiRequest("/api/monday-os/monday-readonly/refresh", {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:monday-os:monday-readonly:refresh" }),
+    });
+    state.mondayOperating = await apiRequest("/api/monday-os/dashboard");
+    persist();
+    renderMondayOperating();
+    showToast(result.configured === false
+      ? result.message || "Monday read-only sync is not configured"
+      : `Monday read-only imported ${result.itemsRead || 0} item(s)`);
   } catch (error) {
     showToast(error.message);
   }
@@ -3631,6 +3654,7 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-monday-readonly").addEventListener("click", refreshMondayReadOnly);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });

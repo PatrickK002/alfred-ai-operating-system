@@ -9,6 +9,16 @@ export const MONDAY_OPERATING_BOUNDARY = Object.freeze({
   approvalRequiredForFutureWrites: true,
 });
 
+export const MONDAY_READONLY_OPERATING_BOUNDARY = Object.freeze({
+  ...MONDAY_OPERATING_BOUNDARY,
+  mondayConnected: true,
+  mondayReadEnabled: true,
+  mondayWriteEnabled: false,
+  externalWritesEnabled: false,
+  autonomousExecutionEnabled: false,
+  readOnlyOperatingSync: true,
+});
+
 export const MONDAY_STATUSES = Object.freeze([
   "New",
   "Planned",
@@ -191,6 +201,7 @@ const SOURCE_DISPLAY_NAMES = Object.freeze({
   property: "Westbridge",
   sarah: "Sarah",
   memory: "Memory",
+  monday_readonly: "Monday.com read-only",
 });
 
 function nowIso() {
@@ -300,6 +311,10 @@ function getMappingForAgent(db, agentId = "alfred") {
     ORDER BY id ASC
     LIMIT 1
   `).get(normalized) || null;
+}
+
+function boardKindForMondayBoard(boardId = "") {
+  return `readonly_${String(boardId || "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "board"}`;
 }
 
 function findSourceRecord(db, table, sourceType, sourceId) {
@@ -667,7 +682,7 @@ export function recordMondayAudit(db, {
     boolInt(outputSaved),
     status === "error" ? "error" : "success",
     clean(errorCode),
-    json({ ...metadata, boundary: MONDAY_OPERATING_BOUNDARY }),
+    json({ ...metadata, boundary: metadata.boundary || MONDAY_OPERATING_BOUNDARY }),
     nowIso(),
   );
   return db.prepare("SELECT * FROM monday_audit_events WHERE id = ?").get(rowId(result));
@@ -683,7 +698,9 @@ function insertWorkItem(db, payload = {}, { audit = true } = {}) {
     companyId: payload.companyId || payload.company_id,
   });
   const companyId = clean(payload.companyId || payload.company_id || companyForBusinessEntity(businessEntityId));
-  const mapping = getMappingForAgent(db, ownerAgentId);
+  const mapping = payload.mondayBoardMappingId || payload.monday_board_mapping_id
+    ? { id: Number(payload.mondayBoardMappingId || payload.monday_board_mapping_id) }
+    : getMappingForAgent(db, ownerAgentId);
   const timestamp = nowIso();
   const result = db.prepare(`
     INSERT INTO work_items (
@@ -711,7 +728,7 @@ function insertWorkItem(db, payload = {}, { audit = true } = {}) {
     String(payload.sourceId || payload.source_id || ""),
     clean(payload.sourceReference || payload.source_reference || sourceReference(payload.sourceType || payload.source_type || "manual", payload.sourceId || payload.source_id || "")),
     mapping?.id || null,
-    "",
+    clean(payload.mondayItemId || payload.monday_item_id || ""),
     json(payload.metadata || {}),
     timestamp,
     timestamp,
@@ -1053,6 +1070,278 @@ function createWorkItemFromSource(db, payload) {
   const existing = sourceId ? findSourceRecord(db, "work_items", sourceType, sourceId) : null;
   if (existing) return { record: mapWorkItem(existing), created: false };
   return { record: insertWorkItem(db, payload, { audit: true }), created: true };
+}
+
+function upsertMondayReadOnlyMapping(db, record = {}) {
+  ensureMondayBoardMappings(db);
+  const agentId = normalizeAgentId(record.ownerAgentId || "alfred");
+  const agent = agentDefinition(agentId);
+  const boardId = clean(record.boardId);
+  const boardKind = boardKindForMondayBoard(boardId || record.boardName);
+  const timestamp = nowIso();
+  const existing = db.prepare(`
+    SELECT *
+    FROM monday_board_mappings
+    WHERE monday_board_id = ? OR (agent_id = ? AND board_kind = ?)
+    ORDER BY CASE WHEN monday_board_id = ? THEN 0 ELSE 1 END
+    LIMIT 1
+  `).get(boardId, agentId, boardKind, boardId);
+  let mappingId = existing?.id;
+  if (mappingId) {
+    db.prepare(`
+      UPDATE monday_board_mappings SET
+        agent_id = ?,
+        agent_name = ?,
+        board_name = ?,
+        monday_board_id = ?,
+        status = 'Connected',
+        description = ?,
+        metadata = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      agentId,
+      agent.agentName,
+      clean(record.boardName || existing.board_name || "Monday read-only board"),
+      boardId,
+      "Read-only Monday.com operating board import. Writes remain disabled.",
+      json({
+        ...(parseJson(existing.metadata, {})),
+        sourceSystem: "monday",
+        readOnly: true,
+        groupName: record.groupName || "",
+        boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+      }),
+      timestamp,
+      mappingId,
+    );
+  } else {
+    const result = db.prepare(`
+      INSERT INTO monday_board_mappings (
+        agent_id, agent_name, board_kind, board_name, monday_board_id, monday_group_id,
+        status, description, metadata, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, '', 'Connected', ?, ?, ?, ?)
+    `).run(
+      agentId,
+      agent.agentName,
+      boardKind,
+      clean(record.boardName || "Monday read-only board"),
+      boardId,
+      "Read-only Monday.com operating board import. Writes remain disabled.",
+      json({
+        sourceSystem: "monday",
+        readOnly: true,
+        groupName: record.groupName || "",
+        boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+      }),
+      timestamp,
+      timestamp,
+    );
+    mappingId = rowId(result);
+  }
+
+  const mapping = db.prepare("SELECT * FROM monday_board_mappings WHERE id = ?").get(mappingId);
+  db.prepare(`
+    INSERT INTO monday_sync_status (
+      mapping_id, agent_id, board_kind, status, read_enabled, write_enabled,
+      last_read_at, last_write_at, message, metadata, created_at, updated_at
+    )
+    VALUES (?, ?, ?, 'Connected', 1, 0, ?, '', ?, ?, ?, ?)
+    ON CONFLICT(agent_id, board_kind) DO UPDATE SET
+      mapping_id = excluded.mapping_id,
+      status = 'Connected',
+      read_enabled = 1,
+      write_enabled = 0,
+      last_read_at = excluded.last_read_at,
+      last_write_at = '',
+      message = excluded.message,
+      metadata = excluded.metadata,
+      updated_at = excluded.updated_at
+  `).run(
+    mapping.id,
+    mapping.agent_id,
+    mapping.board_kind,
+    timestamp,
+    "Read-only Monday.com import completed. No Monday writes are enabled.",
+    json({
+      boardId,
+      boardName: mapping.board_name,
+      readOnly: true,
+      writesEnabled: false,
+      boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+    }),
+    timestamp,
+    timestamp,
+  );
+  return mapBoardMapping(mapping);
+}
+
+function updateMondayReadOnlyWorkItem(db, existing, payload = {}) {
+  const ownerAgentId = normalizeAgentId(payload.ownerAgentId || existing.owner_agent_id);
+  const owner = agentDefinition(ownerAgentId);
+  const businessEntityId = businessEntityFor({
+    agentId: ownerAgentId,
+    businessEntityId: payload.businessEntityId || existing.business_entity_id,
+    companyId: payload.companyId || existing.company_id,
+  });
+  const metadata = {
+    ...parseJson(existing.metadata, {}),
+    ...(payload.metadata || {}),
+    readOnly: true,
+    lastMondayReadAt: nowIso(),
+  };
+  db.prepare(`
+    UPDATE work_items SET
+      title = ?,
+      detail = ?,
+      item_type = ?,
+      owner_agent_id = ?,
+      owner_agent_name = ?,
+      business_entity_id = ?,
+      company_id = ?,
+      client_name = ?,
+      project_name = ?,
+      priority = ?,
+      status = ?,
+      due_date = ?,
+      blocked_reason = ?,
+      source_reference = ?,
+      monday_board_mapping_id = ?,
+      monday_item_id = ?,
+      metadata = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    clean(payload.title || existing.title),
+    clean(payload.detail || existing.detail),
+    clean(payload.itemType || payload.item_type || existing.item_type),
+    ownerAgentId,
+    owner.agentName,
+    businessEntityId,
+    clean(payload.companyId || existing.company_id || companyForBusinessEntity(businessEntityId)) || null,
+    clean(payload.clientName || existing.client_name),
+    clean(payload.projectName || existing.project_name),
+    normalizePriority(payload.priority || existing.priority),
+    normalizeStatus(payload.status || existing.status),
+    clean(payload.dueDate || existing.due_date),
+    clean(payload.blockedReason || existing.blocked_reason),
+    clean(payload.sourceReference || existing.source_reference),
+    payload.mondayBoardMappingId || existing.monday_board_mapping_id || null,
+    clean(payload.mondayItemId || existing.monday_item_id),
+    json(metadata),
+    nowIso(),
+    existing.id,
+  );
+  recordMondayAudit(db, {
+    eventType: "monday_readonly_work_item_updated",
+    userAction: payload.userAction || "monday-os:monday-readonly:update",
+    recordType: "work_item",
+    recordId: existing.id,
+    agentId: ownerAgentId,
+    dataCategories: ["monday_readonly", "work_item", "internal_monday_operating_system"],
+    metadata: {
+      sourceId: existing.source_id,
+      mondayItemId: payload.mondayItemId || existing.monday_item_id,
+      readOnly: true,
+    },
+  });
+  return mapWorkItem(db.prepare("SELECT * FROM work_items WHERE id = ?").get(existing.id));
+}
+
+export function syncMondayReadOnlyOperatingItems(db, { items = [], userAction = "monday-os:monday-readonly:refresh" } = {}) {
+  ensureMondayBoardMappings(db);
+  const mondayItems = Array.isArray(items) ? items : [];
+  let importedRecords = 0;
+  let updatedRecords = 0;
+  let skippedRecords = 0;
+  const records = [];
+
+  for (const item of mondayItems) {
+    const boardId = clean(item.boardId);
+    const externalId = clean(item.externalId);
+    if (!boardId || !externalId) {
+      skippedRecords += 1;
+      continue;
+    }
+    const mapping = upsertMondayReadOnlyMapping(db, item);
+    const sourceId = `${boardId}:${externalId}`;
+    const metadata = {
+      ...(item.rawSummary || {}),
+      boardId,
+      boardName: item.boardName || "",
+      groupName: item.groupName || "",
+      mondayItemUrl: item.mondayItemUrl || "",
+      columnSummary: item.columnSummary || {},
+      readOnly: true,
+      writesEnabled: false,
+      boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+    };
+    const payload = {
+      title: item.title,
+      detail: item.detail,
+      itemType: item.itemType || "task",
+      ownerAgentId: item.ownerAgentId || mapping.agentId,
+      businessEntityId: item.businessEntityId,
+      companyId: item.companyId,
+      clientName: item.clientName,
+      projectName: item.projectName,
+      priority: item.priority,
+      status: item.status,
+      dueDate: item.dueDate,
+      sourceType: "monday_readonly",
+      sourceId,
+      sourceReference: item.sourceReference || sourceReference("monday_readonly", sourceId, item.title),
+      mondayBoardMappingId: mapping.id,
+      mondayItemId: externalId,
+      metadata,
+      userAction,
+    };
+    const existing = findSourceRecord(db, "work_items", "monday_readonly", sourceId);
+    if (existing) {
+      records.push(updateMondayReadOnlyWorkItem(db, existing, payload));
+      updatedRecords += 1;
+    } else {
+      records.push(insertWorkItem(db, payload, { audit: false }));
+      importedRecords += 1;
+      recordMondayAudit(db, {
+        eventType: "monday_readonly_work_item_imported",
+        userAction,
+        recordType: "work_item",
+        recordId: records.at(-1).id,
+        agentId: payload.ownerAgentId,
+        dataCategories: ["monday_readonly", "work_item", "internal_monday_operating_system"],
+        metadata: { sourceId, mondayItemId: externalId, boardId, readOnly: true },
+      });
+    }
+  }
+
+  const workloads = calculateAgentWorkloads(db);
+  recordMondayAudit(db, {
+    eventType: "monday_readonly_sync_completed",
+    userAction,
+    recordType: "monday_readonly_sync",
+    dataCategories: ["monday_readonly", "work_item", "internal_monday_operating_system"],
+    metadata: {
+      itemsRead: mondayItems.length,
+      importedRecords,
+      updatedRecords,
+      skippedRecords,
+      workloadRows: workloads.length,
+      readOnly: true,
+      writesEnabled: false,
+    },
+  });
+
+  return {
+    itemsRead: mondayItems.length,
+    importedRecords,
+    updatedRecords,
+    skippedRecords,
+    workloadsCalculated: workloads.length,
+    records: records.slice(0, 25),
+    boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+  };
 }
 
 function createOperationalSource(db, table, type, payload, createFn) {
@@ -1574,9 +1863,10 @@ function listWorkloadMetrics(db) {
   `).all().map(mapWorkloadMetric);
 }
 
-function dashboardMetrics({ workItems, deliverables, risks, decisions, followups, feedback, boardMappings, workloadMetrics }) {
+function dashboardMetrics({ workItems, deliverables, risks, decisions, followups, feedback, boardMappings, workloadMetrics, syncStatus }) {
   const today = todayIsoDate();
   const active = workItems.filter((item) => !COMPLETE_STATUSES.has(item.status));
+  const readEnabledBoards = syncStatus.filter((item) => item.readEnabled).length;
   const workloadHealth = {
     green: workloadMetrics.filter((item) => item.healthStatus === "Green").length,
     amber: workloadMetrics.filter((item) => item.healthStatus === "Amber").length,
@@ -1595,6 +1885,7 @@ function dashboardMetrics({ workItems, deliverables, risks, decisions, followups
     meetingFollowups: followups.filter((item) => !COMPLETE_STATUSES.has(item.status)).length,
     feedbackForReview: feedback.filter((item) => item.recommendationStatus === "unreviewed").length,
     workloadHealth,
+    readEnabledBoards,
     mondayWritesEnabled: false,
   };
 }
@@ -1613,10 +1904,13 @@ export function getMondayOperatingDashboard(db) {
   const syncStatus = getSyncStatus(db);
   const agentWorkloads = calculateAgentWorkloads(db);
   const workloadMetrics = listWorkloadMetrics(db);
+  const mondayReadEnabled = syncStatus.some((item) => item.readEnabled);
   return {
     title: "Monday Operating System",
-    summary: "Internal Alfred work management foundation for future Monday.com boards. No live Monday.com read/write sync is active.",
-    metrics: dashboardMetrics({ workItems, deliverables, risks, decisions, followups: meetingFollowups, feedback, boardMappings, workloadMetrics }),
+    summary: mondayReadEnabled
+      ? "Internal Alfred work management foundation with read-only Monday.com board import enabled. Monday writes remain disabled."
+      : "Internal Alfred work management foundation for future Monday.com boards. No live Monday.com read/write sync is active.",
+    metrics: dashboardMetrics({ workItems, deliverables, risks, decisions, followups: meetingFollowups, feedback, boardMappings, workloadMetrics, syncStatus }),
     agentBoards: AGENT_BOARD_MODELS,
     agentWorkloads,
     workloadMetrics,
@@ -1637,9 +1931,10 @@ export function getMondayOperatingDashboard(db) {
       "Sarah",
       "Executive Briefing",
       "Memory",
+      "Monday.com read-only import",
       "Future Monday.com IDs",
     ],
-    boundary: MONDAY_OPERATING_BOUNDARY,
+    boundary: mondayReadEnabled ? MONDAY_READONLY_OPERATING_BOUNDARY : MONDAY_OPERATING_BOUNDARY,
   };
 }
 

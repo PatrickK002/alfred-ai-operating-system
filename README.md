@@ -161,6 +161,8 @@ Health and aggregate workflows:
 | `GET` | `/api/monday-os/dashboard` | Internal Monday Operating System dashboard with work items, workloads, deliverables, decisions, follow-ups and feedback |
 | `GET` | `/api/monday-os/briefing` | Monday OS signals for Alfred's executive briefing |
 | `POST` | `/api/monday-os/sync-meeting-followups` | Convert meeting actions, decisions, risks, opportunities and feedback into internal Alfred work records only |
+| `GET` | `/api/monday-os/monday-readonly/status` | Monday.com operating read configuration and read-only boundary |
+| `POST` | `/api/monday-os/monday-readonly/refresh` | Read configured Monday.com boards and upsert local Alfred work items; never writes back to Monday |
 | `GET` | `/api/monday-os/work-items` | List internal Alfred work items |
 | `POST` | `/api/monday-os/work-items` | Create a local work item; does not create a Monday.com item |
 | `PATCH` | `/api/monday-os/work-items/:id` | Update a local work item |
@@ -518,7 +520,7 @@ Example future feedback loops:
 
 Alfred now includes an internal Monday Operating System foundation.
 
-This is not a live Monday.com integration yet. It creates the local structured operating model that future Monday boards can map to after review and approval controls are stable.
+This is a local structured operating model with an optional Monday.com read-only import. Alfred can read configured Monday boards into local SQLite work items, but it still cannot create boards, create items, update items, send mutations or write back to Monday.com.
 
 Internal entities:
 
@@ -553,7 +555,7 @@ Statuses are standardised as `New`, `Planned`, `In Progress`, `Waiting`, `Blocke
 
 Priorities are standardised as `Low`, `Medium`, `High` and `Critical`.
 
-Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Executive Briefing, Memory and future Monday IDs.
+Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Executive Briefing, Memory and Monday.com read-only item IDs.
 
 Workload metrics are calculated locally from open work, high-priority items, overdue work, blocked items and deliverables due. The result is a `workload_score` from 0 to 100 with a Green, Amber or Red health label for each executive agent workspace.
 
@@ -561,7 +563,26 @@ Deliverables can preserve linked meeting, project, business and memory reference
 
 Meeting Intelligence can sync extracted meeting actions, decisions, risks, opportunities and feedback into local Alfred work records. This creates internal SQLite records only.
 
-Semantic memory indexes compact summaries of work items, deliverables, operational decisions and feedback when Voyage indexing is enabled. It does not index live Monday boards.
+Semantic memory indexes compact summaries of work items, deliverables, operational decisions and feedback when Voyage indexing is enabled. Imported Monday records are indexed from compact local summaries and source metadata only, not unbounded board dumps.
+
+### Monday.com Operating Read-Only Import
+
+Set these optional environment variables:
+
+```bash
+MONDAY_API_TOKEN="your-monday-api-token"
+MONDAY_OPERATING_BOARD_IDS="123456789,987654321"
+MONDAY_API_VERSION="2025-04"
+```
+
+`MONDAY_OPERATING_BOARD_IDS` is separate from `MONDAY_FINANCE_BOARD_IDS`. The operating import reads item names, groups, URLs, timestamps and column text from configured boards, then maps them into Alfred's local work queue using inferred agent, business, project/client, status, priority and due date metadata.
+
+Refresh options:
+
+- UI: Monday Operating System -> **Refresh Monday read-only**
+- API: `POST /api/monday-os/monday-readonly/refresh`
+
+Every refresh is audited. Re-import is idempotent by `boardId:itemId`: matching records are updated locally, missing records are imported, and records without a board/item ID are skipped. The Monday integration state is marked `Connected` only after a successful read.
 
 Security boundary:
 
@@ -619,7 +640,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, Monday.com read-only operating import, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -637,6 +658,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
+- `monday-readonly-operating.js` - read-only Monday.com operating board client and local work item mapper
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
