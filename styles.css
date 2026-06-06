@@ -1312,8 +1312,13 @@ h3 {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 24px;
   margin-bottom: 24px;
+}
+
+.section-intro > div {
+  min-width: 0;
 }
 
 .section-intro p:last-child {
@@ -2234,6 +2239,7 @@ h3 {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .sarah-actions select,
@@ -2241,6 +2247,7 @@ h3 {
 #sarah-deliverable-type {
   border: 1px solid var(--line);
   border-radius: 999px;
+  max-width: 100%;
   padding: 10px 12px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
