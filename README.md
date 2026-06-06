@@ -33,6 +33,58 @@ To use another port:
 PORT=4180 npm start
 ```
 
+## Cloud, PWA And Device Access
+
+Alfred is prepared for Azure App Service hosting and installable PWA access.
+
+Target architecture:
+
+```text
+GitHub -> GitHub Actions -> Azure App Service -> Alfred secure URL
+```
+
+Environment behaviour:
+
+- `development` - local use from a MacBook.
+- `testing` - `develop` branch deployment to an Azure testing App Service.
+- `production` - `main` branch deployment to an Azure production App Service.
+
+Recommended Azure App Service settings:
+
+```text
+NODE_ENV=production
+APP_ENV=production
+APP_BASE_URL=https://your-alfred-app.azurewebsites.net
+HOST=0.0.0.0
+PORT=<provided by Azure>
+AUTHENTICATION_ENABLED=false
+```
+
+Set real API keys and publish profiles only in Azure/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
+
+GitHub deployment configuration:
+
+- `CI` validates every pull request.
+- `Deploy Testing` runs on `develop` after tests pass and deploys only when `AZURE_TESTING_WEBAPP_NAME` and `AZURE_TESTING_PUBLISH_PROFILE` are configured.
+- `Deploy Production` runs on `main` after tests pass and deploys only when `AZURE_PRODUCTION_WEBAPP_NAME` and `AZURE_PRODUCTION_PUBLISH_PROFILE` are configured.
+
+PWA install:
+
+- MacBook Chrome: open Alfred, use **Create Shortcut**, then tick **Open as Window** and pin to Dock.
+- MacBook Safari: use **Add to Dock** where supported.
+- iPhone Safari: Share -> **Add to Home Screen**.
+- iPad Pro Safari: Share -> **Add to Home Screen**.
+
+The PWA includes `manifest.json`, `service-worker.js`, icon placeholders and `offline.html`. Offline mode only provides the installed shell; live executive data, approvals, voice, memory and integrations still require the backend.
+
+Production security notes:
+
+- HTTPS is enforced in `production` unless `ENFORCE_HTTPS=false` is explicitly set.
+- Production must not be publicly exposed until Microsoft Entra ID authentication is enabled.
+- No secrets are returned through `/api/health` or stored in frontend `localStorage`.
+- No external write actions are enabled.
+- Approval safeguards remain required for any future execution capability.
+
 ## Database
 
 The SQLite database is created automatically at:
@@ -76,7 +128,8 @@ Health and aggregate workflows:
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/health` | API and database health |
+| `GET` | `/api/health` | App, environment, database, integration, version, PWA and security health without secrets |
+| `GET` | `/api/app/status` | Public app metadata, release notes, environment validation and PWA readiness |
 | `GET` | `/api/dashboard` | Complete dashboard state |
 | `GET` | `/api/morning-brief` | Backend-generated executive brief |
 | `GET` | `/api/anthropic/status` | Anthropic configuration and read-only status |
@@ -319,6 +372,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 ## Architecture
 
 - `server.js` - HTTP server, REST routes and static frontend hosting
+- `app-metadata.js` - app version, release metadata, environment validation, PWA readiness and health response model
 - `db.js` - schema, seed data, resource persistence and briefing queries
 - `anthropic.js` - Claude Messages API client, CEO system prompt and structured output schemas
 - `ai.js` - read-only AI reasoning service and audit wrapper
@@ -331,7 +385,8 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
-- `index.html` / `styles.css` - executive command centre interface
+- `manifest.json` / `service-worker.js` / `offline.html` - installable PWA shell, static cache and offline fallback
+- `index.html` / `styles.css` - executive command centre interface and responsive iPad/iPhone layouts
 - `test/db.test.js` - database and workflow tests
 
 ## Next Integration Steps
@@ -345,6 +400,8 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.
 8. Add retrieval evaluation and retention controls for semantic memory.
 9. Add explicit-consent live provider probes for Deepgram and ElevenLabs once test-call behaviour is reviewed.
+10. Add Microsoft Entra ID authentication before exposing production Alfred publicly.
+11. Replace placeholder SVG app icons with final production icon assets and generated Apple splash screens.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 
