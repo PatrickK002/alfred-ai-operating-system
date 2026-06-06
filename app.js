@@ -647,6 +647,61 @@ function openItems() {
   return state.operatingItems.filter((item) => item.status === "open");
 }
 
+function topicLabel(item = {}) {
+  const company = companyFor(item.companyId);
+  return [
+    company?.shortName || item.companyId || "Group",
+    item.type || "signal",
+    item.priority ? `${item.priority} priority` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function suggestedActionFor(item = {}) {
+  if (item.type === "risk") return "Review risk, confirm owner and decide whether Patrick input is required.";
+  if (item.type === "decision") return "Prepare options, assumptions and the approval question before deciding.";
+  if (item.type === "opportunity") return "Clarify next evidence needed before committing time or capital.";
+  if (item.type === "action") return "Confirm next step, due date and whether the item is blocked.";
+  return "Review source context and keep action advisory until approved.";
+}
+
+function renderCommandOperatingDeck(priorityItems = []) {
+  const topics = priorityItems.length ? priorityItems : openItems().slice(0, 4);
+  $("#current-topics-panel").innerHTML = topics.length
+    ? topics.map((item) => `
+        <article style="--company-color:${escapeHTML(companyFor(item.companyId)?.color || "var(--accent)")}">
+          <span class="priority-marker ${escapeHTML(item.priority || "medium")}"></span>
+          <div>
+            <strong>${escapeHTML(item.title)}</strong>
+            <small>${escapeHTML(topicLabel(item))}</small>
+          </div>
+        </article>
+      `).join("")
+    : '<div class="empty-state">No current topics are above the line.</div>';
+
+  $("#suggested-actions-panel").innerHTML = topics.length
+    ? topics.slice(0, 3).map((item) => `
+        <article>
+          <strong>${escapeHTML(item.title)}</strong>
+          <span>${escapeHTML(suggestedActionFor(item))}</span>
+          <small>No external action will be taken without approval.</small>
+        </article>
+      `).join("")
+    : '<div class="empty-state">Generate a briefing or add operating records to populate suggested actions.</div>';
+
+  $("#command-agent-presence").innerHTML = executiveTeamRoster()
+    .filter((agent) => agent.statusCategory === "active")
+    .map((agent) => `
+      <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
+        ${renderAgentAvatar(agent, "small")}
+        <div>
+          <strong>${escapeHTML(agent.name)}</strong>
+          <span>${escapeHTML(agent.title)}</span>
+          <small>${escapeHTML(agent.status)} · ${escapeHTML(agent.avatarProvider)}</small>
+        </div>
+      </article>
+    `).join("");
+}
+
 function showToast(message) {
   const toast = $("#toast");
   toast.textContent = message;
@@ -695,6 +750,8 @@ function renderCommand() {
         )
         .join("")
     : '<div class="empty-state">No open items require attention.</div>';
+
+  renderCommandOperatingDeck(priorityItems);
 
   const metrics = [
     ["COMPANIES", state.companies.length, "Group portfolio"],

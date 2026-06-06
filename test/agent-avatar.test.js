@@ -141,6 +141,9 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   const app = readFileSync("app.js", "utf8");
   assert.match(html, /id="executive-team-identity"/);
   assert.match(html, /id="sidebar-executive-team"/);
+  assert.match(html, /id="current-topics-panel"/);
+  assert.match(html, /id="suggested-actions-panel"/);
+  assert.match(html, /id="command-agent-presence"/);
   assert.match(html, /id="voice-agent-identity"/);
   assert.match(html, /id="voice-avatar-presence"/);
   assert.match(html, /id="avatar-provider-status"/);
@@ -150,6 +153,7 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);
   assert.match(app, /renderSidebarExecutiveTeam/);
+  assert.match(app, /renderCommandOperatingDeck/);
   assert.match(app, /enhanceAvatarFallbacks/);
   assert.doesNotMatch(app, /roster\.slice\(0,\s*9\)/);
 });

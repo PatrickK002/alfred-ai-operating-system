@@ -495,8 +495,99 @@ h3 {
 
 .core-panel,
 .attention-panel,
-.company-status {
+.company-status,
+.command-deck-panel {
   padding: 25px;
+}
+
+.executive-operating-deck {
+  display: grid;
+  grid-template-columns: 1.1fr 1.1fr 0.9fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.current-topics-panel,
+.suggested-actions-panel,
+.command-agent-presence {
+  display: grid;
+  gap: 10px;
+}
+
+.current-topics-panel article,
+.suggested-actions-panel article,
+.command-agent-presence article {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(98, 234, 213, 0.035), rgba(127, 104, 255, 0.026)),
+    rgba(255, 255, 255, 0.022);
+}
+
+.current-topics-panel article {
+  grid-template-columns: 8px minmax(0, 1fr);
+  border-color: color-mix(in srgb, var(--company-color, var(--accent)) 28%, var(--line));
+}
+
+.suggested-actions-panel article,
+.command-agent-presence article {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.command-agent-presence article {
+  grid-template-columns: auto minmax(0, 1fr);
+  border-color: color-mix(in srgb, var(--agent-accent, var(--accent)) 24%, var(--line));
+}
+
+.current-topics-panel strong,
+.current-topics-panel small,
+.suggested-actions-panel strong,
+.suggested-actions-panel span,
+.suggested-actions-panel small,
+.command-agent-presence strong,
+.command-agent-presence span,
+.command-agent-presence small {
+  display: block;
+}
+
+.current-topics-panel strong,
+.suggested-actions-panel strong,
+.command-agent-presence strong {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.suggested-actions-panel span,
+.command-agent-presence span {
+  margin-top: 5px;
+  color: #9eb1ad;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.current-topics-panel small,
+.suggested-actions-panel small,
+.command-agent-presence small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.advisory-label {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.visual-label {
+  color: #b18ae2;
+  background: rgba(177, 138, 226, 0.1);
 }
 
 .panel-heading {
@@ -3481,6 +3572,7 @@ dialog::backdrop {
   .voice-layout,
   .settings-grid,
   .property-layout,
+  .executive-operating-deck,
   .project-detail-grid { grid-template-columns: 1fr; }
 }
 
@@ -3567,6 +3659,7 @@ dialog::backdrop {
   .ipad-executive-grid,
   .sarah-metrics,
   .sarah-grid,
+  .executive-operating-deck,
   .project-intelligence-signals,
   .project-search-form,
   .meeting-layout,
