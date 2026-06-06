@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   checks:
     name: Node checks
@@ -47,6 +50,15 @@ jobs:
 
       - name: Check semantic memory syntax
         run: node --check semantic-memory.js
+
+      - name: Check CFO finance syntax
+        run: node --check financial.js
+
+      - name: Check order book importer syntax
+        run: node --check excel-orderbook.js
+
+      - name: Check Monday finance syntax
+        run: node --check monday-finance.js
 
       - name: Check briefing intelligence syntax
         run: node --check briefing.js

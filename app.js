@@ -166,6 +166,16 @@ const seedData = {
       tools: [],
       status: "Framework only",
     },
+    {
+      id: "olivia",
+      name: "Olivia",
+      role: "Chief Financial Officer",
+      companyId: "group",
+      department: "Finance",
+      mission: "Act as Group CFO across Alfred-managed businesses with read-only revenue, forecast, debtor, KPI and board reporting intelligence.",
+      tools: [],
+      status: "Framework only",
+    },
   ],
   integrations: [
     { id: "outlook", name: "Microsoft Outlook", symbol: "O", description: "Read and search Outlook email for briefings. Sending and drafting are disabled.", status: "Not connected" },
@@ -189,6 +199,40 @@ const seedData = {
     releaseReady: 0,
     executionEnabled: false,
   },
+  financial: {
+    businessEntities: [
+      { id: "group", name: "Patrick King Group", entityType: "group", parentEntityId: null, companyId: null, status: "active" },
+      { id: "digitize", name: "Digitize Consultants", entityType: "business", parentEntityId: "group", companyId: "digitize", status: "active" },
+      { id: "council-assurance-platform", name: "Council Assurance Platform", entityType: "product", parentEntityId: "group", companyId: "product", status: "planned" },
+      { id: "media-businesses", name: "Media Businesses", entityType: "division", parentEntityId: "group", companyId: "media", status: "planned" },
+      { id: "ai-businesses", name: "AI Businesses", entityType: "division", parentEntityId: "group", companyId: "venture", status: "planned" },
+      { id: "future-saas-products", name: "Future SaaS Products", entityType: "division", parentEntityId: "group", companyId: "product", status: "planned" },
+      { id: "future-ventures", name: "Future Ventures", entityType: "venture", parentEntityId: "group", companyId: "venture", status: "planned" },
+    ],
+    scope: { type: "group", id: "group", label: "Patrick King Group", entityIds: ["group", "digitize"] },
+    metrics: {
+      securedRevenue: 0,
+      pipelineRevenue: 0,
+      weightedForecastRevenue: 0,
+      outstandingDebtors: 0,
+      overdueDebtors: 0,
+      invoiceCount: 0,
+      orderBookEntries: 0,
+    },
+    revenueByFinancialYear: [],
+    revenueByQuarter: [],
+    revenueByBusiness: [],
+    revenueByClient: [],
+    revenueByProject: [],
+    revenueByServiceLine: [],
+    invoiceStatus: {},
+    debtors: [],
+    forecast: { monthly: [], quarterly: [], annual: [], gapAnalysis: [], resourceRevenue: [] },
+    risks: [],
+    opportunities: [],
+    monday: { invoices: [], readOnly: true },
+    boundary: { readOnly: true },
+  },
 };
 
 let state = loadState();
@@ -198,6 +242,8 @@ let currentBriefingId = null;
 let currentBrief = null;
 let memoryFilter = "all";
 let semanticMemoryStatus = null;
+let currentBoardReportMarkdown = "";
+let financeScope = { type: "group", id: "group" };
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -249,6 +295,7 @@ async function loadDashboard() {
     const microsoftStatus = await apiRequest("/api/microsoft/status");
     if (microsoftStatus.connected) state = await apiRequest("/api/dashboard");
     semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => null);
+    state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -272,6 +319,14 @@ function escapeHTML(value = "") {
 
 function companyFor(id) {
   return state.companies.find((company) => company.id === id);
+}
+
+function formatMoney(value = 0) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0);
 }
 
 function openItems() {
@@ -635,9 +690,115 @@ function renderApprovals() {
     : '<div class="empty-state approval-empty">No actions are awaiting approval. Alfred has not executed anything.</div>';
 }
 
+function renderFinanceList(records, empty = "No financial data yet.") {
+  return records?.length
+    ? `<div class="finance-list">${records.slice(0, 8).map((item) => `
+        <article>
+          <span>${escapeHTML(item.label || item.clientName || item.title || "Unassigned")}</span>
+          <strong>${formatMoney(item.amountGbp ?? item.amountOutstandingGbp ?? item.valueGbp ?? 0)}</strong>
+          ${item.detail ? `<small>${escapeHTML(item.detail)}</small>` : ""}
+        </article>
+      `).join("")}</div>`
+    : `<div class="empty-state finance-empty">${empty}</div>`;
+}
+
+function financeScopeValue(entity) {
+  return `${entity.entityType || "business"}:${entity.id}`;
+}
+
+function selectedFinanceEntity() {
+  const finance = state.financial || seedData.financial;
+  const entities = finance.businessEntities?.length ? finance.businessEntities : seedData.financial.businessEntities;
+  return entities.find((entity) => entity.id === financeScope.id)
+    || entities.find((entity) => entity.id === finance.scope?.id)
+    || entities.find((entity) => entity.id === "group")
+    || entities[0];
+}
+
+function selectedOperationalBusinessEntityId() {
+  const entity = selectedFinanceEntity();
+  if (!entity || entity.entityType === "group") return "digitize";
+  return entity.id;
+}
+
+function financeScopeQuery() {
+  const entity = selectedFinanceEntity();
+  const type = entity?.entityType || financeScope.type || "group";
+  const id = entity?.id || financeScope.id || "group";
+  return `scopeType=${encodeURIComponent(type)}&scopeId=${encodeURIComponent(id)}`;
+}
+
+function renderFinanceScopeSelector() {
+  const select = $("#finance-scope");
+  if (!select) return;
+  const finance = state.financial || seedData.financial;
+  const entities = finance.businessEntities?.length ? finance.businessEntities : seedData.financial.businessEntities;
+  const selected = selectedFinanceEntity() || entities[0];
+  financeScope = { type: selected?.entityType || "group", id: selected?.id || "group" };
+  select.innerHTML = entities.map((entity) => `
+    <option value="${escapeHTML(financeScopeValue(entity))}" ${entity.id === financeScope.id ? "selected" : ""}>
+      ${escapeHTML(entity.name)} (${escapeHTML(entity.entityType)})
+    </option>
+  `).join("");
+}
+
+function renderFinance() {
+  const finance = state.financial || seedData.financial;
+  renderFinanceScopeSelector();
+  const metrics = finance.metrics || {};
+  $("#finance-metrics").innerHTML = [
+    ["SECURED REVENUE", metrics.securedRevenue],
+    ["PIPELINE", metrics.pipelineRevenue],
+    ["WEIGHTED FORECAST", metrics.weightedForecastRevenue],
+    ["OUTSTANDING DEBTORS", metrics.outstandingDebtors],
+    ["OVERDUE", metrics.overdueDebtors],
+    ["ORDER BOOK ROWS", metrics.orderBookEntries],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${typeof value === "number" && label !== "ORDER BOOK ROWS" ? formatMoney(value) : value || 0}</strong>
+    </article>
+  `).join("");
+
+  const forecast = finance.forecast || {};
+  $("#finance-forecast").innerHTML = `
+    <div class="forecast-cases">
+      <article><small>Best case</small><strong>${formatMoney(forecast.bestCase)}</strong></article>
+      <article><small>Expected</small><strong>${formatMoney(forecast.expectedCase)}</strong></article>
+      <article><small>Worst case</small><strong>${formatMoney(forecast.worstCase)}</strong></article>
+    </div>
+    ${renderFinanceList(finance.revenueByQuarter || [], "Import the order book to see quarterly revenue.")}
+  `;
+  $("#finance-clients").innerHTML = `
+    <h4>Business entities</h4>
+    ${renderFinanceList(finance.revenueByBusiness || [], "No business-level revenue imported yet.")}
+    ${renderFinanceList(finance.revenueByClient || [], "No client revenue imported yet.")}
+    <h4>Service lines</h4>
+    ${renderFinanceList(finance.revenueByServiceLine || [], "No service line revenue imported yet.")}
+  `;
+  const debtors = finance.debtors || [];
+  $("#finance-debtors").innerHTML = debtors.length
+    ? `<div class="finance-list">${debtors.map((debtor) => `
+        <article>
+          <span>${escapeHTML(debtor.clientName)}</span>
+          <strong>${formatMoney(debtor.amountOutstandingGbp)}</strong>
+          <small>${formatMoney(debtor.amountOverdueGbp)} overdue · ${debtor.invoiceCount} invoice(s)</small>
+        </article>
+      `).join("")}</div>`
+    : `<div class="empty-state finance-empty">No Monday invoice summaries have been refreshed yet.</div>`;
+  const risks = finance.risks || [];
+  const opportunities = finance.opportunities || [];
+  $("#finance-insights").innerHTML = `
+    ${renderFinanceList(risks.map((risk) => ({ ...risk, amountGbp: risk.amountGbp || 0 })), "No financial risks detected yet.")}
+    <h4>Opportunities</h4>
+    ${renderFinanceList(opportunities.map((opportunity) => ({ ...opportunity, amountGbp: opportunity.valueGbp || 0 })), "No financial opportunities detected yet.")}
+  `;
+}
+
 function renderAll() {
   renderCommand();
   renderCompanies();
+  renderFinance();
   renderMemory();
   renderAgents();
   renderApprovals();
@@ -648,6 +809,7 @@ function navigate(view) {
   const titles = {
     command: "Executive Command",
     companies: "Companies",
+    finance: "Finance",
     memory: "Memory",
     agents: "AI Executive Team",
     approvals: "Approvals",
@@ -1081,6 +1243,126 @@ async function toggleSemanticIndexing(event) {
   }
 }
 
+async function refreshFinancialDashboard() {
+  if (!backendAvailable) {
+    showToast("Finance dashboard requires the backend");
+    return;
+  }
+  state.financial = await apiRequest(`/api/financial/dashboard?${financeScopeQuery()}`);
+  persist();
+  renderFinance();
+}
+
+async function changeFinanceScope(event) {
+  const [type, id] = String(event.target.value || "group:group").split(":");
+  financeScope = { type: type || "group", id: id || "group" };
+  await refreshFinancialDashboard();
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read order book file"));
+    reader.onload = () => resolve(String(reader.result).split(",").pop());
+    reader.readAsDataURL(file);
+  });
+}
+
+async function importOrderBookFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!backendAvailable) {
+    showToast("Order book import requires the backend");
+    return;
+  }
+  try {
+    const dataBase64 = await readFileAsBase64(file);
+    const result = await apiRequest("/api/financial/order-book/import", {
+      method: "POST",
+      body: JSON.stringify({ fileName: file.name, dataBase64, businessEntityId: selectedOperationalBusinessEntityId() }),
+    });
+    await refreshFinancialDashboard();
+    showToast(`Imported ${result.rowsImported} order book row(s)`);
+  } catch (error) {
+    if (/status 409/.test(error.message) || /overwrite/i.test(error.message)) {
+      showToast("Import requires overwrite approval. Re-import through API with overwriteApproved once reviewed.");
+    } else {
+      showToast(error.message);
+    }
+  }
+}
+
+async function refreshMondayFinance() {
+  if (!backendAvailable) {
+    showToast("Monday refresh requires the backend");
+    return;
+  }
+  try {
+    const result = await apiRequest("/api/financial/monday/refresh", {
+      method: "POST",
+      body: JSON.stringify({ businessEntityId: selectedOperationalBusinessEntityId() }),
+    });
+    await refreshFinancialDashboard();
+    showToast(`Monday read-only refresh stored ${result.invoicesStored} invoice(s)`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function generateBoardReportView() {
+  if (!backendAvailable) {
+    showToast("Board reports require the backend");
+    return;
+  }
+  try {
+    const entity = selectedFinanceEntity();
+    const report = await apiRequest("/api/financial/board-reports", {
+      method: "POST",
+      body: JSON.stringify({ scopeType: entity?.entityType || "group", scopeId: entity?.id || "group" }),
+    });
+    currentBoardReportMarkdown = report.markdown;
+    $("#board-report-output").textContent = report.markdown;
+    await refreshFinancialDashboard();
+    showToast("Board report generated");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function askOlivia() {
+  if (!backendAvailable) {
+    showToast("Olivia analysis requires the backend");
+    return;
+  }
+  try {
+    const entity = selectedFinanceEntity();
+    const analysis = await apiRequest("/api/financial/olivia-analysis", {
+      method: "POST",
+      body: JSON.stringify({ scopeType: entity?.entityType || "group", scopeId: entity?.id || "group" }),
+    });
+    $("#finance-insights").innerHTML = `
+      <div class="ai-boundary">Olivia analysed local financial records only. No invoices, payments, Monday boards, bank feeds or accounting records were modified.</div>
+      <section class="ai-summary">
+        <h3>Executive summary</h3>
+        <p>${escapeHTML(analysis.executiveSummary)}</p>
+      </section>
+      ${renderList("CFO insights", analysis.insights, (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.detail)}</span>
+        <small>${escapeHTML(item.severity)} · ${escapeHTML(item.sourceRef)}</small>
+      `)}
+      ${renderList("Recommendations", analysis.recommendedActions, (item) => `
+        <strong>${escapeHTML(item.action)}</strong>
+        <small>${item.requiresApproval ? "Future approval required before action" : "Recommendation only"} · no executor installed</small>
+      `)}
+    `;
+    showToast("Olivia analysis generated");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function reviewApproval(id, decision) {
   if (!backendAvailable) {
     showToast("Approvals require the backend audit trail");
@@ -1289,6 +1571,8 @@ function runCommand(command) {
   } else if (normalized.includes("opportun")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "opportunity").length} active opportunity record(s)`);
+  } else if (normalized.includes("finance") || normalized.includes("olivia") || normalized.includes("revenue") || normalized.includes("forecast")) {
+    navigate("finance");
   } else if (normalized.includes("memory") || normalized.includes("remember") || normalized.includes("westminster")) {
     navigate("memory");
     if (normalized.includes("westminster")) {
@@ -1314,6 +1598,20 @@ $("#add-memory").addEventListener("click", () => openRecordForm("memory"));
 $("#add-agent").addEventListener("click", () => openRecordForm("agent"));
 $("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
+$("#import-order-book").addEventListener("click", () => $("#order-book-file").click());
+$("#order-book-file").addEventListener("change", importOrderBookFile);
+$("#finance-scope").addEventListener("change", changeFinanceScope);
+$("#refresh-monday-finance").addEventListener("click", refreshMondayFinance);
+$("#generate-board-report").addEventListener("click", generateBoardReportView);
+$("#ask-olivia").addEventListener("click", askOlivia);
+$("#copy-board-report").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(currentBoardReportMarkdown || $("#board-report-output").textContent);
+    showToast("Board report copied");
+  } catch {
+    showToast("Clipboard access is unavailable");
+  }
+});
 $("#record-form").addEventListener("submit", submitRecord);
 $("#memory-search").addEventListener("input", renderMemory);
 $("#memory-filters").addEventListener("click", (event) => {
