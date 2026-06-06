@@ -210,6 +210,218 @@ const SCHEMA = `
     UNIQUE(project_profile_id, source_system, external_id)
   );
 
+  CREATE TABLE IF NOT EXISTS meeting_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_system TEXT NOT NULL DEFAULT 'microsoft_calendar',
+    external_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    start_datetime TEXT NOT NULL DEFAULT '',
+    end_datetime TEXT NOT NULL DEFAULT '',
+    organizer_name TEXT NOT NULL DEFAULT '',
+    organizer_email TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    web_url TEXT NOT NULL DEFAULT '',
+    online_meeting_url TEXT NOT NULL DEFAULT '',
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL DEFAULT '',
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    project_name TEXT NOT NULL DEFAULT '',
+    business_entity_id TEXT REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    related_agent TEXT NOT NULL DEFAULT 'alfred',
+    transcript_available INTEGER NOT NULL DEFAULT 0 CHECK(transcript_available IN (0, 1)),
+    transcript_source TEXT NOT NULL DEFAULT '',
+    transcript_reference TEXT NOT NULL DEFAULT '',
+    transcript_permission TEXT NOT NULL DEFAULT 'not_available',
+    transcript_status TEXT NOT NULL DEFAULT 'not_available',
+    source_reference TEXT NOT NULL DEFAULT '',
+    confidence_level TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence_level IN ('confirmed', 'inferred', 'assumption')),
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_system, external_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_attendees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'attendee',
+    response_status TEXT NOT NULL DEFAULT '',
+    required INTEGER NOT NULL DEFAULT 0 CHECK(required IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(meeting_id, email, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_transcripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    source_system TEXT NOT NULL DEFAULT 'teams',
+    transcript_reference TEXT NOT NULL DEFAULT '',
+    content_summary TEXT NOT NULL DEFAULT '',
+    transcript_text TEXT NOT NULL DEFAULT '',
+    raw_content_stored INTEGER NOT NULL DEFAULT 0 CHECK(raw_content_stored IN (0, 1)),
+    permission_status TEXT NOT NULL DEFAULT 'not_available',
+    available INTEGER NOT NULL DEFAULT 0 CHECK(available IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    confirmed_facts TEXT NOT NULL DEFAULT '[]',
+    inferred_points TEXT NOT NULL DEFAULT '[]',
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    confidence_level TEXT NOT NULL DEFAULT 'assumption',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner TEXT NOT NULL DEFAULT '',
+    due_date TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    confidence_level TEXT NOT NULL DEFAULT 'inferred',
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    approval_required INTEGER NOT NULL DEFAULT 0 CHECK(approval_required IN (0, 1)),
+    confidence_level TEXT NOT NULL DEFAULT 'inferred',
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    confidence_level TEXT NOT NULL DEFAULT 'inferred',
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    confidence_level TEXT NOT NULL DEFAULT 'inferred',
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    owner TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    confidence_level TEXT NOT NULL DEFAULT 'inferred',
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    output_type TEXT NOT NULL DEFAULT 'meeting_summary',
+    agent_id TEXT NOT NULL DEFAULT 'alfred',
+    user_feedback TEXT NOT NULL DEFAULT '',
+    recommendation_status TEXT NOT NULL DEFAULT 'unreviewed',
+    follow_up_result TEXT NOT NULL DEFAULT '',
+    lesson_learned TEXT NOT NULL DEFAULT '',
+    memory_update_reference TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_agent_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    review_type TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '[]',
+    concerns TEXT NOT NULL DEFAULT '[]',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    relevance TEXT NOT NULL DEFAULT 'relevant',
+    status TEXT NOT NULL DEFAULT 'planned_review',
+    confidence_level TEXT NOT NULL DEFAULT 'assumption',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(meeting_id, agent_id, review_type)
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_memory_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meeting_records(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    semantic_memory_id INTEGER REFERENCES semantic_memory(id) ON DELETE SET NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    relevance_score REAL NOT NULL DEFAULT 0.7,
+    sensitivity_category TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(meeting_id, source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER REFERENCES meeting_records(id) ON DELETE SET NULL,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    source_system TEXT NOT NULL DEFAULT 'alfred',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT 'deterministic-meeting-intelligence-v1',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS meeting_records_start_datetime
+  ON meeting_records(start_datetime);
+
+  CREATE INDEX IF NOT EXISTS meeting_actions_status
+  ON meeting_actions(status, priority);
+
+  CREATE INDEX IF NOT EXISTS meeting_risks_status
+  ON meeting_risks(status, severity);
+
   CREATE TABLE IF NOT EXISTS project_email_signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -1547,6 +1759,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateApprovalSchema(db);
   migrateFinancialBusinessSchema(db);
   migrateProjectIntelligenceSchema(db);
+  migrateMeetingIntelligenceSchema(db);
   migratePropertySchema(db);
   seedDatabase(db);
   return db;
@@ -1685,6 +1898,19 @@ function migrateProjectIntelligenceSchema(db) {
   addColumn("project_documents", "owner_name TEXT NOT NULL DEFAULT ''");
   addColumn("project_documents", "location TEXT NOT NULL DEFAULT ''");
   db.exec("CREATE VIEW IF NOT EXISTS project_emails AS SELECT * FROM project_email_signals");
+}
+
+function migrateMeetingIntelligenceSchema(db) {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS meeting_records_start_datetime
+    ON meeting_records(start_datetime);
+
+    CREATE INDEX IF NOT EXISTS meeting_actions_status
+    ON meeting_actions(status, priority);
+
+    CREATE INDEX IF NOT EXISTS meeting_risks_status
+    ON meeting_risks(status, severity);
+  `);
 }
 
 function migratePropertySchema(db) {
@@ -3212,6 +3438,63 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.organizer ? `Organizer: ${row.organizer}.` : "",
         row.body_preview,
         `Association: ${row.association_reason || "metadata match"}.`,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const meetingSummaries = db.prepare(`
+    SELECT
+      s.*,
+      m.title,
+      m.start_datetime,
+      m.client_name,
+      m.project_name,
+      m.company_id,
+      m.transcript_status,
+      m.source_reference
+    FROM meeting_summaries s
+    JOIN meeting_records m ON m.id = s.meeting_id
+    ORDER BY COALESCE(NULLIF(m.start_datetime, ''), s.created_at) DESC, s.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of meetingSummaries) {
+    records.push(semanticRecord({
+      sourceType: "meeting_summary",
+      sourceId: row.id,
+      sourceCreatedAt: row.start_datetime || row.created_at,
+      title: row.title || "Meeting summary",
+      summary: [
+        `Meeting summary: ${row.title}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Transcript status: ${row.transcript_status}.`,
+        row.summary,
+        "Meeting memory contains summaries and metadata only; raw audio is not stored.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const meetingFeedback = db.prepare(`
+    SELECT f.*, m.title, m.client_name, m.project_name, m.start_datetime
+    FROM meeting_feedback f
+    JOIN meeting_records m ON m.id = f.meeting_id
+    ORDER BY f.created_at DESC, f.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of meetingFeedback) {
+    records.push(semanticRecord({
+      sourceType: "meeting_feedback",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: `Meeting feedback: ${row.title}`,
+      summary: [
+        `Meeting feedback: ${row.title}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        row.user_feedback,
+        row.recommendation_status ? `Recommendation status: ${row.recommendation_status}.` : "",
+        row.follow_up_result ? `Follow-up result: ${row.follow_up_result}.` : "",
+        row.lesson_learned ? `Lesson learned: ${row.lesson_learned}.` : "",
       ].filter(Boolean).join(" "),
     }));
   }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "alfred-pwa-v0.4.4";
+const CACHE_NAME = "alfred-pwa-v0.4.5";
 const STATIC_ASSETS = [
   "/",
   "/index.html",

@@ -149,6 +149,15 @@ Health and aggregate workflows:
 | `GET` | `/api/voice/conversations?limit=20` | List locally stored voice conversation turns |
 | `POST` | `/api/voice/conversations/purge` | Delete local voice conversation turns older than the configured retention threshold |
 | `GET` | `/api/voice/audit?limit=50` | Metadata-only voice audit events |
+| `GET` | `/api/meeting-intelligence/dashboard` | Teams Meeting Intelligence dashboard with metadata, follow-ups, reviews and transcript availability |
+| `GET` | `/api/meeting-intelligence/meetings` | List locally stored meeting records |
+| `POST` | `/api/meeting-intelligence/meetings` | Create a local meeting record or transcript-supplied meeting summary |
+| `GET` | `/api/meeting-intelligence/meetings/:id` | Meeting detail with attendees, summary, actions, decisions, risks, feedback, reviews and memory links |
+| `POST` | `/api/meeting-intelligence/import-calendar` | Import read-only Microsoft calendar metadata; does not read Teams transcripts or modify Microsoft 365 |
+| `POST` | `/api/meeting-intelligence/meetings/:id/transcript` | Process a user-supplied/permitted transcript into summaries and follow-up records |
+| `POST` | `/api/meeting-intelligence/meetings/:id/feedback` | Capture Patrick feedback on meeting outputs and lessons learned |
+| `GET` | `/api/meeting-intelligence/search?q=Westminster` | Search meeting records, actions, decisions, risks and feedback |
+| `GET` | `/api/meeting-intelligence/audit` | Metadata-only meeting intelligence audit events |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -246,6 +255,7 @@ curl -X POST http://localhost:4173/api/actions \
 - Agent definitions and their actual status
 - Westbridge property opportunity, due diligence and cashflow signals
 - Sarah and Project Intelligence attention signals
+- Teams Meeting Intelligence actions, risks, decisions, missing transcripts and Sentinel confidentiality concerns
 
 No agent is presented as active unless its stored status says it is connected. Calendar meetings are explicitly unavailable until the calendar integration is connected.
 
@@ -409,27 +419,33 @@ Sentinel is advisory and planned only. This phase adds no tenant administration,
 
 Sentinel must exist before future write-capable or autonomous agents.
 
-## Teams Meeting Intelligence Roadmap
+## Teams Meeting Intelligence
 
-Future branch: `feature/teams-meeting-intelligence`.
+Teams Meeting Intelligence is Alfred's read-only meeting knowledge layer.
 
-Do not implement Teams integration yet. The future read-only phase should allow Alfred to use Microsoft Teams meeting transcripts, calendar context and meeting metadata to support executive operations.
+It combines:
 
-Future scope:
+- Microsoft calendar metadata through the existing read-only Microsoft 365 connection
+- Locally supplied and permitted Teams transcript text, where available
+- Structured meeting records, attendees, summaries, actions, decisions, risks, opportunities, questions and feedback
+- Agent reviews from Alfred, Sarah, Olivia, Westbridge Property Director and Sentinel where the meeting context is relevant
+- Meeting memory links for Voyage semantic retrieval using summaries and metadata first
 
-- Read Teams meeting transcripts where available
-- Read meeting metadata from calendar
-- Identify related project, client, business and agent
-- Generate meeting summaries
-- Extract actions, decisions, risks, opportunities, questions and follow-ups
-- Link meeting intelligence to project records
-- Link meeting intelligence to Olivia financial context
-- Link meeting intelligence to Sarah project context
-- Link meeting intelligence to Westbridge property context
-- Store meeting memory
-- Produce source references
+Calendar import is metadata-only. Alfred records the title, time, organiser, attendees, web URL, meeting URL, client/project association and transcript status. If no transcript is available, the meeting detail explicitly says Alfred reviewed metadata only and did not infer meeting minutes.
 
-Future meeting agent contributions:
+Transcript processing is local and permission-led. When transcript text is provided to Alfred, the system extracts a compact summary, actions, decisions, risks, opportunities, questions and feedback. Raw full transcript text is not stored by default. Raw audio is never stored. Meeting memory contains summaries, metadata and source references rather than unbounded transcript dumps.
+
+Meeting Intelligence contributes to:
+
+- Executive briefing
+- Project Intelligence
+- Memory search
+- Risk and opportunity review
+- Decision review
+- Sentinel confidentiality and access-control review
+- Agent feedback loop foundation
+
+Meeting agent contributions:
 
 - Alfred: executive summary, actions, decisions, risks, opportunities and follow-ups
 - Sarah: project/digital construction review, BIM/ISO 19650/COBie/GIS observations and information management risks
@@ -437,7 +453,25 @@ Future meeting agent contributions:
 - Westbridge: property opportunity implications, due diligence implications and portfolio risk
 - Sentinel: security/data protection concerns, confidentiality risks, access-control risks and AI-governance risks
 
-Teams Meeting Intelligence should be read-only first.
+Security boundary:
+
+- No Teams posts
+- No email sending
+- No calendar updates
+- No Microsoft write scopes
+- No SharePoint or OneDrive writes
+- No Monday.com writes
+- No financial or property execution
+- No automated follow-up creation outside Alfred
+- No autonomous agents
+
+Current limitations:
+
+- Microsoft Graph transcript retrieval is not implemented in this phase.
+- Full document/audio indexing is not enabled.
+- Speaker diarisation and high-confidence action ownership require future transcript metadata.
+- Agent reviews are deterministic advisory summaries unless routed through the Claude analysis layer later.
+- Feedback is stored locally for learning and memory; it does not trigger external action.
 
 ## Agent Feedback Loop Roadmap
 
@@ -523,7 +557,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -539,6 +573,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `property.js` - Westbridge portfolio metrics, deal analysis, rules engine, due diligence, property memory and audit logging
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
+- `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
@@ -553,13 +588,14 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 2. Add a separately reviewed Microsoft write adapter that consumes approved requests.
 3. Add idempotency, expiry and re-authentication checks before any approved action can execute.
 4. Add Monday.com project and task synchronization.
-5. Ingest Krisp transcripts into memories and actions.
+5. Add explicit transcript connectors only after a permissions review; keep transcript unavailable states visible.
 6. Add retention controls, encryption and role-based access for financial intelligence tables.
 7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.
 8. Add retrieval evaluation and retention controls for semantic memory.
 9. Add explicit-consent live provider probes for Deepgram and ElevenLabs once test-call behaviour is reviewed.
 10. Add Microsoft Entra ID authentication before exposing production Alfred publicly.
 11. Replace placeholder SVG app icons with final production icon assets and generated Apple splash screens.
+12. Add retention controls for meeting transcripts, summaries, feedback and audit records.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 
