@@ -63,6 +63,17 @@ import {
   searchProjectKnowledge,
   updateProjectProfile,
 } from "./project-intelligence.js";
+import {
+  SARAH_READ_ONLY_BOUNDARY,
+  buildSarahClientReviewInput,
+  buildSarahProjectAnalysisInput,
+  draftSarahDeliverable,
+  generateSarahProjectHealthReview,
+  getSarahDashboard,
+  listSarahAudit,
+  recordSarahAudit,
+  sarahBriefingForDaily,
+} from "./sarah.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -238,6 +249,140 @@ async function handleApi(request, response, url) {
   }
   if (url.pathname === "/api/project-intelligence/audit" && request.method === "GET") {
     return sendJson(response, 200, listProjectAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/sarah/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getSarahDashboard(db));
+  }
+  if (url.pathname === "/api/sarah/audit" && request.method === "GET") {
+    return sendJson(response, 200, listSarahAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/ai/sarah/project-health-review" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
+    return sendJson(response, 200, generateSarahProjectHealthReview(db, Number(body.projectProfileId), {
+      userAction: body.userAction || "sarah:project-health-review",
+    }));
+  }
+  if (url.pathname === "/api/ai/sarah/draft-deliverable" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
+    return sendJson(response, 200, draftSarahDeliverable(db, {
+      projectProfileId: Number(body.projectProfileId),
+      deliverableType: body.deliverableType,
+      userAction: body.userAction || "sarah:draft-deliverable",
+    }));
+  }
+  if (url.pathname === "/api/ai/sarah/analyse-project" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
+    const detail = getProjectDetail(db, Number(body.projectProfileId), { calculateHealth: false });
+    if (!detail) return sendJson(response, 404, { error: "Project profile not found" });
+    const memoryContext = await semanticMemory.retrieveContext(memoryQueryForSarahProject(detail), {
+      maxRecords: 8,
+      maxTokens: 1400,
+    });
+    const retrievedMemoryContext = {
+      ...memoryContext,
+      records: memoryContext.records.map(memoryRecordForClaude),
+    };
+    const input = buildSarahProjectAnalysisInput(db, Number(body.projectProfileId), { retrievedMemoryContext });
+    try {
+      const result = await aiReasoning.analyzeSarahProject(input, {
+        userAction: body.userAction || "sarah:analyse-project",
+        dataCategories: compactCategories([
+          "project_profile",
+          "project_health",
+          "information_quality",
+          input.linkedRisks.length ? "project_risks" : "",
+          input.linkedActions.length ? "project_actions" : "",
+          input.linkedDecisions.length ? "project_decisions" : "",
+          input.linkedDocumentMetadata.length ? "project_document_metadata" : "",
+          input.linkedMeetings.length ? "project_meetings" : "",
+          input.linkedEmailSignals.length ? "project_email_signals" : "",
+          input.projectTags.length ? "project_tags" : "",
+          input.sarahOpportunities.length ? "sarah_opportunities" : "",
+          input.relevantMemory.length ? "semantic_memory" : "",
+          input.oliviaFinancialContext?.linkedOrderBookEntries ? "olivia_financial_context" : "",
+        ]),
+      });
+      recordSarahAudit(db, {
+        eventType: "project_analysis",
+        userAction: body.userAction || "sarah:analyse-project",
+        projectProfileId: Number(body.projectProfileId),
+        dataCategories: ["project_profile", "project_intelligence", "semantic_memory", "olivia_financial_context"],
+        model: result.model,
+        metadata: { projectName: detail.profile.projectName, aiAuditId: result.auditId },
+      });
+      return sendJson(response, 200, {
+        ...result,
+        relatedMemory: input.relevantMemory,
+        memoryContext: memoryContextSummary(retrievedMemoryContext),
+        boundary: SARAH_READ_ONLY_BOUNDARY,
+      });
+    } catch (error) {
+      recordSarahAudit(db, {
+        eventType: "project_analysis",
+        userAction: body.userAction || "sarah:analyse-project",
+        projectProfileId: Number(body.projectProfileId),
+        dataCategories: ["project_profile", "project_intelligence", "semantic_memory", "olivia_financial_context"],
+        model: anthropic.model,
+        status: "error",
+        errorCode: error.code || "SARAH_PROJECT_ANALYSIS_FAILED",
+        metadata: { projectName: detail.profile.projectName },
+      });
+      throw error;
+    }
+  }
+  if (url.pathname === "/api/ai/sarah/client-review" && request.method === "POST") {
+    const body = await readJson(request);
+    const client = body.client || body.clientName || "";
+    const memoryContext = await semanticMemory.retrieveContext(`Sarah client review ${client}`, {
+      maxRecords: 8,
+      maxTokens: 1400,
+    });
+    const retrievedMemoryContext = {
+      ...memoryContext,
+      records: memoryContext.records.map(memoryRecordForClaude),
+    };
+    const input = buildSarahClientReviewInput(db, client, { retrievedMemoryContext });
+    try {
+      const result = await aiReasoning.analyzeSarahClient(input, {
+        userAction: body.userAction || "sarah:client-review",
+        dataCategories: compactCategories([
+          "client",
+          input.portfolioSummary.length ? "project_portfolio" : "",
+          input.clientRisks.length ? "project_risks" : "",
+          input.openActions.length ? "project_actions" : "",
+          input.opportunities.length ? "sarah_opportunities" : "",
+          input.relevantMemory.length ? "semantic_memory" : "",
+        ]),
+      });
+      recordSarahAudit(db, {
+        eventType: "client_review",
+        userAction: body.userAction || "sarah:client-review",
+        clientName: client,
+        dataCategories: ["client", "project_portfolio", "semantic_memory"],
+        model: result.model,
+        metadata: { projectCount: input.portfolioSummary.length, aiAuditId: result.auditId },
+      });
+      return sendJson(response, 200, {
+        ...result,
+        relatedMemory: input.relevantMemory,
+        memoryContext: memoryContextSummary(retrievedMemoryContext),
+        boundary: SARAH_READ_ONLY_BOUNDARY,
+      });
+    } catch (error) {
+      recordSarahAudit(db, {
+        eventType: "client_review",
+        userAction: body.userAction || "sarah:client-review",
+        clientName: client,
+        dataCategories: ["client", "project_portfolio", "semantic_memory"],
+        model: anthropic.model,
+        status: "error",
+        errorCode: error.code || "SARAH_CLIENT_REVIEW_FAILED",
+      });
+      throw error;
+    }
   }
   if (url.pathname === "/api/financial/dashboard" && request.method === "GET") {
     return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)));
@@ -550,7 +695,15 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.decisionPrompts = analysis.decisionPrompts;
   brief.executivePriorities = analysis.executivePriorities;
   brief.projectIntelligence = projectAttentionForBriefing(db);
+  brief.sarah = sarahBriefingForDaily(db);
   brief.executivePriorities = [
+    ...brief.sarah.items.map((item, index) => ({
+      ...item,
+      id: `sarah-${index + 1}`,
+      rank: index + 1,
+      category: "sarah",
+      score: item.priority === "high" ? 78 : 52,
+    })),
     ...brief.projectIntelligence.projectsNeedingAttention.map((project, index) => ({
       ...project,
       rank: index + 1,
@@ -572,6 +725,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithMissingInformation = brief.projectIntelligence.projectsWithMissingInformation.length;
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
+  brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
   brief.analysisMethod = "deterministic-v1";
 
   if (!save) return brief;
@@ -627,6 +781,11 @@ function sourceReferencesFor(context) {
     ...compactRecords(context.decisions, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "decision", record)),
     ...compactRecords(context.opportunities, ["id", "title"]).map((record) => sourceReference("opportunity", record)),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
+    ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `sarah:${record.title}`,
+      label: record.title || "Sarah digital construction signal",
+      category: "sarah",
+    })),
     ...compactRecords(context.outlookSignals, ["id", "title", "subject"]).map((record) => sourceReference("outlook", record)),
     ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
     ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
@@ -686,6 +845,7 @@ function memoryQueryForBriefing(context) {
     ...(context.decisions || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.opportunities || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -717,6 +877,22 @@ function memoryQueryForProject(detail) {
   ].join(" ").slice(0, 2000);
 }
 
+function memoryQueryForSarahProject(detail) {
+  return [
+    "Sarah digital construction review",
+    detail.profile.projectName,
+    detail.profile.clientName,
+    detail.profile.serviceLine,
+    detail.profile.currentPhase,
+    detail.profile.summary,
+    ...(detail.tags || []).map((tag) => `${tag.domainLabel || ""} ${tag.tag || ""}`),
+    ...(detail.digitalConstruction?.detectedSignals || []),
+    ...(detail.healthScore?.inputs?.missingClasses || []),
+    ...(detail.risks || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(detail.documents || []).map((item) => `${item.name || ""} ${item.classification || ""}`),
+  ].join(" ").slice(0, 2000);
+}
+
 function buildAiBriefingContext(briefing, body = {}) {
   const history = listBriefings(db, 5).map((item) => ({
     id: item.id,
@@ -743,6 +919,12 @@ function buildAiBriefingContext(briefing, body = {}) {
       projectsWithMissingInformation: compactRecords(briefing.projectIntelligence?.projectsWithMissingInformation || [], ["projectProfileId", "projectName", "missing"], 6),
       projectsWithFinancialRisk: compactRecords(briefing.projectIntelligence?.projectsWithFinancialRisk || [], ["projectProfileId", "projectName", "financialSummary"], 6),
       projectsWithInformationQualityRisk: compactRecords(briefing.projectIntelligence?.projectsWithInformationQualityRisk || [], ["projectProfileId", "projectName", "informationQuality"], 6),
+    },
+    sarahDigitalConstructionBrief: {
+      title: briefing.sarah?.title || "Daily Digital Construction Brief",
+      summary: briefing.sarah?.summary || "",
+      items: compactRecords(briefing.sarah?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      boundary: briefing.sarah?.boundary || SARAH_READ_ONLY_BOUNDARY,
     },
     approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
     briefingHistory: history,

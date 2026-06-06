@@ -65,5 +65,21 @@ export function createAiReasoningService({ db, client, onConnected = () => {} })
         analyze: () => client.analyzeProject(input),
       });
     },
+    analyzeSarahProject(input, metadata = {}) {
+      return run({
+        analysisType: "sarah_project_analysis",
+        userAction: metadata.userAction || "api:ai-sarah-project-analysis",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeSarahProject(input),
+      });
+    },
+    analyzeSarahClient(input, metadata = {}) {
+      return run({
+        analysisType: "sarah_client_review",
+        userAction: metadata.userAction || "api:ai-sarah-client-review",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeSarahClient(input),
+      });
+    },
   };
 }

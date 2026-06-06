@@ -263,7 +263,8 @@ test("digital construction domain catalog and future placeholders are present", 
     assert.deepEqual([...DIGITAL_CONSTRUCTION_DOMAINS].sort(), domains.map((domain) => domain.id).sort());
     assert.equal(tableNames.length, 6);
     assert.equal(JSON.parse(sarah.tools).includes("COBie"), true);
-    assert.match(sarah.mission, /Placeholder only/);
+    assert.equal(sarah.status, "Active");
+    assert.match(sarah.mission, /advisory-only/);
   });
 });
 

@@ -1351,6 +1351,89 @@ h3 {
   font-size: 12px;
 }
 
+.sarah-boundary {
+  margin-bottom: 18px;
+}
+
+.sarah-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.sarah-metrics article,
+.sarah-panel,
+.sarah-list article {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sarah-metrics small,
+.sarah-list small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sarah-metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.sarah-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.sarah-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sarah-list article {
+  display: grid;
+  gap: 5px;
+}
+
+.sarah-list span,
+.sarah-analysis-output span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sarah-actions,
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.sarah-actions select,
+#sarah-project-select,
+#sarah-deliverable-type {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sarah-analysis-output {
+  display: grid;
+  gap: 12px;
+}
+
 .project-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2248,6 +2331,8 @@ dialog::backdrop {
   .finance-metrics { grid-template-columns: repeat(3, 1fr); }
   .finance-grid { grid-template-columns: 1fr; }
   .project-metrics { grid-template-columns: repeat(3, 1fr); }
+  .sarah-metrics { grid-template-columns: repeat(3, 1fr); }
+  .sarah-grid { grid-template-columns: 1fr; }
   .project-intelligence-signals { grid-template-columns: 1fr; }
   .project-layout,
   .project-detail-grid { grid-template-columns: 1fr; }
@@ -2262,7 +2347,7 @@ dialog::backdrop {
     padding: 16px;
   }
   .nav {
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(9, 1fr);
     margin-top: 18px;
     overflow-x: auto;
   }
@@ -2297,7 +2382,11 @@ dialog::backdrop {
   .finance-metrics,
   .forecast-cases,
   .project-metrics,
+  .sarah-metrics,
+  .sarah-grid,
   .project-intelligence-signals,
   .project-search-form { grid-template-columns: 1fr; }
   .project-detail-header { flex-direction: column; }
+  .sarah-actions,
+  .project-actions { justify-content: flex-start; }
 }

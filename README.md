@@ -59,7 +59,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Sarah, Alex, Maya, James and Olivia as planned agent definitions
+- Sarah as an active advisory Executive Specialist, plus Alex, Maya, James and Olivia as planned agent definitions
 
 Database files are excluded from Git.
 
@@ -98,6 +98,12 @@ Health and aggregate workflows:
 | `POST` | `/api/project-intelligence/discover-microsoft` | Discover project file/email/calendar metadata using existing Microsoft read-only access |
 | `GET` | `/api/projects/search?q=Westminster` | Project-aware search across profiles, documents, risks, actions, decisions, meetings, emails, tags, memory and source references |
 | `POST` | `/api/ai/project-analysis` | Claude project analysis with bounded Voyage memory and Olivia finance context |
+| `GET` | `/api/sarah/dashboard` | Sarah's Digital Construction Director dashboard |
+| `GET` | `/api/sarah/audit` | Sarah advisory-output audit events |
+| `POST` | `/api/ai/sarah/analyse-project` | Claude-powered Sarah project review with project intelligence, memory and finance context |
+| `POST` | `/api/ai/sarah/project-health-review` | Deterministic Sarah project health, BIM maturity and digital readiness review |
+| `POST` | `/api/ai/sarah/client-review` | Claude-powered Sarah client portfolio review |
+| `POST` | `/api/ai/sarah/draft-deliverable` | Draft an internal outline only; no document is created or edited |
 | `GET` | `/api/financial/dashboard?scopeType=group&scopeId=group` | Olivia's scoped CFO dashboard |
 | `GET` | `/api/financial/forecast?scopeType=business&scopeId=digitize` | Monthly, quarterly, annual and scenario forecasts for a reporting scope |
 | `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables for a `businessEntityId` |
@@ -532,9 +538,52 @@ Claude must distinguish confirmed records, inferred associations, assumptions an
 
 The Project Intelligence dashboard shows active projects, projects at risk, overdue project actions, recently updated projects, missing information, financial risk indicators and information quality indicators.
 
-### Future Sarah Preparation
+## Sarah Digital Construction Director
 
-Sarah remains a role placeholder only. Her planned expertise is BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform. The project outputs are shaped so Sarah can later analyse BIM risks, ISO 19650 compliance, COBie gaps, GIS issues, Digital Twin opportunities and asset information requirements, but no Sarah runtime or autonomous execution exists in this phase.
+Sarah is Alfred's first Executive Specialist. She reports to Alfred and acts as Digitize's advisory-only AI Digital Construction Director.
+
+Sarah specialises in:
+
+- BIM strategy, BIM Execution Plans, EIR, AIR, MIDP, TIDP, BIM delivery and BIM governance
+- ISO 19650, information requirements, CDE, information delivery and appointing-party workflows
+- COBie structure, COBie quality, asset information and information completeness
+- GIS strategy, spatial information, asset mapping and geospatial data
+- Digital Twin strategy, operational data, asset performance and smart asset management
+- Building Safety, golden thread, information assurance and compliance information
+- Power Platform for digital construction, including Power Apps, Dataverse, Power Automate, Power BI and SharePoint
+
+Sarah uses the Project Intelligence Platform, Digital Construction Knowledge Layer, Voyage memory, Anthropic reasoning, Microsoft 365 read-only metadata and Olivia CFO context. Sarah can analyse and recommend only. She cannot send emails, update calendars, edit OneDrive/SharePoint files, create Power Platform apps, publish documents, modify Monday.com, update finance records or execute approvals.
+
+### Sarah APIs
+
+- `GET /api/sarah/dashboard`
+- `GET /api/sarah/audit`
+- `POST /api/ai/sarah/analyse-project`
+- `POST /api/ai/sarah/project-health-review`
+- `POST /api/ai/sarah/client-review`
+- `POST /api/ai/sarah/draft-deliverable`
+
+Sarah project analysis returns an executive summary, BIM observations, information management observations, digital construction opportunities, risks, missing information, recommendations, confidence level, assumptions and source references.
+
+Sarah project health review returns project score, information quality score, BIM maturity assessment, digital readiness assessment and recommendations.
+
+Sarah client review answers what projects exist for a client, what risks and actions remain, what information is missing, what opportunities exist and what Patrick should discuss next.
+
+Sarah deliverable support is draft-outline only for BIM Strategy, EIR, AIR, BEP, Information Management Plan, Digital Twin Strategy and GIS Strategy outlines. No file is created, edited, saved, uploaded or published.
+
+### Future Sarah Team
+
+The database stores placeholders only for future Sarah-managed specialist roles:
+
+- BIM Consultant
+- Information Manager
+- COBie Specialist
+- GIS Consultant
+- Digital Twin Consultant
+- Building Safety Consultant
+- Power Platform Consultant
+
+These are not active agents and have no autonomous behaviour.
 
 ## Olivia CFO Financial Intelligence
 

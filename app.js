@@ -250,6 +250,29 @@ const seedData = {
     missingInformation: [],
     boundary: { readOnly: true },
   },
+  sarah: {
+    profile: {
+      name: "Sarah",
+      role: "Digital Construction Director",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      projectsRequiringAttention: 0,
+      informationRisks: 0,
+      highRiskProjects: 0,
+      missingInformation: 0,
+      opportunities: 0,
+    },
+    projectsRequiringAttention: [],
+    informationRisks: [],
+    opportunities: [],
+    recentDecisions: [],
+    recentMeetings: [],
+    recentRisks: [],
+    futureTeamPlaceholders: [],
+    boundary: { advisoryOnly: true, readOnly: true },
+  },
 };
 
 let state = loadState();
@@ -262,6 +285,7 @@ let semanticMemoryStatus = null;
 let currentBoardReportMarkdown = "";
 let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
+let sarahCurrentProjectId = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -315,6 +339,7 @@ async function loadDashboard() {
     semanticMemoryStatus = await apiRequest("/api/memory/status").catch(() => null);
     state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
+    state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -942,10 +967,76 @@ function renderProjectIntelligence() {
   renderProjectDetail(currentProjectDetail);
 }
 
+function sarahProjectOptions() {
+  const projects = state.projectIntelligence?.projects || [];
+  return projects.map((project) => `
+    <option value="${project.profile.id}" ${String(project.profile.id) === String(sarahCurrentProjectId || "") ? "selected" : ""}>
+      ${escapeHTML(project.profile.projectName)} (${escapeHTML(project.profile.clientName || "Internal")})
+    </option>
+  `).join("");
+}
+
+function sarahList(records, empty, formatter) {
+  return records?.length
+    ? `<div class="sarah-list">${records.slice(0, 8).map((record) => `<article>${formatter(record)}</article>`).join("")}</div>`
+    : `<div class="empty-state project-empty">${empty}</div>`;
+}
+
+function renderSarah() {
+  const sarah = state.sarah || seedData.sarah;
+  const metrics = sarah.metrics || {};
+  $("#sarah-metrics").innerHTML = [
+    ["PROJECTS NEEDING ATTENTION", metrics.projectsRequiringAttention],
+    ["INFORMATION RISKS", metrics.informationRisks],
+    ["HIGH-RISK PROJECTS", metrics.highRiskProjects],
+    ["MISSING INFORMATION", metrics.missingInformation],
+    ["OPPORTUNITIES", metrics.opportunities],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  const select = $("#sarah-project-select");
+  if (select) {
+    const options = sarahProjectOptions();
+    select.innerHTML = options || '<option value="">No projects available</option>';
+    if (!sarahCurrentProjectId && select.value) sarahCurrentProjectId = select.value;
+  }
+
+  $("#sarah-attention").innerHTML = sarahList(sarah.projectsRequiringAttention || [], "No projects currently require Sarah's attention.", (project) => `
+    <strong>${escapeHTML(project.profile?.projectName || project.projectName || "Project")}</strong>
+    <span>${escapeHTML(project.healthScore?.status || "unknown")} · ${escapeHTML(project.healthScore?.explanation || "")}</span>
+    <small>${escapeHTML(project.profile?.clientName || "")}</small>
+  `);
+  $("#sarah-information-risks").innerHTML = sarahList(sarah.informationRisks || [], "No information quality risks found.", (risk) => `
+    <strong>${escapeHTML(risk.projectName)}</strong>
+    <span>${escapeHTML(risk.informationQuality?.explanation || "Information quality requires review.")}</span>
+    <small>${escapeHTML(risk.informationQuality?.status || "unknown")}</small>
+  `);
+  $("#sarah-opportunities").innerHTML = sarahList(sarah.opportunities || [], "No Sarah opportunities detected yet.", (opportunity) => `
+    <strong>${escapeHTML(opportunity.opportunity)}</strong>
+    <span>${escapeHTML(opportunity.projectName)} · ${escapeHTML(opportunity.businessImpact)}</span>
+    <small>${escapeHTML(opportunity.category)} · ${escapeHTML(opportunity.confidence)} · ${escapeHTML(opportunity.sourceReference)}</small>
+  `);
+  const recent = [
+    ...(sarah.recentRisks || []).map((item) => ({ ...item, label: "Risk" })),
+    ...(sarah.recentDecisions || []).map((item) => ({ ...item, label: "Decision" })),
+    ...(sarah.recentMeetings || []).map((item) => ({ ...item, label: "Meeting" })),
+  ].slice(0, 8);
+  $("#sarah-recent-signals").innerHTML = sarahList(recent, "No recent Sarah signals found.", (signal) => `
+    <strong>${escapeHTML(signal.title || "Signal")}</strong>
+    <span>${escapeHTML(signal.projectName || "")} · ${escapeHTML(signal.detail || signal.status || "")}</span>
+    <small>${escapeHTML(signal.label)}</small>
+  `);
+}
+
 function renderAll() {
   renderCommand();
   renderCompanies();
   renderProjectIntelligence();
+  renderSarah();
   renderFinance();
   renderMemory();
   renderAgents();
@@ -958,6 +1049,7 @@ function navigate(view) {
     command: "Executive Command",
     companies: "Companies",
     projects: "Project Intelligence",
+    sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
     agents: "AI Executive Team",
@@ -1006,6 +1098,7 @@ function buildBrief(brief) {
       ${brief.summary.totalOpen} open operating records, ${brief.emails?.length || 0} reviewed emails and
       ${brief.meetings.items?.length || 0} upcoming meetings.
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
+      ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
     </div>
     ${section("1. EXECUTIVE PRIORITIES", (brief.executivePriorities || []).map((item) => ({
@@ -1020,7 +1113,8 @@ function buildBrief(brief) {
     ${section("6. REVENUE OPPORTUNITIES", brief.opportunities, "No opportunities are currently recorded.")}
     ${section("7. DECISION PROMPTS", brief.decisionPrompts || brief.decisions, "No decisions are currently recorded.")}
     ${section("8. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
-    ${section("9. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
+    ${section("9. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
+    ${section("10. AGENT STATUS", brief.agents.map((agent) => ({ title: `${agent.name} — ${agent.role}`, detail: agent.status })), "No agent definitions are currently recorded.")}
   `;
 }
 
@@ -1070,6 +1164,7 @@ function buildFallbackBrief() {
     agents: state.agents,
     emails: [],
     projectIntelligence: { projectsNeedingAttention: [] },
+    sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
     microsoft: { connected: false },
     source: "localStorage",
   };
@@ -1677,6 +1772,201 @@ async function askProjectAnalysis(projectId) {
   }
 }
 
+async function refreshSarahDashboard() {
+  if (!backendAvailable) {
+    showToast("Sarah requires the backend");
+    return;
+  }
+  state.sarah = await apiRequest("/api/sarah/dashboard");
+  persist();
+  renderSarah();
+}
+
+function renderSarahHealthReview(review) {
+  return `
+    <div class="ai-boundary">Sarah reviewed Alfred project records only. No Microsoft, SharePoint, OneDrive, calendar, email, file, app or finance system was modified.</div>
+    <section class="ai-summary">
+      <h3>${escapeHTML(review.projectName)} project health</h3>
+      <p>Project score ${review.projectScore}/100 (${escapeHTML(review.projectHealthStatus)}). Information quality ${review.informationQualityScore}/100 (${escapeHTML(review.informationQualityStatus)}).</p>
+    </section>
+    ${renderList("BIM maturity assessment", [review.bimMaturityAssessment], (item) => `
+      <strong>${escapeHTML(item.status)} · ${item.score}/100</strong>
+      <span>${escapeHTML(item.explanation)}</span>
+    `)}
+    ${renderList("Digital readiness assessment", [review.digitalReadinessAssessment], (item) => `
+      <strong>${escapeHTML(item.status)} · ${item.score}/100</strong>
+      <span>${escapeHTML(item.explanation)}</span>
+    `)}
+    ${renderList("Recommendations", review.recommendations || [], (item) => `
+      <strong>${escapeHTML(item.recommendation)}</strong>
+      <small>${escapeHTML(item.confidence)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+  `;
+}
+
+function renderSarahProjectAnalysis(analysis = {}, relatedMemory = []) {
+  return `
+    <div class="ai-boundary">Claude analysed Sarah's project context only. Sarah is advisory: no files, emails, calendars, SharePoint, OneDrive, Power Platform apps or finance records were changed.</div>
+    <section class="ai-summary">
+      <h3>Sarah executive summary</h3>
+      <p>${escapeHTML(analysis.executiveSummary || "No Sarah analysis returned.")}</p>
+      <small>Confidence: ${escapeHTML(analysis.confidenceLevel || "unknown")}</small>
+    </section>
+    ${renderList("BIM observations", analysis.bimObservations || [], (item) => `
+      <strong>${escapeHTML(item.observation)}</strong>
+      <span>${escapeHTML(item.implication)}</span>
+      <small>${escapeHTML(item.confidence)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Information management observations", analysis.informationManagementObservations || [], (item) => `
+      <strong>${escapeHTML(item.observation)}</strong>
+      <span>${escapeHTML(item.implication)}</span>
+      <small>${escapeHTML(item.confidence)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Digital construction opportunities", analysis.digitalConstructionOpportunities || [], (item) => `
+      <strong>${escapeHTML(item.opportunity)}</strong>
+      <span>${escapeHTML(item.businessImpact)}</span>
+      <small>${escapeHTML(item.estimatedValue)} · ${escapeHTML(item.confidence)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Key risks", analysis.keyRisks || [], (item) => `
+      <strong>${escapeHTML(item.risk)}</strong>
+      <span>${escapeHTML(item.impact)}</span>
+      <small>${escapeHTML(item.severity)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Missing information", analysis.missingInformation || [], (item) => `
+      <strong>${escapeHTML(item.item)}</strong>
+      <span>${escapeHTML(item.whyItMatters)}</span>
+      <small>${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Recommendations", analysis.recommendations || [], (item) => `
+      <strong>${escapeHTML(item.recommendation)}</strong>
+      <span>${escapeHTML(item.rationale)}</span>
+      <small>${item.approvalRequiredBeforeAction ? "Approval required before external action" : "Recommendation only"} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Confirmed facts", analysis.confirmedFacts || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Assumptions", analysis.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderRelatedMemory(relatedMemory)}
+  `;
+}
+
+async function askSarahProjectReview() {
+  if (!backendAvailable) {
+    showToast("Sarah project review requires the backend");
+    return;
+  }
+  const projectId = Number($("#sarah-project-select").value || sarahCurrentProjectId);
+  if (!projectId) {
+    showToast("Select a project for Sarah");
+    return;
+  }
+  sarahCurrentProjectId = projectId;
+  $("#sarah-analysis-output").innerHTML = '<div class="ai-loading">Sarah is reviewing project intelligence...</div>';
+  try {
+    const review = await apiRequest("/api/ai/sarah/project-health-review", {
+      method: "POST",
+      body: JSON.stringify({ projectProfileId: projectId, userAction: "ui:sarah:project-health-review" }),
+    });
+    $("#sarah-analysis-output").innerHTML = renderSarahHealthReview(review);
+    try {
+      const result = await apiRequest("/api/ai/sarah/analyse-project", {
+        method: "POST",
+        body: JSON.stringify({ projectProfileId: projectId, userAction: "ui:sarah:review-project" }),
+      });
+      $("#sarah-analysis-output").innerHTML = renderSarahProjectAnalysis(result.analysis || {}, result.relatedMemory || []);
+      showToast("Sarah project analysis generated");
+    } catch (error) {
+      $("#sarah-analysis-output").innerHTML += `<div class="empty-state">Claude Sarah analysis unavailable: ${escapeHTML(error.message)}. Deterministic Sarah health review shown above.</div>`;
+      showToast("Sarah health review generated");
+    }
+    await refreshSarahDashboard();
+  } catch (error) {
+    $("#sarah-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function draftSarahOutline() {
+  if (!backendAvailable) {
+    showToast("Sarah draft support requires the backend");
+    return;
+  }
+  const projectId = Number($("#sarah-project-select").value || sarahCurrentProjectId);
+  const deliverableType = $("#sarah-deliverable-type").value;
+  if (!projectId) {
+    showToast("Select a project for Sarah");
+    return;
+  }
+  try {
+    const draft = await apiRequest("/api/ai/sarah/draft-deliverable", {
+      method: "POST",
+      body: JSON.stringify({ projectProfileId: projectId, deliverableType, userAction: "ui:sarah:draft-deliverable" }),
+    });
+    $("#sarah-analysis-output").innerHTML = `
+      <div class="ai-boundary">Draft outline only. Sarah did not create, edit, publish or save a document.</div>
+      <section class="ai-summary">
+        <h3>${escapeHTML(draft.title)}</h3>
+        <p>${escapeHTML(draft.status.replaceAll("_", " "))}</p>
+      </section>
+      ${renderList("Outline", draft.outline || [], (section) => `
+        <strong>${escapeHTML(section.heading)}</strong>
+        <span>${escapeHTML((section.prompts || []).join(" "))}</span>
+      `)}
+      ${renderList("Assumptions", draft.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    `;
+    showToast("Sarah draft outline generated");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function reviewSarahClient(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Sarah client review requires the backend");
+    return;
+  }
+  const client = $("#sarah-client-query").value.trim();
+  if (!client) {
+    showToast("Enter a client name");
+    return;
+  }
+  $("#sarah-client-output").innerHTML = '<div class="ai-loading">Sarah is reviewing client context...</div>';
+  try {
+    const result = await apiRequest("/api/ai/sarah/client-review", {
+      method: "POST",
+      body: JSON.stringify({ client, userAction: "ui:sarah:client-review" }),
+    });
+    const analysis = result.analysis || {};
+    $("#sarah-client-output").innerHTML = `
+      <div class="ai-boundary">Sarah reviewed client context only. No sales actions or external updates were performed.</div>
+      <section class="ai-summary">
+        <h3>Client portfolio summary</h3>
+        <p>${escapeHTML(analysis.projectPortfolioSummary || "No client review returned.")}</p>
+        <small>Confidence: ${escapeHTML(analysis.confidenceLevel || "unknown")}</small>
+      </section>
+      ${renderList("Client risks", analysis.clientRisks || [], (risk) => `
+        <strong>${escapeHTML(risk.risk)}</strong>
+        <small>${escapeHTML(risk.severity)} · ${escapeHTML(risk.sourceReference)}</small>
+      `)}
+      ${renderList("Opportunities", analysis.opportunities || [], (opportunity) => `
+        <strong>${escapeHTML(opportunity.opportunity)}</strong>
+        <span>${escapeHTML(opportunity.businessImpact)}</span>
+        <small>${escapeHTML(opportunity.estimatedValue)} · ${escapeHTML(opportunity.confidence)} · ${escapeHTML(opportunity.sourceReference)}</small>
+      `)}
+      ${renderList("Strategic recommendations", analysis.strategicRecommendations || [], (item) => `
+        <strong>${escapeHTML(item.recommendation)}</strong>
+        <span>${escapeHTML(item.why)}</span>
+        <small>${escapeHTML(item.sourceReference)}</small>
+      `)}
+      ${renderList("Next discussion points", analysis.nextDiscussionPoints || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+      ${renderList("Assumptions", analysis.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    `;
+    showToast("Sarah client review generated");
+  } catch (error) {
+    $("#sarah-client-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
 async function reviewApproval(id, decision) {
   if (!backendAvailable) {
     showToast("Approvals require the backend audit trail");
@@ -1877,7 +2167,10 @@ function runCommand(command) {
   const normalized = command.toLowerCase().trim();
   if (!normalized) return;
 
-  if (normalized.includes("brief")) {
+  if (normalized.includes("sarah")) {
+    navigate("sarah");
+    if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
+  } else if (normalized.includes("brief")) {
     generateBrief();
   } else if (normalized.includes("risk")) {
     navigate("companies");
@@ -1922,6 +2215,12 @@ $("#add-approval").addEventListener("click", () => openRecordForm("approval"));
 $("#add-operating-item").addEventListener("click", () => openRecordForm("operating"));
 $("#discover-projects").addEventListener("click", discoverProjectMetadata);
 $("#project-search-form").addEventListener("submit", searchProjects);
+$("#sarah-project-select").addEventListener("change", (event) => {
+  sarahCurrentProjectId = event.target.value;
+});
+$("#sarah-review-project").addEventListener("click", askSarahProjectReview);
+$("#sarah-draft-deliverable").addEventListener("click", draftSarahOutline);
+$("#sarah-client-form").addEventListener("submit", reviewSarahClient);
 $("#import-order-book").addEventListener("click", () => $("#order-book-file").click());
 $("#order-book-file").addEventListener("change", importOrderBookFile);
 $("#finance-scope").addEventListener("change", changeFinanceScope);

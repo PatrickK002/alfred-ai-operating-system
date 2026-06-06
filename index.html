@@ -37,6 +37,9 @@
           <button class="nav-item" data-view="projects">
             <span class="nav-icon">▣</span> Projects
           </button>
+          <button class="nav-item" data-view="sarah">
+            <span class="nav-icon">S</span> Sarah
+          </button>
           <button class="nav-item" data-view="finance">
             <span class="nav-icon">£</span> Finance
           </button>
@@ -224,6 +227,101 @@
             </form>
             <div id="project-search-results" class="project-search-results">
               <div class="empty-state">Search project records, document metadata, risks, actions, decisions and memory links.</div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="sarah-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">EXECUTIVE SPECIALIST</p>
+              <h2>Sarah Digital Construction Director</h2>
+              <p>Advisory-only BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety and Power Platform intelligence.</p>
+            </div>
+            <div class="project-actions">
+              <select id="sarah-project-select" aria-label="Select project for Sarah review"></select>
+              <button class="secondary-button" id="sarah-review-project">Sarah, review this project</button>
+            </div>
+          </div>
+          <div class="approval-boundary sarah-boundary">
+            <strong>Sarah is advisory only</strong>
+            <span>Sarah reports to Alfred. She can analyse and recommend, but cannot send emails, edit files, update calendars, modify SharePoint/OneDrive, create apps, publish documents or change finance records.</span>
+          </div>
+          <div class="sarah-metrics" id="sarah-metrics"></div>
+          <div class="sarah-grid">
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ATTENTION</p>
+                  <h3>Projects requiring Sarah</h3>
+                </div>
+              </div>
+              <div id="sarah-attention"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RISKS</p>
+                  <h3>Information risks</h3>
+                </div>
+              </div>
+              <div id="sarah-information-risks"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OPPORTUNITIES</p>
+                  <h3>Digital construction opportunities</h3>
+                </div>
+              </div>
+              <div id="sarah-opportunities"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RECENT SIGNALS</p>
+                  <h3>Decisions, meetings and risks</h3>
+                </div>
+              </div>
+              <div id="sarah-recent-signals"></div>
+            </section>
+          </div>
+          <section class="panel sarah-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SARAH OUTPUT</p>
+                <h3>Project review</h3>
+              </div>
+              <div class="sarah-actions">
+                <select id="sarah-deliverable-type" aria-label="Sarah deliverable type">
+                  <option value="bim_strategy_outline">BIM Strategy outline</option>
+                  <option value="eir_outline">EIR outline</option>
+                  <option value="air_outline">AIR outline</option>
+                  <option value="bep_outline">BEP outline</option>
+                  <option value="information_management_plan">Information Management Plan</option>
+                  <option value="digital_twin_strategy_outline">Digital Twin Strategy outline</option>
+                  <option value="gis_strategy_outline">GIS Strategy outline</option>
+                </select>
+                <button class="text-button" id="sarah-draft-deliverable">Draft outline</button>
+              </div>
+            </div>
+            <div id="sarah-analysis-output" class="sarah-analysis-output">
+              <div class="empty-state">Select a project and ask Sarah to review it. Outputs are recommendations only.</div>
+            </div>
+          </section>
+          <section class="panel sarah-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">CLIENT INTELLIGENCE</p>
+                <h3>Client review</h3>
+              </div>
+            </div>
+            <form id="sarah-client-form" class="project-search-form">
+              <input id="sarah-client-query" placeholder='Try “Westminster”, “RBKC” or “Islington”' />
+              <button class="secondary-button" type="submit">Review client</button>
+            </form>
+            <div id="sarah-client-output" class="sarah-analysis-output">
+              <div class="empty-state">Sarah can review client project portfolios, risks, missing information and opportunities.</div>
             </div>
           </section>
         </section>
