@@ -1,0 +1,61 @@
+import { recordAiAnalysisAudit } from "./db.js";
+
+function compactCategories(categories) {
+  return [...new Set((categories || []).map(String).filter(Boolean))].slice(0, 30);
+}
+
+export function createAiReasoningService({ db, client, onConnected = () => {} }) {
+  async function run({ analysisType, userAction, dataCategories, outputSaved = false, analyze }) {
+    const categories = compactCategories(dataCategories);
+    try {
+      const result = await analyze();
+      onConnected();
+      const audit = recordAiAnalysisAudit(db, {
+        analysisType,
+        userAction,
+        dataCategories: categories,
+        outputSaved,
+        model: result.model,
+        status: "success",
+        executionAttempted: false,
+      });
+      return {
+        ...result,
+        auditId: audit.id,
+        outputSaved,
+        executionAttempted: false,
+      };
+    } catch (error) {
+      recordAiAnalysisAudit(db, {
+        analysisType,
+        userAction,
+        dataCategories: categories,
+        outputSaved: false,
+        model: client.model,
+        status: "error",
+        errorCode: error.code || "AI_ANALYSIS_FAILED",
+        executionAttempted: false,
+      });
+      throw error;
+    }
+  }
+
+  return {
+    analyzeBriefing(input, metadata = {}) {
+      return run({
+        analysisType: "executive_briefing",
+        userAction: metadata.userAction || "api:ai-briefing",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeBriefing(input),
+      });
+    },
+    analyzeDecision(input, metadata = {}) {
+      return run({
+        analysisType: "decision_support",
+        userAction: metadata.userAction || "api:ai-decision-support",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeDecision(input),
+      });
+    },
+  };
+}

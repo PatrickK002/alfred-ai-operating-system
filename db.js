@@ -230,6 +230,20 @@ const SCHEMA = `
     result TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS ai_analysis_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    analysis_type TEXT NOT NULL,
+    user_action TEXT NOT NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
 const COMPANY_SEEDS = [
@@ -262,7 +276,7 @@ const INTEGRATION_SEEDS = [
   ["elevenlabs", "ElevenLabs", "E", "Natural voice output for executive briefings and alerts.", "Planned"],
   ["deepgram", "Deepgram", "D", "Speech-to-text input for voice commands and conversations.", "Planned"],
   ["voyage", "Voyage AI", "V", "Semantic long-term memory and retrieval across operating records.", "Planned"],
-  ["anthropic", "Anthropic", "A", "Reasoning and language-model execution for Alfred intelligence workflows.", "Planned"],
+  ["anthropic", "Anthropic Claude", "A", "Read-only reasoning for executive briefings, risk review, prioritisation and decision support.", "Planned"],
 ];
 
 function toSnakeCase(value) {
@@ -988,6 +1002,72 @@ export function getApprovalSummary(db) {
     releaseReady: 0,
     executionEnabled: false,
   };
+}
+
+export function recordAiAnalysisAudit(db, {
+  analysisType,
+  userAction,
+  dataCategories = [],
+  outputSaved = false,
+  model,
+  status,
+  errorCode = "",
+  executionAttempted = false,
+}) {
+  const result = db.prepare(`
+    INSERT INTO ai_analysis_audit (
+      analysis_type, user_action, data_categories, output_saved,
+      model, status, error_code, execution_attempted
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    String(analysisType),
+    String(userAction),
+    JSON.stringify(dataCategories),
+    outputSaved ? 1 : 0,
+    String(model),
+    String(status),
+    String(errorCode).slice(0, 200),
+    executionAttempted ? 1 : 0,
+  );
+  return getAiAnalysisAudit(db, Number(result.lastInsertRowid));
+}
+
+export function getAiAnalysisAudit(db, id) {
+  const row = db.prepare("SELECT * FROM ai_analysis_audit WHERE id = ?").get(id);
+  if (!row) return null;
+  return {
+    id: row.id,
+    requestedAt: toIsoTimestamp(row.requested_at),
+    analysisType: row.analysis_type,
+    userAction: row.user_action,
+    dataCategories: JSON.parse(row.data_categories || "[]"),
+    outputSaved: Boolean(row.output_saved),
+    model: row.model,
+    status: row.status,
+    errorCode: row.error_code,
+    executionAttempted: Boolean(row.execution_attempted),
+  };
+}
+
+export function listAiAnalysisAudit(db, limit = 50) {
+  return db.prepare(`
+    SELECT *
+    FROM ai_analysis_audit
+    ORDER BY requested_at DESC, id DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map((row) => ({
+    id: row.id,
+    requestedAt: toIsoTimestamp(row.requested_at),
+    analysisType: row.analysis_type,
+    userAction: row.user_action,
+    dataCategories: JSON.parse(row.data_categories || "[]"),
+    outputSaved: Boolean(row.output_saved),
+    model: row.model,
+    status: row.status,
+    errorCode: row.error_code,
+    executionAttempted: Boolean(row.execution_attempted),
+  }));
 }
 
 function getLatestApprovalPreflight(db, id) {

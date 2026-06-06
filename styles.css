@@ -1133,7 +1133,7 @@ h3 {
 
 .operating-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 9px;
   align-items: center;
   padding: 9px 10px;
@@ -1149,6 +1149,12 @@ h3 {
   color: var(--muted);
   font-size: 8px;
   text-transform: uppercase;
+}
+
+.mini-ai-button {
+  padding: 0;
+  font-size: 8px;
+  white-space: nowrap;
 }
 
 .memory-toolbar {
@@ -1529,6 +1535,77 @@ dialog::backdrop {
   grid-template-columns: repeat(2, 1fr);
   gap: 22px;
   padding: 25px;
+}
+
+.ai-analysis-content {
+  display: grid;
+  gap: 14px;
+  padding: 25px;
+}
+
+.ai-boundary,
+.ai-loading {
+  padding: 14px 16px;
+  border: 1px solid rgba(226, 180, 107, 0.24);
+  border-radius: 10px;
+  color: #c9b083;
+  background: var(--amber-soft);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.ai-summary,
+.ai-section {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.ai-summary h3,
+.ai-section h4 {
+  margin: 0 0 9px;
+  color: var(--accent);
+  font: 500 11px/1.3 var(--font-display);
+}
+
+.ai-summary p {
+  margin: 0 0 9px;
+  color: #b9c9c6;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.ai-summary small,
+.ai-section small,
+.ai-section em {
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.ai-section ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ai-section li {
+  color: #a8b9b6;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.ai-section li strong,
+.ai-section li span,
+.ai-section li small {
+  display: block;
+}
+
+.ai-section li strong {
+  margin-bottom: 3px;
+  color: var(--text);
 }
 
 .brief-section.priority-section {

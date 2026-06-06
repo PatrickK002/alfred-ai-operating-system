@@ -265,8 +265,24 @@
       </div>
       <div class="dialog-footer">
         <button class="text-button" id="brief-history-button">Briefing history</button>
+        <button class="secondary-button" id="ai-brief-analysis">Ask Alfred to analyse</button>
         <button class="secondary-button" id="copy-brief">Copy briefing</button>
         <button class="primary-button close-dialog">Done</button>
+      </div>
+    </dialog>
+
+    <dialog id="ai-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">ALFRED CEO BRAIN</p>
+          <h2 id="ai-analysis-title">Analysis</h2>
+          <small id="ai-analysis-meta">Claude reasoning is read-only. No actions are executed.</small>
+        </div>
+        <button class="icon-button close-ai" aria-label="Close">×</button>
+      </div>
+      <div class="ai-analysis-content" id="ai-analysis-content"></div>
+      <div class="dialog-footer">
+        <button class="primary-button close-ai">Done</button>
       </div>
     </dialog>
 

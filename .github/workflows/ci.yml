@@ -36,6 +36,12 @@ jobs:
       - name: Check Microsoft integration syntax
         run: node --check microsoft.js
 
+      - name: Check Anthropic reasoning syntax
+        run: node --check anthropic.js
+
+      - name: Check AI service syntax
+        run: node --check ai.js
+
       - name: Check briefing intelligence syntax
         run: node --check briefing.js
 

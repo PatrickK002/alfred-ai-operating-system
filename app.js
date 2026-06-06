@@ -195,6 +195,7 @@ let state = loadState();
 let backendAvailable = false;
 let microsoftPollTimer;
 let currentBriefingId = null;
+let currentBrief = null;
 let memoryFilter = "all";
 let toastTimer;
 
@@ -398,6 +399,7 @@ function renderCompanies() {
                             <span class="priority-marker ${item.priority}"></span>
                             <span>${escapeHTML(item.title)}</span>
                             <small>${escapeHTML(item.type)}</small>
+                            ${["risk", "decision"].includes(item.type) ? `<button class="text-button mini-ai-button ai-operating-analysis" data-ai-item-type="${item.type}" data-ai-item-id="${item.id}">Ask Alfred</button>` : ""}
                           </div>
                         `,
                       )
@@ -555,14 +557,20 @@ function renderApprovals() {
           ` : ""}
           ${approval.status === "pending" ? `
             <div class="approval-actions">
+              <button class="secondary-button ai-approval-analysis" data-approval-id="${approval.id}">Ask Alfred to analyse</button>
               <button class="secondary-button approval-decision" data-approval-id="${approval.id}" data-decision="reject">Reject</button>
               <button class="primary-button approval-decision" data-approval-id="${approval.id}" data-decision="approve">Approve</button>
             </div>
           ` : approval.status === "approved" ? `
             <div class="approval-actions">
+              <button class="secondary-button ai-approval-analysis" data-approval-id="${approval.id}">Ask Alfred to analyse</button>
               <button class="secondary-button approval-preflight" data-approval-id="${approval.id}">Run execution preflight</button>
             </div>
-          ` : ""}
+          ` : `
+            <div class="approval-actions">
+              <button class="secondary-button ai-approval-analysis" data-approval-id="${approval.id}">Ask Alfred to analyse</button>
+            </div>
+          `}
         </article>
       `).join("")
     : '<div class="empty-state approval-empty">No actions are awaiting approval. Alfred has not executed anything.</div>';
@@ -619,6 +627,7 @@ function buildBrief(brief) {
     minute: "2-digit",
   });
   currentBriefingId = brief.briefingId || null;
+  currentBrief = brief;
   $("#brief-feedback").classList.remove("submitted");
   $("#brief-feedback-note").value = "";
   $("#brief-content").innerHTML = `
@@ -784,6 +793,189 @@ async function showBriefHistory() {
     $("#history-dialog").showModal();
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+function renderList(title, values, formatter = (item) => item) {
+  return `
+    <section class="ai-section">
+      <h4>${title}</h4>
+      ${
+        values?.length
+          ? `<ul>${values.map((item) => `<li>${formatter(item)}</li>`).join("")}</ul>`
+          : '<p class="core-message">None supplied.</p>'
+      }
+    </section>
+  `;
+}
+
+function sourceRefs(refs = []) {
+  const values = Array.isArray(refs) ? refs : [refs].filter(Boolean);
+  return values.length ? `<em>Sources: ${escapeHTML(values.join(", "))}</em>` : "";
+}
+
+function renderAiBriefing(analysis) {
+  return `
+    <div class="ai-boundary">Claude analysed the supplied data only. No emails, files, calendar events, approvals, or records were changed.</div>
+    <section class="ai-summary">
+      <h3>Executive summary</h3>
+      <p>${escapeHTML(analysis.executiveSummary)}</p>
+      <small>Confidence: ${escapeHTML(analysis.confidenceLevel)}</small>
+    </section>
+    ${renderList("Top priorities", analysis.topPriorities, (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.rationale)}</span>
+      <small>${escapeHTML(item.urgency)} ${sourceRefs(item.sourceReferences || item.sourceReference)}</small>
+    `)}
+    ${renderList("Risks", analysis.risks, (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.assessment)} Mitigation: ${escapeHTML(item.mitigation)}</span>
+      <small>Confidence: ${escapeHTML(item.confidence)} ${sourceRefs(item.sourceReferences || item.sourceReference)}</small>
+    `)}
+    ${renderList("Decisions required", analysis.decisionsRequired, (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.whyNow)}</span>
+      <small>${item.approvalRequired ? "Patrick approval required" : "No explicit approval flagged"} ${sourceRefs(item.sourceReferences || item.sourceReference)}</small>
+    `)}
+    ${renderList("Recommended next actions", analysis.recommendedNextActions, (item) => `
+      <strong>${escapeHTML(item.action)}</strong>
+      <span>${escapeHTML(item.owner)} · ${escapeHTML(item.timing)}</span>
+      <small>${item.requiresApproval ? "Requires approval" : "Recommendation only"} ${sourceRefs(item.sourceReferences || item.sourceReference)}</small>
+    `)}
+    ${renderList("Assumptions", analysis.assumptions, escapeHTML)}
+  `;
+}
+
+function renderAiDecision(analysis) {
+  return `
+    <div class="ai-boundary">Claude provided recommendation only. No approval was granted and no action was executed.</div>
+    <section class="ai-summary">
+      <h3>Recommendation</h3>
+      <p>${escapeHTML(analysis.recommendation)}</p>
+      <small>Confidence: ${escapeHTML(analysis.confidenceLevel)} · ${analysis.patrickApprovalRequired ? "Patrick approval required" : "No approval requirement flagged"}</small>
+    </section>
+    ${renderList("Pros", analysis.pros, escapeHTML)}
+    ${renderList("Cons", analysis.cons, escapeHTML)}
+    ${renderList("Risks", analysis.risks, escapeHTML)}
+    ${renderList("Next action", [analysis.nextAction], escapeHTML)}
+    ${renderList("Assumptions", analysis.assumptions, escapeHTML)}
+  `;
+}
+
+function showAiAnalysis({ title, meta, html }) {
+  $("#ai-analysis-title").textContent = title;
+  $("#ai-analysis-meta").textContent = meta;
+  $("#ai-analysis-content").innerHTML = html;
+  if (!$("#ai-dialog").open) $("#ai-dialog").showModal();
+}
+
+function showAiLoading(title) {
+  showAiAnalysis({
+    title,
+    meta: "Claude reasoning is read-only. Alfred is not executing anything.",
+    html: '<div class="ai-loading">Asking Alfred to analyse the supplied records…</div>',
+  });
+}
+
+async function askAiBriefing() {
+  if (!backendAvailable) {
+    showToast("AI analysis requires the backend");
+    return;
+  }
+  if (!currentBrief) {
+    showToast("Generate a briefing first");
+    return;
+  }
+  showAiLoading("Executive analysis");
+  try {
+    const result = await apiRequest("/api/ai/briefing", {
+      method: "POST",
+      body: JSON.stringify({ briefing: currentBrief, userAction: "ui:briefing:ask-alfred" }),
+    });
+    showAiAnalysis({
+      title: "Executive analysis",
+      meta: `${result.model} · audit #${result.auditId} · read-only`,
+      html: renderAiBriefing(result.analysis),
+    });
+    showToast("Claude analysis returned");
+  } catch (error) {
+    showAiAnalysis({
+      title: "Executive analysis unavailable",
+      meta: "No action was executed.",
+      html: `<div class="empty-state">${escapeHTML(error.message)}</div>`,
+    });
+  }
+}
+
+async function askAiForOperatingItem(type, id) {
+  if (!backendAvailable) {
+    showToast("AI analysis requires the backend");
+    return;
+  }
+  const item = state.operatingItems.find((record) => record.type === type && String(record.id) === String(id));
+  if (!item) return;
+  const companyItems = state.operatingItems.filter((record) => record.companyId === item.companyId && record.id !== item.id);
+  showAiLoading(`${type === "risk" ? "Risk" : "Decision"} analysis`);
+  try {
+    const result = await apiRequest("/api/ai/decision-support", {
+      method: "POST",
+      body: JSON.stringify({
+        decisionTitle: `${type}: ${item.title}`,
+        context: item.detail,
+        category: type,
+        relatedItems: companyItems,
+        risks: type === "risk" ? [item] : companyItems.filter((record) => record.type === "risk"),
+        sourceRecordReferences: [{ reference: `${type}:${item.id}`, label: item.title, category: type }],
+        userAction: `ui:${type}:ask-alfred`,
+      }),
+    });
+    showAiAnalysis({
+      title: `${type === "risk" ? "Risk" : "Decision"} analysis`,
+      meta: `${result.model} · audit #${result.auditId} · read-only`,
+      html: renderAiDecision(result.analysis),
+    });
+  } catch (error) {
+    showAiAnalysis({
+      title: "Analysis unavailable",
+      meta: "No action was executed.",
+      html: `<div class="empty-state">${escapeHTML(error.message)}</div>`,
+    });
+  }
+}
+
+async function askAiForApproval(id) {
+  if (!backendAvailable) {
+    showToast("AI analysis requires the backend");
+    return;
+  }
+  const approval = (state.approvals || []).find((record) => String(record.id) === String(id));
+  if (!approval) return;
+  showAiLoading("Approval analysis");
+  try {
+    const result = await apiRequest("/api/ai/decision-support", {
+      method: "POST",
+      body: JSON.stringify({
+        decisionTitle: `Approval request: ${approval.title}`,
+        context: approval.description,
+        category: "approval",
+        options: ["Approve", "Reject", "Request more information"],
+        approvals: [approval],
+        risks: state.operatingItems.filter((record) => record.type === "risk"),
+        sourceRecordReferences: [{ reference: `approval:${approval.id}`, label: approval.title, category: "approval" }],
+        userAction: "ui:approval:ask-alfred",
+      }),
+    });
+    showAiAnalysis({
+      title: "Approval analysis",
+      meta: `${result.model} · audit #${result.auditId} · read-only`,
+      html: renderAiDecision(result.analysis),
+    });
+  } catch (error) {
+    showAiAnalysis({
+      title: "Analysis unavailable",
+      meta: "No action was executed.",
+      html: `<div class="empty-state">${escapeHTML(error.message)}</div>`,
+    });
   }
 }
 
@@ -1041,9 +1233,11 @@ $("#copy-brief").addEventListener("click", async () => {
     showToast("Clipboard access is unavailable");
   }
 });
+$("#ai-brief-analysis").addEventListener("click", askAiBriefing);
 $("#brief-history-button").addEventListener("click", showBriefHistory);
 $$(".feedback-button").forEach((button) => button.addEventListener("click", () => submitBriefFeedback(button.dataset.rating)));
 $$(".close-dialog").forEach((button) => button.addEventListener("click", () => $("#brief-dialog").close()));
+$$(".close-ai").forEach((button) => button.addEventListener("click", () => $("#ai-dialog").close()));
 $$(".close-history").forEach((button) => button.addEventListener("click", () => $("#history-dialog").close()));
 document.addEventListener("click", (event) => {
   if (event.target.closest(".close-form")) $("#form-dialog").close();
@@ -1052,6 +1246,10 @@ document.addEventListener("click", (event) => {
   if (approvalButton) reviewApproval(approvalButton.dataset.approvalId, approvalButton.dataset.decision);
   const preflightButton = event.target.closest(".approval-preflight");
   if (preflightButton) runApprovalPreflight(preflightButton.dataset.approvalId);
+  const operatingAiButton = event.target.closest(".ai-operating-analysis");
+  if (operatingAiButton) askAiForOperatingItem(operatingAiButton.dataset.aiItemType, operatingAiButton.dataset.aiItemId);
+  const approvalAiButton = event.target.closest(".ai-approval-analysis");
+  if (approvalAiButton) askAiForApproval(approvalAiButton.dataset.approvalId);
   if (event.target.closest(".close-microsoft")) {
     clearTimeout(microsoftPollTimer);
     $("#microsoft-dialog").close();
@@ -1081,6 +1279,7 @@ document.addEventListener("keydown", (event) => {
       $("#microsoft-dialog").close();
     }
     if ($("#history-dialog").open) $("#history-dialog").close();
+    if ($("#ai-dialog").open) $("#ai-dialog").close();
   }
 });
 
