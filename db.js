@@ -856,6 +856,50 @@ const SCHEMA = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS voice_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ('created', 'listening', 'thinking', 'speaking', 'completed', 'error')),
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_conversation_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER REFERENCES voice_sessions(id) ON DELETE SET NULL,
+    speaker TEXT NOT NULL DEFAULT 'Patrick',
+    transcript TEXT NOT NULL DEFAULT '',
+    detected_intent TEXT NOT NULL DEFAULT 'unknown',
+    response TEXT NOT NULL DEFAULT '',
+    linked_project TEXT NOT NULL DEFAULT '',
+    linked_client TEXT NOT NULL DEFAULT '',
+    linked_business TEXT NOT NULL DEFAULT '',
+    linked_agent TEXT NOT NULL DEFAULT '',
+    audit_reference TEXT NOT NULL DEFAULT '',
+    transcript_logged INTEGER NOT NULL DEFAULT 1 CHECK(transcript_logged IN (0, 1)),
+    source_references TEXT NOT NULL DEFAULT '[]',
+    specialist_contributions TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    session_id INTEGER REFERENCES voice_sessions(id) ON DELETE SET NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS semantic_memory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_type TEXT NOT NULL,
@@ -1508,10 +1552,32 @@ function ensureDefaultSettings(db) {
   const semanticDefault = String(process.env.SEMANTIC_INDEXING_ENABLED || "true").toLowerCase() === "false"
     ? "false"
     : "true";
+  const voiceDefault = String(process.env.VOICE_ENABLED || "true").toLowerCase() === "false"
+    ? "false"
+    : "true";
+  const transcriptLoggingDefault = String(process.env.VOICE_TRANSCRIPT_LOGGING_ENABLED || "true").toLowerCase() === "false"
+    ? "false"
+    : "true";
   db.prepare(`
     INSERT OR IGNORE INTO app_settings (key, value)
     VALUES ('semantic_indexing_enabled', ?)
   `).run(semanticDefault);
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('voice_enabled', ?)
+  `).run(voiceDefault);
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('voice_transcript_logging_enabled', ?)
+  `).run(transcriptLoggingDefault);
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('voice_selection', ?)
+  `).run(process.env.ELEVENLABS_VOICE_ID || "alfred");
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('voice_speech_speed', '1')
+  `).run();
 }
 
 function migrateApprovalSchema(db) {
@@ -2634,6 +2700,234 @@ export function getSemanticIndexingEnabled(db) {
 
 export function setSemanticIndexingEnabled(db, enabled) {
   return setSetting(db, "semantic_indexing_enabled", enabled ? "true" : "false") === "true";
+}
+
+function safeJson(value, fallback) {
+  try {
+    return JSON.parse(value || "");
+  } catch {
+    return fallback;
+  }
+}
+
+export function getVoiceSettings(db) {
+  return {
+    enabled: getSetting(db, "voice_enabled", "false") === "true",
+    transcriptLoggingEnabled: getSetting(db, "voice_transcript_logging_enabled", "true") === "true",
+    voiceSelection: getSetting(db, "voice_selection", process.env.ELEVENLABS_VOICE_ID || "alfred"),
+    speechSpeed: Number(getSetting(db, "voice_speech_speed", "1")) || 1,
+  };
+}
+
+export function setVoiceSettings(db, settings = {}) {
+  if (typeof settings.enabled === "boolean") setSetting(db, "voice_enabled", settings.enabled ? "true" : "false");
+  if (typeof settings.transcriptLoggingEnabled === "boolean") {
+    setSetting(db, "voice_transcript_logging_enabled", settings.transcriptLoggingEnabled ? "true" : "false");
+  }
+  if (settings.voiceSelection !== undefined) setSetting(db, "voice_selection", String(settings.voiceSelection || "alfred"));
+  if (settings.speechSpeed !== undefined) {
+    const speed = Math.min(Math.max(Number(settings.speechSpeed) || 1, 0.5), 1.5);
+    setSetting(db, "voice_speech_speed", String(speed));
+  }
+  return getVoiceSettings(db);
+}
+
+export function createVoiceSession(db, { status = "created", metadata = {} } = {}) {
+  const result = db.prepare(`
+    INSERT INTO voice_sessions (status, metadata)
+    VALUES (?, ?)
+  `).run(status, JSON.stringify(metadata || {}));
+  return getVoiceSession(db, Number(result.lastInsertRowid));
+}
+
+export function updateVoiceSession(db, id, { status, metadata, completed = false } = {}) {
+  const current = getVoiceSession(db, id);
+  if (!current) return null;
+  db.prepare(`
+    UPDATE voice_sessions
+    SET status = ?, metadata = ?, completed_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE completed_at END,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(
+    status || current.status,
+    JSON.stringify(metadata || current.metadata || {}),
+    completed ? 1 : 0,
+    id,
+  );
+  return getVoiceSession(db, id);
+}
+
+export function getVoiceSession(db, id) {
+  const row = db.prepare("SELECT * FROM voice_sessions WHERE id = ?").get(Number(id));
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: toIsoTimestamp(row.started_at),
+    completedAt: toIsoTimestamp(row.completed_at),
+    metadata: safeJson(row.metadata, {}),
+  };
+}
+
+export function recordVoiceAudit(db, {
+  eventType,
+  userAction = "",
+  sessionId = null,
+  dataCategories = [],
+  model = "",
+  status = "success",
+  errorCode = "",
+  outputSaved = false,
+  executionAttempted = false,
+  metadata = {},
+} = {}) {
+  const result = db.prepare(`
+    INSERT INTO voice_audit_events (
+      event_type, user_action, session_id, data_categories, model, status,
+      error_code, output_saved, execution_attempted, metadata
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    String(eventType || "voice_command"),
+    String(userAction || ""),
+    sessionId,
+    JSON.stringify(dataCategories || []),
+    String(model || ""),
+    String(status || "success"),
+    String(errorCode || "").slice(0, 200),
+    outputSaved ? 1 : 0,
+    executionAttempted ? 1 : 0,
+    JSON.stringify(metadata || {}),
+  );
+  return getVoiceAuditEvent(db, Number(result.lastInsertRowid));
+}
+
+export function getVoiceAuditEvent(db, id) {
+  const row = db.prepare("SELECT * FROM voice_audit_events WHERE id = ?").get(Number(id));
+  if (!row) return null;
+  return {
+    id: row.id,
+    requestedAt: toIsoTimestamp(row.requested_at),
+    eventType: row.event_type,
+    userAction: row.user_action,
+    sessionId: row.session_id,
+    dataCategories: safeJson(row.data_categories, []),
+    model: row.model,
+    status: row.status,
+    errorCode: row.error_code,
+    outputSaved: Boolean(row.output_saved),
+    executionAttempted: Boolean(row.execution_attempted),
+    metadata: safeJson(row.metadata, {}),
+  };
+}
+
+export function listVoiceAudit(db, limit = 50) {
+  return db.prepare(`
+    SELECT *
+    FROM voice_audit_events
+    ORDER BY requested_at DESC, id DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 50, 1), 200)).map((row) => ({
+    id: row.id,
+    requestedAt: toIsoTimestamp(row.requested_at),
+    eventType: row.event_type,
+    userAction: row.user_action,
+    sessionId: row.session_id,
+    dataCategories: safeJson(row.data_categories, []),
+    model: row.model,
+    status: row.status,
+    errorCode: row.error_code,
+    outputSaved: Boolean(row.output_saved),
+    executionAttempted: Boolean(row.execution_attempted),
+    metadata: safeJson(row.metadata, {}),
+  }));
+}
+
+export function recordVoiceConversationTurn(db, {
+  sessionId = null,
+  speaker = "Patrick",
+  transcript = "",
+  detectedIntent = "unknown",
+  response = "",
+  linkedProject = "",
+  linkedClient = "",
+  linkedBusiness = "",
+  linkedAgent = "",
+  auditReference = "",
+  transcriptLogged = true,
+  sourceReferences = [],
+  specialistContributions = [],
+} = {}) {
+  const result = db.prepare(`
+    INSERT INTO voice_conversation_turns (
+      session_id, speaker, transcript, detected_intent, response, linked_project,
+      linked_client, linked_business, linked_agent, audit_reference, transcript_logged,
+      source_references, specialist_contributions
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    sessionId,
+    String(speaker || "Patrick"),
+    transcriptLogged ? String(transcript || "") : "",
+    String(detectedIntent || "unknown"),
+    String(response || ""),
+    String(linkedProject || ""),
+    String(linkedClient || ""),
+    String(linkedBusiness || ""),
+    String(linkedAgent || ""),
+    String(auditReference || ""),
+    transcriptLogged ? 1 : 0,
+    JSON.stringify(sourceReferences || []),
+    JSON.stringify(specialistContributions || []),
+  );
+  return getVoiceConversationTurn(db, Number(result.lastInsertRowid));
+}
+
+export function getVoiceConversationTurn(db, id) {
+  const row = db.prepare("SELECT * FROM voice_conversation_turns WHERE id = ?").get(Number(id));
+  if (!row) return null;
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    speaker: row.speaker,
+    transcript: row.transcript,
+    detectedIntent: row.detected_intent,
+    response: row.response,
+    linkedProject: row.linked_project,
+    linkedClient: row.linked_client,
+    linkedBusiness: row.linked_business,
+    linkedAgent: row.linked_agent,
+    auditReference: row.audit_reference,
+    transcriptLogged: Boolean(row.transcript_logged),
+    sourceReferences: safeJson(row.source_references, []),
+    specialistContributions: safeJson(row.specialist_contributions, []),
+    createdAt: toIsoTimestamp(row.created_at),
+  };
+}
+
+export function listVoiceConversationTurns(db, limit = 20) {
+  return db.prepare(`
+    SELECT *
+    FROM voice_conversation_turns
+    ORDER BY created_at DESC, id DESC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 20, 1), 100)).map((row) => ({
+    id: row.id,
+    sessionId: row.session_id,
+    speaker: row.speaker,
+    transcript: row.transcript,
+    detectedIntent: row.detected_intent,
+    response: row.response,
+    linkedProject: row.linked_project,
+    linkedClient: row.linked_client,
+    linkedBusiness: row.linked_business,
+    linkedAgent: row.linked_agent,
+    auditReference: row.audit_reference,
+    transcriptLogged: Boolean(row.transcript_logged),
+    sourceReferences: safeJson(row.source_references, []),
+    specialistContributions: safeJson(row.specialist_contributions, []),
+    createdAt: toIsoTimestamp(row.created_at),
+  }));
 }
 
 function semanticRecord({

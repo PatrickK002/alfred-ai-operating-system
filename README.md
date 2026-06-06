@@ -87,6 +87,13 @@ Health and aggregate workflows:
 | `GET` | `/api/memory/search?q=Westminster` | Semantic memory search with source references |
 | `GET` | `/api/memory/settings` | Current semantic indexing setting |
 | `PATCH` | `/api/memory/settings` | Enable or disable semantic indexing |
+| `GET` | `/api/voice/status` | Voice settings, provider status, personas, supported commands and advisory boundary |
+| `GET` | `/api/voice/settings` | Read voice enablement, transcript logging, voice selection and speech speed |
+| `PATCH` | `/api/voice/settings` | Update local voice settings |
+| `POST` | `/api/voice/sessions` | Create a local voice session |
+| `POST` | `/api/voice/command` | Process a transcript or microphone audio command through Alfred |
+| `GET` | `/api/voice/conversations?limit=20` | List locally stored voice conversation turns |
+| `GET` | `/api/voice/audit?limit=50` | Metadata-only voice audit events |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -203,6 +210,77 @@ The Westbridge Property Director is advisory only. It can:
 
 It cannot buy property, make offers, send communications, issue legal instructions, connect to bank accounts, process payments or provide regulated financial advice. All recommendations require Patrick review and professional due diligence.
 
+## Voice Command Centre
+
+Alfred now supports a read-only voice command interface on the Executive Command dashboard.
+
+Architecture:
+
+```text
+Voice -> Deepgram -> Alfred -> Claude -> Executive Team Context -> Response -> ElevenLabs -> Voice
+```
+
+The same endpoint also accepts typed transcript fallback commands for local testing when microphone, Deepgram or ElevenLabs are not configured.
+
+### Voice Setup
+
+Add these values to `.env` as needed:
+
+```bash
+DEEPGRAM_API_KEY="your-deepgram-key"
+DEEPGRAM_MODEL="nova-3"
+ELEVENLABS_API_KEY="your-elevenlabs-key"
+ELEVENLABS_VOICE_ID="your-elevenlabs-voice-id"
+ELEVENLABS_MODEL="eleven_multilingual_v2"
+VOICE_ENABLED=true
+VOICE_TRANSCRIPT_LOGGING_ENABLED=true
+VOICE_AI_TIMEOUT_MS=12000
+```
+
+`VOICE_ENABLED` controls the local voice interface. `VOICE_TRANSCRIPT_LOGGING_ENABLED=false` prevents transcript content from being persisted in `voice_conversation_turns`.
+`VOICE_AI_TIMEOUT_MS` caps how long voice commands wait for Claude before using deterministic local fallback.
+
+### Supported Commands
+
+- `Alfred, brief me`
+- `What requires my attention today?`
+- `What are my biggest risks?`
+- `What meetings do I have today?`
+- `What decisions are waiting for approval?`
+- `Show Westminster status`
+- `Ask Sarah to review Westminster`
+- `Ask Olivia for revenue forecast`
+- `Ask Westbridge for property pipeline`
+- `What property opportunities need attention?`
+- `What is projected property cashflow?`
+
+### Voice Security Boundary
+
+Voice is an executive intelligence interface only. It can analyse, brief, route internally to Sarah, Olivia and Westbridge, and recommend next steps.
+
+Voice cannot:
+
+- Send emails
+- Update calendars
+- Edit OneDrive or SharePoint files
+- Modify Monday.com
+- Raise invoices or process payments
+- Create property offers, purchases or legal instructions
+- Approve, reject or execute approval requests
+- Bypass approval safeguards
+
+No raw audio is stored by default. Microphone audio is sent to Deepgram only for transcription when the user starts recording and a Deepgram key is configured. ElevenLabs receives only Alfred's final response text for speech synthesis when configured. If ElevenLabs is unavailable, the UI falls back to text and may use local browser speech synthesis.
+
+Voice transcripts are local sensitive business data. Voice audit records log metadata only: timestamp, user action, data categories, provider/model, success/error status and whether execution was attempted. API keys and raw audio are never logged.
+
+### Voice Limitations
+
+- Alfred voice is the only active voice persona in this phase.
+- Sarah, Olivia and Westbridge are routed advisory specialists; they do not have separate voices yet.
+- Deepgram and ElevenLabs show `Connected` only after a successful provider call.
+- Mobile/PWA/native app packaging is not included. The layout is prepared for MacBook, iPhone Safari and future PWA work.
+- Voice commands do not create external actions. Any future write action must go through the existing approval framework and a separate executor review.
+
 ## Integration States
 
 The database contains honest placeholders for:
@@ -223,7 +301,7 @@ Allowed states are:
 - `Planned`
 - `Connected`
 
-External calls are limited to verified read-only Microsoft 365 reads, explicit Anthropic reasoning requests and Voyage embedding/search requests over compact summaries. Alfred still cannot modify external systems.
+External calls are limited to verified read-only Microsoft 365 reads, explicit Anthropic reasoning requests, Voyage embedding/search requests over compact summaries, Deepgram transcription requests for user-supplied voice audio, and ElevenLabs text-to-speech requests for Alfred's final response. Alfred still cannot modify external systems.
 
 ## Tests
 
@@ -231,7 +309,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah and Westbridge property intelligence.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence and the Voice Command Centre.
 
 ## Architecture
 
@@ -244,6 +322,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `financial.js` - Olivia CFO calculations, order book import persistence, board reports and read-only finance audits
 - `property.js` - Westbridge portfolio metrics, deal analysis, rules engine, due diligence, property memory and audit logging
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
+- `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
@@ -260,7 +339,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 6. Add retention controls, encryption and role-based access for financial intelligence tables.
 7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.
 8. Add retrieval evaluation and retention controls for semantic memory.
-9. Add ElevenLabs and Deepgram only after text workflows are stable.
+9. Add provider health probes and retention controls for voice transcripts.
 
 Each integration should remain disabled until credentials are configured and its connection has been verified.
 

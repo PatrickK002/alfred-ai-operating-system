@@ -340,6 +340,31 @@ const seedData = {
     pipelineStages: ["Lead", "Reviewing", "Due Diligence", "Offer Made", "Negotiating", "Exchanged", "Completed", "Rejected"],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  voice: {
+    status: {
+      settings: {
+        enabled: true,
+        transcriptLoggingEnabled: true,
+        voiceSelection: "alfred",
+        speechSpeed: 1,
+      },
+      personas: [],
+      supportedCommands: [
+        "Alfred, brief me",
+        "Ask Sarah to review Westminster",
+        "Ask Olivia for revenue forecast",
+        "Ask Westbridge for property pipeline",
+      ],
+      providers: {
+        deepgram: { state: "Not connected", configured: false },
+        elevenlabs: { state: "Not connected", configured: false },
+      },
+      microphone: { rawAudioStored: false },
+      boundary: { readOnly: true, voiceExecutionEnabled: false },
+    },
+    conversations: [],
+    lastResult: null,
+  },
 };
 
 let state = loadState();
@@ -354,6 +379,9 @@ let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
 let sarahCurrentProjectId = null;
 let currentPropertyOpportunityId = null;
+let voiceMediaRecorder = null;
+let voiceAudioChunks = [];
+let voiceCurrentStream = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -409,6 +437,12 @@ async function loadDashboard() {
     state.property = await apiRequest("/api/property/dashboard").catch(() => seedData.property);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
+    state.voice = {
+      ...seedData.voice,
+      status: await apiRequest("/api/voice/status").catch(() => seedData.voice.status),
+      conversations: await apiRequest("/api/voice/conversations?limit=8").catch(() => []),
+      lastResult: state.voice?.lastResult || null,
+    };
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -534,6 +568,68 @@ function renderCommand() {
       `;
     })
     .join("");
+}
+
+function renderVoiceCommandCentre() {
+  const voice = state.voice || seedData.voice;
+  const status = voice.status || seedData.voice.status;
+  const settings = status.settings || seedData.voice.status.settings;
+  const deepgram = status.providers?.deepgram || {};
+  const elevenlabs = status.providers?.elevenlabs || {};
+  const conversations = voice.conversations || [];
+  const last = voice.lastResult;
+  const voiceEnabled = Boolean(settings.enabled);
+
+  $("#voice-status-pill").textContent = voiceEnabled ? "Voice ready" : "Voice disabled";
+  $("#voice-status-pill").classList.toggle("disabled", !voiceEnabled);
+  $("#deepgram-status").textContent = deepgram.state || (deepgram.configured ? "Planned" : "Not connected");
+  $("#elevenlabs-status").textContent = elevenlabs.state || (elevenlabs.configured ? "Planned" : "Not connected");
+  $("#microphone-status").textContent = navigator.mediaDevices ? "Available on request" : "Unavailable";
+  $("#voice-button").disabled = !backendAvailable || !voiceEnabled;
+  $("#voice-enabled-toggle").checked = voiceEnabled;
+  $("#voice-transcript-logging-toggle").checked = Boolean(settings.transcriptLoggingEnabled);
+  $("#voice-selection").value = settings.voiceSelection || "alfred";
+  $("#voice-speech-speed").value = settings.speechSpeed || 1;
+  $("#voice-speed-label").textContent = `${Number(settings.speechSpeed || 1).toFixed(2)}x`;
+  $("#voice-command-examples").innerHTML = (status.supportedCommands || seedData.voice.status.supportedCommands)
+    .slice(0, 6)
+    .map((command) => `<button type="button" class="voice-example" data-voice-command="${escapeHTML(command)}">${escapeHTML(command)}</button>`)
+    .join("");
+
+  if (last) {
+    $("#voice-response").innerHTML = `
+      <div class="voice-answer">
+        <strong>Alfred</strong>
+        <p>${escapeHTML(last.response || last.message || "")}</p>
+        <small>
+          Intent: ${escapeHTML(last.detectedIntent?.intent || last.detectedIntent || "unknown")}
+          · Audio: ${escapeHTML(last.audio?.status || "text_only")}
+          · No external action executed
+        </small>
+      </div>
+      ${(last.specialistContributions || []).length ? `
+        <div class="voice-specialists">
+          ${(last.specialistContributions || []).map((item) => `
+            <article>
+              <strong>${escapeHTML(item.agent)}</strong>
+              <span>${escapeHTML(item.assessment)}</span>
+              <small>${escapeHTML(item.sourceReference || "")}</small>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
+    `;
+  }
+
+  $("#voice-history").innerHTML = conversations.length
+    ? conversations.map((turn) => `
+        <article class="voice-history-item">
+          <strong>${turn.transcriptLogged ? escapeHTML(turn.transcript || "Voice transcript") : "Transcript logging disabled"}</strong>
+          <span>${escapeHTML(turn.response || "")}</span>
+          <small>${escapeHTML(turn.detectedIntent || "unknown")} · ${escapeHTML(turn.linkedAgent || "alfred")} · ${new Date(turn.createdAt).toLocaleString("en-GB")}</small>
+        </article>
+      `).join("")
+    : '<div class="empty-state">No voice conversations yet.</div>';
 }
 
 function renderCompanies() {
@@ -1208,6 +1304,7 @@ function renderSarah() {
 
 function renderAll() {
   renderCommand();
+  renderVoiceCommandCentre();
   renderCompanies();
   renderProperty();
   renderProjectIntelligence();
@@ -2308,6 +2405,171 @@ async function runApprovalPreflight(id) {
   }
 }
 
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",").pop() || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function setVoiceUiState(label, detail = "") {
+  $("#voice-state-label").textContent = label;
+  $("#voice-state-detail").textContent = detail;
+  $("#voice-command-centre").dataset.voiceState = label.toLowerCase();
+}
+
+function speakWithBrowserFallback(text, rate = 1) {
+  return new Promise((resolve) => {
+    if (!("speechSynthesis" in window) || !text) return resolve(false);
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = Math.min(Math.max(Number(rate) || 1, 0.5), 1.5);
+    utterance.onend = () => resolve(true);
+    utterance.onerror = () => resolve(false);
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+async function playVoiceResult(result) {
+  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
+  if (result.audio?.audioBase64 && result.audio?.mimeType) {
+    setVoiceUiState("Speaking", "Playing Alfred through ElevenLabs.");
+    const audio = new Audio(`data:${result.audio.mimeType};base64,${result.audio.audioBase64}`);
+    await new Promise((resolve) => {
+      audio.onended = resolve;
+      audio.onerror = resolve;
+      audio.play().catch(resolve);
+    });
+    setVoiceUiState("Ready", "Voice response complete.");
+    return;
+  }
+  setVoiceUiState("Speaking", result.audio?.errorCode ? "Using local browser speech fallback." : "Speaking locally.");
+  const spoke = await speakWithBrowserFallback(result.response, settings.speechSpeed);
+  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Text response ready. Browser speech is unavailable.");
+}
+
+async function submitVoiceCommand(payload) {
+  if (!backendAvailable) {
+    showToast("Voice requires the backend API");
+    return;
+  }
+  setVoiceUiState("Thinking", "Routing your command through Alfred.");
+  try {
+    const result = await apiRequest("/api/voice/command", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    state.voice = {
+      ...state.voice,
+      lastResult: result,
+      conversations: await apiRequest("/api/voice/conversations?limit=8").catch(() => state.voice?.conversations || []),
+      status: await apiRequest("/api/voice/status").catch(() => state.voice?.status || seedData.voice.status),
+    };
+    renderVoiceCommandCentre();
+    if (result.status === "error") {
+      setVoiceUiState("Ready", result.message || "Voice command failed gracefully.");
+      showToast(result.errorCode || "Voice command unavailable");
+      return;
+    }
+    await playVoiceResult(result);
+  } catch (error) {
+    setVoiceUiState("Ready", error.message);
+    showToast(error.message);
+  }
+}
+
+async function submitVoiceTranscript(event) {
+  event.preventDefault();
+  const transcript = $("#voice-transcript-input").value.trim();
+  if (!transcript) {
+    showToast("Enter a voice command transcript");
+    return;
+  }
+  $("#voice-transcript-input").value = "";
+  await submitVoiceCommand({ transcript, userAction: "ui:voice:typed-command" });
+}
+
+async function startVoiceListening() {
+  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
+  if (!backendAvailable) {
+    showToast("Voice requires the backend API");
+    return;
+  }
+  if (!settings.enabled) {
+    showToast("Enable Voice first");
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    $("#microphone-status").textContent = "Unavailable";
+    showToast("Microphone recording is unavailable in this browser");
+    return;
+  }
+  try {
+    voiceCurrentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    $("#microphone-status").textContent = "Listening";
+    voiceAudioChunks = [];
+    voiceMediaRecorder = new MediaRecorder(voiceCurrentStream);
+    voiceMediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) voiceAudioChunks.push(event.data);
+    });
+    voiceMediaRecorder.addEventListener("stop", async () => {
+      const blob = new Blob(voiceAudioChunks, { type: voiceMediaRecorder.mimeType || "audio/webm" });
+      voiceCurrentStream?.getTracks().forEach((track) => track.stop());
+      voiceCurrentStream = null;
+      voiceMediaRecorder = null;
+      $("#voice-button").setAttribute("aria-pressed", "false");
+      $("#microphone-status").textContent = "Captured";
+      const audioBase64 = await blobToBase64(blob);
+      await submitVoiceCommand({
+        audioBase64,
+        mimeType: blob.type || "audio/webm",
+        userAction: "ui:voice:microphone-command",
+      });
+    });
+    voiceMediaRecorder.start();
+    $("#voice-button").setAttribute("aria-pressed", "true");
+    setVoiceUiState("Listening", "Speak naturally. Press the microphone again to stop.");
+  } catch (error) {
+    $("#microphone-status").textContent = "Permission denied";
+    showToast(error.message || "Microphone permission was not granted");
+  }
+}
+
+function toggleVoiceListening() {
+  if (voiceMediaRecorder?.state === "recording") {
+    setVoiceUiState("Thinking", "Transcribing your command.");
+    voiceMediaRecorder.stop();
+    return;
+  }
+  startVoiceListening();
+}
+
+async function updateVoiceSettings() {
+  if (!backendAvailable) return;
+  const settings = {
+    enabled: $("#voice-enabled-toggle").checked,
+    transcriptLoggingEnabled: $("#voice-transcript-logging-toggle").checked,
+    voiceSelection: $("#voice-selection").value.trim() || "alfred",
+    speechSpeed: Number($("#voice-speech-speed").value || 1),
+  };
+  $("#voice-speed-label").textContent = `${settings.speechSpeed.toFixed(2)}x`;
+  try {
+    const nextSettings = await apiRequest("/api/voice/settings", {
+      method: "PATCH",
+      body: JSON.stringify(settings),
+    });
+    state.voice.status = await apiRequest("/api/voice/status").catch(() => ({
+      ...state.voice.status,
+      settings: nextSettings,
+    }));
+    renderVoiceCommandCentre();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function openRecordForm(kind) {
   const form = $("#record-form");
   const companies = state.companies
@@ -2548,6 +2810,15 @@ $("#memory-filters").addEventListener("click", (event) => {
 });
 $("#semantic-memory-form").addEventListener("submit", searchSemanticMemory);
 $("#semantic-indexing-toggle").addEventListener("change", toggleSemanticIndexing);
+$("#voice-button").addEventListener("click", toggleVoiceListening);
+$("#voice-transcript-form").addEventListener("submit", submitVoiceTranscript);
+$("#voice-enabled-toggle").addEventListener("change", updateVoiceSettings);
+$("#voice-transcript-logging-toggle").addEventListener("change", updateVoiceSettings);
+$("#voice-selection").addEventListener("change", updateVoiceSettings);
+$("#voice-speech-speed").addEventListener("input", () => {
+  $("#voice-speed-label").textContent = `${Number($("#voice-speech-speed").value || 1).toFixed(2)}x`;
+});
+$("#voice-speech-speed").addEventListener("change", updateVoiceSettings);
 $("#command-form").addEventListener("submit", (event) => {
   event.preventDefault();
   runCommand($("#command-input").value);
@@ -2587,6 +2858,11 @@ document.addEventListener("click", (event) => {
   if (operatingAiButton) askAiForOperatingItem(operatingAiButton.dataset.aiItemType, operatingAiButton.dataset.aiItemId);
   const approvalAiButton = event.target.closest(".ai-approval-analysis");
   if (approvalAiButton) askAiForApproval(approvalAiButton.dataset.approvalId);
+  const voiceExample = event.target.closest(".voice-example");
+  if (voiceExample) {
+    $("#voice-transcript-input").value = voiceExample.dataset.voiceCommand || "";
+    $("#voice-transcript-form").requestSubmit();
+  }
   if (event.target.closest(".close-microsoft")) {
     clearTimeout(microsoftPollTimer);
     $("#microsoft-dialog").close();

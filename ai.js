@@ -81,5 +81,13 @@ export function createAiReasoningService({ db, client, onConnected = () => {} })
         analyze: () => client.analyzeSarahClient(input),
       });
     },
+    analyzeVoiceCommand(input, metadata = {}) {
+      return run({
+        analysisType: "voice_command",
+        userAction: metadata.userAction || "api:voice-command",
+        dataCategories: metadata.dataCategories,
+        analyze: () => client.analyzeVoiceCommand(input),
+      });
+    },
   };
 }

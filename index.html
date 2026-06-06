@@ -155,6 +155,72 @@
             </section>
           </div>
 
+          <section class="voice-panel panel" id="voice-command-centre">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">VOICE COMMAND CENTRE</p>
+                <h3>Speak to Alfred</h3>
+              </div>
+              <span class="voice-status" id="voice-status-pill">Checking voice</span>
+            </div>
+            <div class="approval-boundary voice-boundary">
+              <strong>Advisory-only voice mode</strong>
+              <span>Voice can brief, analyse and route to Sarah, Olivia or Westbridge. It cannot send emails, update calendars, edit files, modify finance/property records or bypass approvals.</span>
+            </div>
+            <div class="voice-layout">
+              <section class="voice-console">
+                <button class="voice-button" id="voice-button" type="button" aria-pressed="false">
+                  <span class="voice-ring"></span>
+                  <span class="voice-mark">A</span>
+                </button>
+                <div class="voice-state">
+                  <strong id="voice-state-label">Ready</strong>
+                  <span id="voice-state-detail">Press the microphone, or type a transcript below.</span>
+                </div>
+                <form class="voice-transcript-form" id="voice-transcript-form">
+                  <input id="voice-transcript-input" placeholder='Try “Alfred, brief me” or “Ask Olivia for revenue forecast”' />
+                  <button class="secondary-button" type="submit">Ask Alfred</button>
+                </form>
+                <div class="voice-examples" id="voice-command-examples"></div>
+              </section>
+              <section class="voice-output">
+                <div class="voice-provider-grid">
+                  <article><small>Deepgram</small><strong id="deepgram-status">Checking</strong></article>
+                  <article><small>ElevenLabs</small><strong id="elevenlabs-status">Checking</strong></article>
+                  <article><small>Microphone</small><strong id="microphone-status">Not requested</strong></article>
+                </div>
+                <div class="voice-response" id="voice-response">
+                  <div class="empty-state">Alfred's spoken response will appear here.</div>
+                </div>
+                <details class="voice-settings">
+                  <summary>Voice settings</summary>
+                  <label><input id="voice-enabled-toggle" type="checkbox" /> Enable Voice</label>
+                  <label><input id="voice-transcript-logging-toggle" type="checkbox" /> Store transcripts locally</label>
+                  <label>
+                    <span>Voice Selection</span>
+                    <input id="voice-selection" placeholder="alfred or ElevenLabs voice ID" />
+                  </label>
+                  <label>
+                    <span>Speech Speed</span>
+                    <input id="voice-speech-speed" type="range" min="0.5" max="1.5" step="0.05" />
+                    <small id="voice-speed-label">1.00x</small>
+                  </label>
+                </details>
+              </section>
+            </div>
+            <section class="voice-history-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CONVERSATION HISTORY</p>
+                  <h3>Recent voice turns</h3>
+                </div>
+              </div>
+              <div id="voice-history" class="voice-history">
+                <div class="empty-state">No voice conversations yet.</div>
+              </div>
+            </section>
+          </section>
+
           <section class="metric-grid" id="metric-grid"></section>
 
           <section class="company-status panel">
