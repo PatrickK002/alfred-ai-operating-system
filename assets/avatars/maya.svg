@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Maya abstract media avatar</title>
+  <desc id="desc">Premium dark abstract avatar with amber media identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#e2b46b" stroke-opacity=".28" stroke-width="2"/>
+  <path d="M48 58h64a8 8 0 0 1 8 8v48H40V66a8 8 0 0 1 8-8z" fill="#e2b46b" fill-opacity=".11" stroke="#e2b46b" stroke-opacity=".55" stroke-width="3"/>
+  <path d="M66 75l28 18-28 18z" fill="#fff0cf" fill-opacity=".7"/>
+  <text x="80" y="137" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#fff3d4">M</text>
+</svg>

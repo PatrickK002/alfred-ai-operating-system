@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Alfred abstract executive avatar</title>
+  <desc id="desc">Premium dark abstract avatar with cyan executive identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#62ead5" stroke-opacity=".28" stroke-width="2"/>
+  <circle cx="80" cy="80" r="40" fill="#62ead5" fill-opacity=".08" stroke="#62ead5" stroke-opacity=".42" stroke-width="2"/>
+  <path d="M34 84h28l18-36 18 36h28" fill="none" stroke="#62ead5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M52 111c14 10 42 10 56 0" fill="none" stroke="#d8fffa" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+  <text x="80" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#e6fffb">A</text>
+</svg>

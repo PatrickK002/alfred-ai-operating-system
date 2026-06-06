@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">James abstract product avatar</title>
+  <desc id="desc">Premium dark abstract avatar with rose product identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#ff9fb2" stroke-opacity=".28" stroke-width="2"/>
+  <path d="M50 101V61h60v40z" fill="#ff9fb2" fill-opacity=".1" stroke="#ff9fb2" stroke-opacity=".55" stroke-width="3"/>
+  <path d="M62 75h36M62 89h22M58 116h44" stroke="#ffe7ec" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="111" cy="61" r="9" fill="#ff9fb2" fill-opacity=".4"/>
+  <text x="80" y="143" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#fff0f3">J</text>
+</svg>
