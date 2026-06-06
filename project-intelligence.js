@@ -20,15 +20,31 @@ const DOCUMENT_CLASSIFICATIONS = [
   "COBie",
   "IFC",
   "Drawings",
-  "Meeting minutes",
+  "Meeting Minutes",
   "Reports",
+  "Risk Registers",
+  "Asset Information",
+  "Digital Twin Documents",
+  "GIS Documents",
+  "Building Safety Documents",
   "Proposals",
   "Contracts",
-  "Commercial",
+  "Commercial Documents",
   "Unknown",
 ];
 
 const REQUIRED_DOCUMENT_CLASSES = ["EIR", "BEP", "MIDP", "TIDP"];
+export const DIGITAL_CONSTRUCTION_DOMAINS = [
+  "BIM",
+  "GIS",
+  "COBie",
+  "ISO19650",
+  "AssetInformation",
+  "DigitalTwin",
+  "BuildingSafety",
+  "InformationManagement",
+  "PowerPlatform",
+];
 const RISK_WORDS = ["risk", "issue", "delay", "blocked", "missing", "overdue", "breach", "escalation"];
 const DECISION_WORDS = ["approve", "approval", "decision", "decide", "confirm", "sign off", "agreed", "agreement"];
 
@@ -132,11 +148,16 @@ export function classifyProjectDocument(file = {}) {
   if (/cobie|\.xlsx?$/.test(text) && /cobie/.test(text)) return "COBie";
   if (/\.ifc\b|industry foundation class/.test(text)) return "IFC";
   if (/drawing|drawings|\bdwg\b|\.dwg\b|\.rvt\b|\.nwd\b/.test(text)) return "Drawings";
-  if (/minutes|meeting note|mom\b|action log/.test(text)) return "Meeting minutes";
+  if (/risk register|risk log|issue register|issue log/.test(text)) return "Risk Registers";
+  if (/asset information|air\b|asset register|asset data|asset requirement/.test(text)) return "Asset Information";
+  if (/digital twin|twin strategy|twin model|sensor/.test(text)) return "Digital Twin Documents";
+  if (/\bgis\b|geospatial|spatial dataset|spatial data|arcgis|qgis|layer/.test(text)) return "GIS Documents";
+  if (/building safety|golden thread|safety case|gateway|brsr|building control/.test(text)) return "Building Safety Documents";
+  if (/minutes|meeting note|mom\b|action log/.test(text)) return "Meeting Minutes";
   if (/report|dashboard|review|assessment/.test(text)) return "Reports";
   if (/proposal|quote|tender|bid/.test(text)) return "Proposals";
   if (/contract|appointment|agreement|terms/.test(text)) return "Contracts";
-  if (/commercial|fee|invoice|cost|payment|order book/.test(text)) return "Commercial";
+  if (/commercial|fee|invoice|cost|payment|order book/.test(text)) return "Commercial Documents";
   return "Unknown";
 }
 
@@ -181,6 +202,43 @@ export function recordProjectAudit(db, {
     VALUES (?, ?, ?, ?, ?)
   `).run(projectProfileId, String(eventType), String(actor), String(source), JSON.stringify(metadata));
   return { id: Number(result.lastInsertRowid), projectProfileId, eventType, actor, source, metadata };
+}
+
+export function recordProjectKnowledgeLink(db, {
+  projectProfileId,
+  fromType = "project_profile",
+  fromId = projectProfileId,
+  toType,
+  toId,
+  relationship,
+  confidence = "inferred",
+  explanation = "",
+  sourceType = "alfred_project_intelligence",
+}) {
+  if (!projectProfileId || !toType || toId === undefined || !relationship) return null;
+  const result = db.prepare(`
+    INSERT INTO project_knowledge_links (
+      project_profile_id, from_type, from_id, to_type, to_id, relationship,
+      confidence, explanation, source_type, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(project_profile_id, from_type, from_id, to_type, to_id, relationship) DO UPDATE SET
+      confidence = excluded.confidence,
+      explanation = excluded.explanation,
+      source_type = excluded.source_type,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    Number(projectProfileId),
+    String(fromType),
+    String(fromId),
+    String(toType),
+    String(toId),
+    String(relationship),
+    String(confidence),
+    normalizeText(explanation),
+    String(sourceType),
+  );
+  return Number(result.lastInsertRowid || 0);
 }
 
 function mapProfile(row) {
@@ -326,9 +384,10 @@ export function importProjectDocuments(db, projectProfileId, files = [], { sourc
     INSERT INTO project_documents (
       project_profile_id, source_system, external_id, name, path, web_url, file_type,
       classification, size_bytes, created_datetime, modified_datetime, parent_folder,
+      owner_name, location,
       association_confidence, association_reason, metadata, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(project_profile_id, source_system, external_id) DO UPDATE SET
       name = excluded.name,
       path = excluded.path,
@@ -339,6 +398,8 @@ export function importProjectDocuments(db, projectProfileId, files = [], { sourc
       created_datetime = excluded.created_datetime,
       modified_datetime = excluded.modified_datetime,
       parent_folder = excluded.parent_folder,
+      owner_name = excluded.owner_name,
+      location = excluded.location,
       association_confidence = excluded.association_confidence,
       association_reason = excluded.association_reason,
       metadata = excluded.metadata,
@@ -363,6 +424,8 @@ export function importProjectDocuments(db, projectProfileId, files = [], { sourc
       fileRecord.createdDateTime,
       fileRecord.modifiedDateTime,
       fileRecord.parentFolder,
+      fileRecord.ownerName,
+      fileRecord.location,
       files.length === 1 && !association.associated ? 1 : association.confidence,
       files.length === 1 && !association.associated ? "Manual/project-specific import" : association.reason,
       JSON.stringify({ rawMetadata: fileRecord.rawMetadata, fullContentIndexed: false }),
@@ -376,6 +439,15 @@ export function importProjectDocuments(db, projectProfileId, files = [], { sourc
       sourceId: saved.id,
       summary: `Project document metadata: ${fileRecord.name}. Classification: ${classifyProjectDocument(fileRecord)}. Full document content was not indexed.`,
       relevanceScore: association.confidence || 0.5,
+    });
+    if (saved) recordProjectKnowledgeLink(db, {
+      projectProfileId: profile.id,
+      toType: "project_document",
+      toId: saved.id,
+      relationship: "has_document_metadata",
+      confidence: files.length === 1 && !association.associated ? "confirmed" : "inferred",
+      explanation: files.length === 1 && !association.associated ? "Manual/project-specific import" : association.reason,
+      sourceType: sourceSystem,
     });
     stored += 1;
     if (saved) storedIds.push(saved.id);
@@ -446,6 +518,15 @@ export function importProjectEmailSignals(db, projectProfileId, emails = [], { s
       summary: `Project email signal: ${email.subject || "(No subject)"}. ${email.bodyPreview || ""}`.slice(0, 1200),
       relevanceScore: association.confidence,
     });
+    if (saved) recordProjectKnowledgeLink(db, {
+      projectProfileId,
+      toType: "project_email",
+      toId: saved.id,
+      relationship: "has_email_signal",
+      confidence: "inferred",
+      explanation: association.reason,
+      sourceType: sourceSystem,
+    });
     stored += 1;
   }
   if (stored) recordProjectAudit(db, {
@@ -510,6 +591,15 @@ export function importProjectMeetings(db, projectProfileId, meetings = [], { sou
       summary: `Project meeting metadata: ${meeting.subject || meeting.title || "(Untitled meeting)"}. ${meeting.bodyPreview || ""}`.slice(0, 1200),
       relevanceScore: association.confidence,
     });
+    if (saved) recordProjectKnowledgeLink(db, {
+      projectProfileId,
+      toType: "project_meeting",
+      toId: saved.id,
+      relationship: "has_meeting",
+      confidence: "inferred",
+      explanation: association.reason,
+      sourceType: sourceSystem,
+    });
     stored += 1;
   }
   if (stored) recordProjectAudit(db, {
@@ -523,6 +613,20 @@ export function importProjectMeetings(db, projectProfileId, meetings = [], { sou
 
 function normalizeMicrosoftFile(file) {
   const parentPath = file.parentReference?.path || file.parentFolder || "";
+  const ownerName = normalizeText(
+    file.ownerName
+    || file.lastModifiedBy?.user?.displayName
+    || file.createdBy?.user?.displayName
+    || file.createdBy?.application?.displayName
+    || "",
+  );
+  const location = normalizeText(
+    file.location
+    || file.parentReference?.siteId
+    || file.parentReference?.driveId
+    || file.parentReference?.driveType
+    || "",
+  );
   return {
     externalId: String(file.id || file.externalId || file.webUrl || file.name),
     name: normalizeText(file.name || ""),
@@ -533,10 +637,14 @@ function normalizeMicrosoftFile(file) {
     createdDateTime: normalizeText(file.createdDateTime || file.created_datetime || ""),
     modifiedDateTime: normalizeText(file.lastModifiedDateTime || file.modifiedDateTime || file.modified_datetime || ""),
     parentFolder: normalizeText(file.parentReference?.name || file.parentFolder || parentPath.split("/").pop() || ""),
+    ownerName,
+    location,
     rawMetadata: {
       folder: Boolean(file.folder),
       file: Boolean(file.file),
       parentReference: file.parentReference || null,
+      ownerName,
+      location,
     },
   };
 }
@@ -622,8 +730,11 @@ export function syncOperatingRecordsToProjects(db) {
       for (const row of rows) {
         const association = scoreAssociation(`${row.title} ${row.detail}`.toLowerCase(), profile, contacts);
         if (row.project_id && row.project_id === profile.projectId || association.confidence >= 0.3) {
+          let linkedId;
+          let linkType;
+          let relationship;
           if (target === "project_risks") {
-            upsertProjectRisk(db, profile.id, {
+            linkedId = upsertProjectRisk(db, profile.id, {
               title: row.title,
               detail: row.detail,
               severity: row.priority,
@@ -631,16 +742,20 @@ export function syncOperatingRecordsToProjects(db) {
               sourceType: "operating_risk",
               sourceId: row.id,
             });
+            linkType = "project_risk";
+            relationship = "has_risk";
           } else if (target === "project_decisions") {
-            upsertProjectDecision(db, profile.id, {
+            linkedId = upsertProjectDecision(db, profile.id, {
               title: row.title,
               detail: row.detail,
               status: row.status,
               sourceType: "operating_decision",
               sourceId: row.id,
             });
+            linkType = "project_decision";
+            relationship = "has_decision";
           } else {
-            upsertSourceRecord(db, target, profile.id, {
+            linkedId = upsertSourceRecord(db, target, profile.id, {
               title: row.title,
               detail: row.detail,
               priority: row.priority,
@@ -649,7 +764,20 @@ export function syncOperatingRecordsToProjects(db) {
               sourceType: "operating_action",
               sourceId: row.id,
             });
+            linkType = "project_action";
+            relationship = "has_action";
           }
+          recordProjectKnowledgeLink(db, {
+            projectProfileId: profile.id,
+            toType: linkType,
+            toId: linkedId,
+            relationship,
+            confidence: row.project_id && row.project_id === profile.projectId ? "confirmed" : "inferred",
+            explanation: row.project_id && row.project_id === profile.projectId
+              ? "Linked through confirmed Alfred project record."
+              : association.reason,
+            sourceType: "operating_register",
+          });
           linked += 1;
         }
       }
@@ -679,6 +807,8 @@ export function calculateProjectHealthScore(bundle, { now = new Date() } = {}) {
   const overdueActions = bundle.actions.filter((action) => isProjectActionOverdue(action, now)).length;
   const classes = new Set(bundle.documents.map((document) => document.classification));
   const missingClasses = REQUIRED_DOCUMENT_CLASSES.filter((classification) => !classes.has(classification));
+  const unknownDocuments = bundle.documents.filter((document) => document.classification === "Unknown").length;
+  const taggedDomains = bundle.tags?.length || 0;
   const latestActivity = [
     ...bundle.updates.map((item) => item.createdAt || item.created_at),
     ...bundle.documents.map((item) => item.modifiedDatetime || item.modified_datetime),
@@ -695,6 +825,9 @@ export function calculateProjectHealthScore(bundle, { now = new Date() } = {}) {
   score -= overdueActions * 18;
   score -= Math.max(0, openActions - overdueActions) * 7;
   score -= missingClasses.length * 6;
+  score -= unknownDocuments * 3;
+  if (!taggedDomains) score -= 8;
+  if (!bundle.meetings.length) score -= 5;
   if (!bundle.contacts.length) score -= 8;
   if (!Number.isFinite(daysSinceActivity)) score -= 20;
   else if (daysSinceActivity > 21) score -= 14;
@@ -707,6 +840,9 @@ export function calculateProjectHealthScore(bundle, { now = new Date() } = {}) {
     highRisks ? `${highRisks} high risk item(s)` : "",
     overdueActions ? `${overdueActions} overdue action(s)` : "",
     missingClasses.length ? `Missing ${missingClasses.join(", ")}` : "",
+    unknownDocuments ? `${unknownDocuments} unclassified document(s)` : "",
+    !taggedDomains ? "No digital construction domain tags" : "",
+    !bundle.meetings.length ? "No linked meetings" : "",
     !bundle.contacts.length ? "No confirmed contacts" : "",
     !Number.isFinite(daysSinceActivity) ? "No recent activity recorded" : daysSinceActivity > 7 ? `Last activity ${Math.round(daysSinceActivity)} day(s) ago` : "",
   ].filter(Boolean).join("; ") || "No material project exceptions detected from current records.";
@@ -717,11 +853,13 @@ export function calculateProjectHealthScore(bundle, { now = new Date() } = {}) {
     riskLevel: highRisks ? "high" : openRisks ? "medium" : "low",
     actionStatus: overdueActions ? "overdue" : openActions ? "open" : "clear",
     documentCompleteness: missingClasses.length ? "incomplete" : "baseline",
+    informationQuality: missingClasses.length || unknownDocuments || !taggedDomains ? "needs_attention" : "usable",
+    meetingFrequency: bundle.meetings.length ? "observed" : "none",
     recentActivity: !Number.isFinite(daysSinceActivity) ? "none" : daysSinceActivity > 21 ? "stale" : daysSinceActivity > 7 ? "aging" : "recent",
     clientResponsiveness: bundle.emailSignals.length || bundle.meetings.length ? "observed" : "unknown",
     financialRisk: bundle.financialSummary?.riskLevel || "unknown",
     explanation,
-    inputs: { highRisks, openRisks, openActions, overdueActions, missingClasses, latestActivity },
+    inputs: { highRisks, openRisks, openActions, overdueActions, missingClasses, unknownDocuments, taggedDomains, meetingCount: bundle.meetings.length, latestActivity },
   };
 }
 
@@ -761,6 +899,95 @@ function latestHealth(db, projectProfileId) {
     ...mapRow(row),
     inputs: safeJsonParse(row.inputs, {}),
     calculatedAt: toIsoTimestamp(row.calculated_at),
+  };
+}
+
+export function listDigitalConstructionDomains(db) {
+  return db.prepare(`
+    SELECT *
+    FROM digital_construction_domains
+    ORDER BY label ASC
+  `).all().map((row) => mapRow(row));
+}
+
+function listProjectTags(db, projectProfileId) {
+  return db.prepare(`
+    SELECT t.*, d.label AS domain_label, d.description AS domain_description, d.sarah_future_scope
+    FROM project_tags t
+    JOIN digital_construction_domains d ON d.id = t.domain_id
+    WHERE t.project_profile_id = ?
+    ORDER BY d.label ASC, t.tag ASC
+  `).all(Number(projectProfileId)).map((row) => ({
+    ...mapRow(row),
+    domainLabel: row.domain_label,
+    domainDescription: row.domain_description,
+    sarahFutureScope: row.sarah_future_scope,
+  }));
+}
+
+function listKnowledgeLinks(db, projectProfileId) {
+  return db.prepare(`
+    SELECT *
+    FROM project_knowledge_links
+    WHERE project_profile_id = ?
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 100
+  `).all(Number(projectProfileId)).map((row) => mapRow(row));
+}
+
+function digitalConstructionReadiness(bundle) {
+  const domainIds = new Set((bundle.tags || []).map((tag) => tag.domainId));
+  const classifications = new Set((bundle.documents || []).map((document) => document.classification));
+  const signals = [
+    classifications.has("COBie") || domainIds.has("COBie") ? "COBie context detected" : "",
+    classifications.has("GIS Documents") || domainIds.has("GIS") ? "GIS context detected" : "",
+    classifications.has("Digital Twin Documents") || domainIds.has("DigitalTwin") ? "Digital Twin context detected" : "",
+    classifications.has("Building Safety Documents") || domainIds.has("BuildingSafety") ? "Building Safety context detected" : "",
+    domainIds.has("ISO19650") ? "ISO 19650 domain tagged" : "",
+    domainIds.has("AssetInformation") ? "Asset Information domain tagged" : "",
+  ].filter(Boolean);
+  const placeholders = {
+    cobie: ["Facility", "Floor", "Space", "Zone", "Type", "Component", "System", "Document", "Attribute", "Issue", "ValidationResult"],
+    gis: ["Asset", "Location", "Coordinate", "Layer", "SpatialDataset", "GISIssue", "GISOpportunity"],
+    digitalTwin: ["Asset", "Sensor", "System", "Model", "TwinRecord", "TwinIssue", "TwinOpportunity"],
+  };
+  return {
+    domains: Array.from(domainIds),
+    detectedSignals: signals,
+    placeholders,
+    sarahStatus: "Prepared data structures only. Sarah runtime is not implemented.",
+    noSpecialistAnalysisYet: true,
+  };
+}
+
+function informationQualityFor(bundle) {
+  const missingClasses = bundle.healthScore?.inputs?.missingClasses || [];
+  const unknownDocuments = (bundle.documents || []).filter((document) => document.classification === "Unknown").length;
+  const confirmedAssociations = [
+    ...(bundle.documents || []),
+    ...(bundle.meetings || []),
+    ...(bundle.emailSignals || []),
+  ].filter((item) => Number(item.associationConfidence || 0) >= 0.5).length;
+  const hasTags = Boolean((bundle.tags || []).length);
+  const score = Math.max(0, Math.min(100,
+    100
+    - missingClasses.length * 10
+    - unknownDocuments * 6
+    - (!hasTags ? 12 : 0)
+    - (!confirmedAssociations ? 10 : 0),
+  ));
+  return {
+    score,
+    status: score < 55 ? "red" : score < 78 ? "amber" : "green",
+    missingBaselineDocuments: missingClasses,
+    unknownDocuments,
+    confirmedAssociations,
+    explanation: [
+      missingClasses.length ? `Missing ${missingClasses.join(", ")}` : "",
+      unknownDocuments ? `${unknownDocuments} unclassified document(s)` : "",
+      !hasTags ? "No digital construction tags" : "",
+      !confirmedAssociations ? "No strong Microsoft metadata associations yet" : "",
+    ].filter(Boolean).join("; ") || "Baseline information quality is usable from current records.",
   };
 }
 
@@ -807,14 +1034,19 @@ export function getProjectDetail(db, id, { calculateHealth = true } = {}) {
       ...row,
       metadata: safeJsonParse(row.metadata, {}),
     })),
+    tags: listProjectTags(db, id),
+    knowledgeLinks: listKnowledgeLinks(db, id),
     memoryLinks: listRows(db, "project_memory_links", id, "relevance_score DESC, id DESC"),
     financialSummary: getProjectFinancialSummary(db, profile),
   };
   const health = calculateProjectHealthScore(bundle);
   if (calculateHealth) saveProjectHealthScore(db, id, health);
+  const enrichedBundle = { ...bundle, healthScore: health };
   return {
-    ...bundle,
+    ...enrichedBundle,
     healthScore: health,
+    informationQuality: informationQualityFor(enrichedBundle),
+    digitalConstruction: digitalConstructionReadiness(enrichedBundle),
     boundary: PROJECT_READ_ONLY_BOUNDARY,
   };
 }
@@ -847,16 +1079,21 @@ export function getProjectDashboard(db) {
       overdueActions: overdueActions.length,
       recentlyUpdatedProjects: projects.filter((project) => project.healthScore.recentActivity === "recent").length,
       projectsWithMissingInformation: missingInformation.length,
+      financialRiskIndicators: projects.filter((project) => ["high", "medium"].includes(project.financialSummary?.riskLevel)).length,
+      informationQualityIndicators: projects.filter((project) => project.informationQuality?.status !== "green").length,
     },
     projects: projects.map((project) => ({
       profile: project.profile,
       healthScore: project.healthScore,
+      informationQuality: project.informationQuality,
       latestUpdate: project.updates[0] || null,
       documentCount: project.documents.length,
       actionCount: project.actions.filter((action) => action.status !== "complete").length,
       riskCount: project.risks.filter((risk) => risk.status !== "closed").length,
       meetingCount: project.meetings.length,
       emailSignalCount: project.emailSignals.length,
+      tagCount: project.tags.length,
+      domains: project.digitalConstruction.domains,
       financialSummary: project.financialSummary,
     })),
     highRiskProjects: highRiskProjects.map((project) => ({ projectProfileId: project.profile.id, projectName: project.profile.projectName, healthScore: project.healthScore })),
@@ -883,9 +1120,18 @@ export function linkProjectMemoryRecord(db, projectProfileId, {
       relevance_score = excluded.relevance_score,
       summary = excluded.summary
   `).run(projectProfileId, sourceType, String(sourceId), semanticMemoryId, Number(relevanceScore) || 0, normalizeText(summary).slice(0, 1200));
+  recordProjectKnowledgeLink(db, {
+    projectProfileId,
+    toType: semanticMemoryId ? "semantic_memory" : "project_memory_link",
+    toId: semanticMemoryId || `${sourceType}:${sourceId}`,
+    relationship: "has_memory_reference",
+    confidence: "confirmed",
+    explanation: `Memory link for ${sourceType}:${sourceId}`,
+    sourceType: "semantic_memory",
+  });
 }
 
-export function compactProjectSummary({ profile, documents = [], actions = [], risks = [], decisions = [], meetings = [] }) {
+export function compactProjectSummary({ profile, documents = [], actions = [], risks = [], decisions = [], meetings = [], tags = [] }) {
   const missingDocs = REQUIRED_DOCUMENT_CLASSES.filter((classification) => !documents.some((document) => document.classification === classification));
   return [
     `Project: ${profile.projectName}.`,
@@ -899,6 +1145,7 @@ export function compactProjectSummary({ profile, documents = [], actions = [], r
     `Decisions: ${decisions.length}.`,
     `Documents: ${documents.length}.`,
     `Meetings: ${meetings.length}.`,
+    tags.length ? `Digital construction domains: ${tags.map((tag) => tag.domainLabel || tag.tag).join(", ")}.` : "Digital construction domains are not yet tagged.",
     missingDocs.length ? `Missing document metadata: ${missingDocs.join(", ")}.` : "Baseline document metadata present.",
   ].filter(Boolean).join(" ");
 }
@@ -910,53 +1157,107 @@ export function searchProjectKnowledge(db, query) {
     error.statusCode = 400;
     throw error;
   }
-  const projects = listProjectProfiles(db)
+  const terms = cleanQuery.split(/\W+/).filter(Boolean);
+  const like = `%${cleanQuery}%`;
+  const scoreText = (text) => terms.filter((term) => normalizeText(text).toLowerCase().includes(term)).length;
+  const initialProjects = listProjectProfiles(db)
     .map((profile) => {
-      const text = `${profile.projectName} ${profile.clientName} ${profile.serviceLine} ${profile.currentPhase} ${profile.summary}`.toLowerCase();
-      const score = cleanQuery.split(/\W+/).filter((term) => term && text.includes(term)).length;
+      const tags = listProjectTags(db, profile.id);
+      const text = `${profile.projectName} ${profile.clientName} ${profile.serviceLine} ${profile.currentPhase} ${profile.summary} ${tags.map((tag) => `${tag.domainLabel} ${tag.tag}`).join(" ")}`;
+      const score = scoreText(text);
       return { ...profile, relevanceScore: score };
     })
-    .filter((profile) => profile.relevanceScore > 0)
-    .sort((a, b) => b.relevanceScore - a.relevanceScore);
-  const projectIds = projects.map((project) => project.id);
-  const documents = projectIds.length
-    ? db.prepare(`
-      SELECT d.*, p.project_name
-      FROM project_documents d
-      JOIN project_profiles p ON p.id = d.project_profile_id
-      WHERE d.project_profile_id IN (${projectIds.map(() => "?").join(",")})
-      ORDER BY d.modified_datetime DESC, d.id DESC
-      LIMIT 20
-    `).all(...projectIds).map((row) => mapRow(row))
-    : [];
-  const related = (table) => projectIds.length
-    ? db.prepare(`
-      SELECT r.*, p.project_name
-      FROM ${table} r
-      JOIN project_profiles p ON p.id = r.project_profile_id
-      WHERE r.project_profile_id IN (${projectIds.map(() => "?").join(",")})
-      ORDER BY r.updated_at DESC, r.id DESC
-      LIMIT 20
-    `).all(...projectIds).map((row) => mapRow(row))
-    : [];
-  const memoryReferences = projectIds.length
+    .filter((profile) => profile.relevanceScore > 0);
+
+  const documents = db.prepare(`
+    SELECT d.*, p.project_name
+    FROM project_documents d
+    JOIN project_profiles p ON p.id = d.project_profile_id
+    WHERE lower(d.name || ' ' || d.path || ' ' || d.classification || ' ' || d.owner_name || ' ' || d.location) LIKE ?
+    ORDER BY d.modified_datetime DESC, d.id DESC
+    LIMIT 20
+  `).all(like).map((row) => ({ ...mapRow(row), sourceReference: `project_document:${row.id}` }));
+  const related = (table, type, fields = "r.title || ' ' || r.detail") => db.prepare(`
+    SELECT r.*, p.project_name
+    FROM ${table} r
+    JOIN project_profiles p ON p.id = r.project_profile_id
+    WHERE lower(${fields}) LIKE ?
+    ORDER BY r.updated_at DESC, r.id DESC
+    LIMIT 20
+  `).all(like).map((row) => ({ ...mapRow(row), sourceReference: `${type}:${row.id}` }));
+  const relatedRisks = related("project_risks", "project_risk");
+  const relatedActions = related("project_actions", "project_action");
+  const relatedDecisions = related("project_decisions", "project_decision");
+  const relatedMeetings = related("project_meetings", "project_meeting", "r.title || ' ' || r.organizer || ' ' || r.body_preview");
+  const relatedEmails = related("project_email_signals", "project_email", "r.subject || ' ' || r.from_name || ' ' || r.from_email || ' ' || r.body_preview");
+  const matchingTags = db.prepare(`
+    SELECT t.*, d.label AS domain_label, p.project_name
+    FROM project_tags t
+    JOIN digital_construction_domains d ON d.id = t.domain_id
+    JOIN project_profiles p ON p.id = t.project_profile_id
+    WHERE lower(t.tag || ' ' || d.label || ' ' || d.description) LIKE ?
+    ORDER BY d.label ASC, p.project_name ASC
+    LIMIT 20
+  `).all(like).map((row) => ({ ...mapRow(row), sourceReference: `project_tag:${row.id}` }));
+  const directMemoryReferences = db.prepare(`
+    SELECT l.*, p.project_name
+    FROM project_memory_links l
+    JOIN project_profiles p ON p.id = l.project_profile_id
+    WHERE lower(l.source_type || ' ' || l.source_id || ' ' || l.summary) LIKE ?
+    ORDER BY l.relevance_score DESC, l.id DESC
+    LIMIT 20
+  `).all(like).map((row) => ({ ...mapRow(row), sourceReference: `project_memory_link:${row.id}` }));
+  const linkedProjectIds = new Set([
+    ...initialProjects.map((project) => project.id),
+    ...documents.map((record) => record.projectProfileId),
+    ...relatedRisks.map((record) => record.projectProfileId),
+    ...relatedActions.map((record) => record.projectProfileId),
+    ...relatedDecisions.map((record) => record.projectProfileId),
+    ...relatedMeetings.map((record) => record.projectProfileId),
+    ...relatedEmails.map((record) => record.projectProfileId),
+    ...matchingTags.map((record) => record.projectProfileId),
+    ...directMemoryReferences.map((record) => record.projectProfileId),
+  ].filter(Boolean));
+  const projectRowsById = new Map(listProjectProfiles(db).map((profile) => [profile.id, profile]));
+  const projects = Array.from(linkedProjectIds).map((id) => {
+    const project = projectRowsById.get(Number(id));
+    const existing = initialProjects.find((item) => item.id === Number(id));
+    return project ? { ...project, relevanceScore: existing?.relevanceScore || 1 } : null;
+  }).filter(Boolean).sort((a, b) => b.relevanceScore - a.relevanceScore);
+  const graphLinks = linkedProjectIds.size
     ? db.prepare(`
       SELECT l.*, p.project_name
-      FROM project_memory_links l
+      FROM project_knowledge_links l
       JOIN project_profiles p ON p.id = l.project_profile_id
-      WHERE l.project_profile_id IN (${projectIds.map(() => "?").join(",")})
-      ORDER BY l.relevance_score DESC, l.id DESC
-      LIMIT 20
-    `).all(...projectIds).map((row) => mapRow(row))
+      WHERE l.project_profile_id IN (${Array.from(linkedProjectIds).map(() => "?").join(",")})
+      ORDER BY l.updated_at DESC, l.id DESC
+      LIMIT 30
+    `).all(...Array.from(linkedProjectIds)).map((row) => ({ ...mapRow(row), sourceReference: `project_knowledge_link:${row.id}` }))
     : [];
+  const sourceReferences = [
+    ...projects.map((project) => ({ reference: `project_profile:${project.id}`, label: project.projectName, category: "project_profile" })),
+    ...documents.map((document) => ({ reference: document.sourceReference, label: document.name, category: "project_document" })),
+    ...relatedRisks.map((risk) => ({ reference: risk.sourceReference, label: risk.title, category: "project_risk" })),
+    ...relatedActions.map((action) => ({ reference: action.sourceReference, label: action.title, category: "project_action" })),
+    ...relatedDecisions.map((decision) => ({ reference: decision.sourceReference, label: decision.title, category: "project_decision" })),
+    ...relatedMeetings.map((meeting) => ({ reference: meeting.sourceReference, label: meeting.title, category: "project_meeting" })),
+    ...relatedEmails.map((email) => ({ reference: email.sourceReference, label: email.subject, category: "project_email" })),
+    ...matchingTags.map((tag) => ({ reference: tag.sourceReference, label: tag.tag, category: "project_tag" })),
+    ...directMemoryReferences.map((memory) => ({ reference: memory.sourceReference, label: memory.summary || memory.sourceType, category: "project_memory" })),
+  ].slice(0, 80);
   return {
     query,
     matchingProjects: projects,
     relevantDocuments: documents,
-    relatedRisks: related("project_risks"),
-    relatedActions: related("project_actions"),
-    relatedDecisions: related("project_decisions"),
-    memoryReferences,
+    relatedRisks,
+    relatedActions,
+    relatedDecisions,
+    relatedMeetings,
+    relatedEmails,
+    matchingTags,
+    memoryReferences: directMemoryReferences,
+    graphLinks,
+    sourceReferences,
   };
 }
 
@@ -1028,6 +1329,8 @@ export function buildProjectAnalysisInput(db, projectProfileId, {
       classification: document.classification,
       path: document.path,
       webUrl: document.webUrl,
+      ownerName: document.ownerName,
+      location: document.location,
       modifiedDatetime: document.modifiedDatetime,
       sourceReference: `project_document:${document.id}`,
       fullContentRetrieved: false,
@@ -1043,6 +1346,23 @@ export function buildProjectAnalysisInput(db, projectProfileId, {
       sourceReference: `project_email_signal:${email.id}`,
       fullEmailRetrieved: false,
     })),
+    projectTags: detail.tags.slice(0, 20).map((tag) => ({
+      domainId: tag.domainId,
+      domainLabel: tag.domainLabel,
+      tag: tag.tag,
+      confidence: tag.confidence,
+      sourceReference: `project_tag:${tag.id}`,
+    })),
+    knowledgeGraphLinks: detail.knowledgeLinks.slice(0, 30).map((link) => ({
+      from: `${link.fromType}:${link.fromId}`,
+      to: `${link.toType}:${link.toId}`,
+      relationship: link.relationship,
+      confidence: link.confidence,
+      explanation: link.explanation,
+      sourceReference: `project_knowledge_link:${link.id}`,
+    })),
+    digitalConstructionContext: detail.digitalConstruction,
+    informationQuality: detail.informationQuality,
     relevantMemory: retrievedMemoryContext.records,
     oliviaFinancialContext: detail.financialSummary,
     healthScore: detail.healthScore,
@@ -1054,6 +1374,10 @@ export function buildProjectAnalysisInput(db, projectProfileId, {
       ...detail.risks.slice(0, 10).map((risk) => ({ reference: `project_risk:${risk.id}`, label: risk.title, category: "project_risk" })),
       ...detail.actions.slice(0, 10).map((action) => ({ reference: `project_action:${action.id}`, label: action.title, category: "project_action" })),
       ...detail.decisions.slice(0, 10).map((decision) => ({ reference: `project_decision:${decision.id}`, label: decision.title, category: "project_decision" })),
+      ...detail.meetings.slice(0, 10).map((meeting) => ({ reference: `project_meeting:${meeting.id}`, label: meeting.title, category: "project_meeting" })),
+      ...detail.emailSignals.slice(0, 10).map((email) => ({ reference: `project_email:${email.id}`, label: email.subject, category: "project_email" })),
+      ...detail.tags.slice(0, 10).map((tag) => ({ reference: `project_tag:${tag.id}`, label: tag.tag, category: "project_tag" })),
+      ...detail.knowledgeLinks.slice(0, 10).map((link) => ({ reference: `project_knowledge_link:${link.id}`, label: `${link.relationship}: ${link.toType}`, category: "project_knowledge_link" })),
       ...(retrievedMemoryContext.sourceRecordReferences || []),
     ].slice(0, 50),
   };
@@ -1077,6 +1401,20 @@ export function projectAttentionForBriefing(db) {
     overdueProjectActions: dashboard.overdueActions,
     recentlyUpdatedProjects: dashboard.recentlyUpdatedProjects,
     projectsWithMissingInformation: dashboard.missingInformation,
+    projectsWithFinancialRisk: dashboard.projects
+      .filter((project) => ["high", "medium"].includes(project.financialSummary?.riskLevel))
+      .map((project) => ({
+        projectProfileId: project.profile.id,
+        projectName: project.profile.projectName,
+        financialSummary: project.financialSummary,
+      })),
+    projectsWithInformationQualityRisk: dashboard.projects
+      .filter((project) => project.informationQuality?.status !== "green")
+      .map((project) => ({
+        projectProfileId: project.profile.id,
+        projectName: project.profile.projectName,
+        informationQuality: project.informationQuality,
+      })),
   };
 }
 

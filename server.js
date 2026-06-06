@@ -56,6 +56,7 @@ import {
   importProjectDocuments,
   importProjectEmailSignals,
   importProjectMeetings,
+  listDigitalConstructionDomains,
   listProjectAudit,
   listProjectProfiles,
   projectAttentionForBriefing,
@@ -188,6 +189,13 @@ async function handleApi(request, response, url) {
   }
   if (url.pathname === "/api/project-intelligence/dashboard" && request.method === "GET") {
     return sendJson(response, 200, getProjectDashboard(db));
+  }
+  if (url.pathname === "/api/project-intelligence/domains" && request.method === "GET") {
+    return sendJson(response, 200, {
+      domains: listDigitalConstructionDomains(db),
+      sarahStatus: "Placeholder only. No Sarah runtime, autonomous behaviour or external writes exist.",
+      boundary: PROJECT_READ_ONLY_BOUNDARY,
+    });
   }
   if (url.pathname === "/api/project-intelligence/projects") {
     if (request.method === "GET") return sendJson(response, 200, listProjectProfiles(db));
@@ -348,6 +356,10 @@ async function handleApi(request, response, url) {
         input.linkedDocumentMetadata.length ? "project_document_metadata" : "",
         input.linkedMeetings.length ? "project_meetings" : "",
         input.linkedEmailSignals.length ? "project_email_signals" : "",
+        input.projectTags.length ? "project_tags" : "",
+        input.knowledgeGraphLinks.length ? "project_knowledge_graph" : "",
+        input.digitalConstructionContext?.domains?.length ? "digital_construction_domains" : "",
+        input.informationQuality ? "project_information_quality" : "",
         input.relevantMemory.length ? "semantic_memory" : "",
         input.oliviaFinancialContext?.linkedOrderBookEntries ? "olivia_financial_context" : "",
       ],
@@ -558,6 +570,8 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectRisks = brief.projectIntelligence.projectRisks.length;
   brief.summary.overdueProjectActions = brief.projectIntelligence.overdueProjectActions.length;
   brief.summary.projectsWithMissingInformation = brief.projectIntelligence.projectsWithMissingInformation.length;
+  brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
+  brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.analysisMethod = "deterministic-v1";
 
   if (!save) return brief;
@@ -698,6 +712,8 @@ function memoryQueryForProject(detail) {
     ...(detail.actions || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(detail.decisions || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(detail.documents || []).map((item) => `${item.name || ""} ${item.classification || ""}`),
+    ...(detail.tags || []).map((item) => `${item.domainLabel || ""} ${item.tag || ""}`),
+    ...(detail.digitalConstruction?.detectedSignals || []),
   ].join(" ").slice(0, 2000);
 }
 
@@ -725,6 +741,8 @@ function buildAiBriefingContext(briefing, body = {}) {
       projectsNeedingAttention: compactRecords(briefing.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "detail", "priority", "sourceType", "sourceId"], 6),
       overdueProjectActions: compactRecords(briefing.projectIntelligence?.overdueProjectActions || [], ["id", "title", "detail", "status", "due", "projectName"], 6),
       projectsWithMissingInformation: compactRecords(briefing.projectIntelligence?.projectsWithMissingInformation || [], ["projectProfileId", "projectName", "missing"], 6),
+      projectsWithFinancialRisk: compactRecords(briefing.projectIntelligence?.projectsWithFinancialRisk || [], ["projectProfileId", "projectName", "financialSummary"], 6),
+      projectsWithInformationQualityRisk: compactRecords(briefing.projectIntelligence?.projectsWithInformationQualityRisk || [], ["projectProfileId", "projectName", "informationQuality"], 6),
     },
     approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
     briefingHistory: history,

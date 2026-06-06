@@ -124,6 +124,8 @@ const SCHEMA = `
     created_datetime TEXT NOT NULL DEFAULT '',
     modified_datetime TEXT NOT NULL DEFAULT '',
     parent_folder TEXT NOT NULL DEFAULT '',
+    owner_name TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
     association_confidence REAL NOT NULL DEFAULT 0,
     association_reason TEXT NOT NULL DEFAULT '',
     metadata TEXT NOT NULL DEFAULT '{}',
@@ -229,6 +231,9 @@ const SCHEMA = `
     UNIQUE(project_profile_id, source_system, external_id)
   );
 
+  CREATE VIEW IF NOT EXISTS project_emails AS
+    SELECT * FROM project_email_signals;
+
   CREATE TABLE IF NOT EXISTS project_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -282,6 +287,352 @@ const SCHEMA = `
     UNIQUE(project_profile_id, source_type, source_id)
   );
 
+  CREATE TABLE IF NOT EXISTS digital_construction_domains (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sarah_future_scope TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    domain_id TEXT NOT NULL REFERENCES digital_construction_domains(id),
+    tag TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'confirmed' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, domain_id, tag)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_knowledge_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
+    from_type TEXT NOT NULL,
+    from_id TEXT NOT NULL,
+    to_type TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    relationship TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    explanation TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred_project_intelligence',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_profile_id, from_type, from_id, to_type, to_id, relationship)
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_facilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_floors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_spaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_zones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_components (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_systems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_attributes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cobie_validation_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    result TEXT NOT NULL DEFAULT 'not_run',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_coordinates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    coordinate_reference_system TEXT NOT NULL DEFAULT '',
+    latitude REAL,
+    longitude REAL,
+    easting REAL,
+    northing REAL,
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_layers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_spatial_datasets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS gis_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_sensors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_systems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS digital_twin_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'placeholder',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS project_audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
@@ -309,6 +660,12 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS project_email_signals_profile
   ON project_email_signals(project_profile_id, received_datetime);
+
+  CREATE INDEX IF NOT EXISTS project_tags_profile
+  ON project_tags(project_profile_id, domain_id);
+
+  CREATE INDEX IF NOT EXISTS project_knowledge_links_profile
+  ON project_knowledge_links(project_profile_id, relationship, to_type);
 
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -847,8 +1204,38 @@ const PROJECT_PROFILE_SEEDS = [
   },
 ];
 
+const DIGITAL_CONSTRUCTION_DOMAIN_SEEDS = [
+  ["BIM", "BIM", "Building information modelling delivery, coordination and model-based information management.", "Sarah will later review BIM risks, model coordination signals and delivery exceptions."],
+  ["GIS", "GIS", "Geospatial project information, layers, spatial datasets and location-based asset context.", "Sarah will later review GIS issues, spatial data quality and GIS opportunities."],
+  ["COBie", "COBie", "Construction Operations Building information exchange data, registers and validation readiness.", "Sarah will later review COBie gaps, validation results and handover readiness."],
+  ["ISO19650", "ISO 19650", "Information management process, appointments, BEPs, EIRs, MIDPs, TIDPs and CDE discipline.", "Sarah will later review ISO 19650 compliance and information management risks."],
+  ["AssetInformation", "Asset Information", "Asset information requirements, asset data, maintainable asset registers and handover metadata.", "Sarah will later review asset information quality and missing requirements."],
+  ["DigitalTwin", "Digital Twin", "Digital twin strategy, models, connected systems, sensors and operational twin records.", "Sarah will later review digital twin opportunities and twin readiness."],
+  ["BuildingSafety", "Building Safety", "Building safety information, golden thread, risk records and public-sector assurance context.", "Sarah will later review building safety information completeness and exceptions."],
+  ["InformationManagement", "Information Management", "Project information strategy, governance, records, data quality and delivery controls.", "Sarah will later review information management performance and missing records."],
+  ["PowerPlatform", "Power Platform", "Power Platform solutions, apps, automations, reporting and low-code delivery context.", "Sarah will later review Power Platform opportunities and delivery risks."],
+];
+
+const PROJECT_TAG_SEEDS = [
+  ["KSPF", "InformationManagement", "Information Management", "confirmed"],
+  ["KSPF", "ISO19650", "ISO 19650", "inferred"],
+  ["Westminster", "BIM", "BIM", "inferred"],
+  ["Westminster", "ISO19650", "ISO 19650", "inferred"],
+  ["Westminster", "BuildingSafety", "Building Safety", "inferred"],
+  ["Westminster", "InformationManagement", "Information Management", "confirmed"],
+  ["RBKC", "COBie", "COBie", "confirmed"],
+  ["RBKC", "AssetInformation", "Asset Information", "inferred"],
+  ["RBKC", "InformationManagement", "Information Management", "confirmed"],
+  ["Islington", "InformationManagement", "Information Management", "confirmed"],
+  ["Islington", "BIM", "BIM", "inferred"],
+  ["Council Construction Assurance Platform", "PowerPlatform", "Power Platform", "inferred"],
+  ["Council Construction Assurance Platform", "BuildingSafety", "Building Safety", "inferred"],
+  ["Council Construction Assurance Platform", "DigitalTwin", "Digital Twin", "assumption"],
+  ["Council Construction Assurance Platform", "InformationManagement", "Information Management", "confirmed"],
+];
+
 const AGENT_SEEDS = [
-  ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Lead BIM, GIS, Digital Twin and ISO 19650 delivery for Digitize.", [], "Planned"],
+  ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Lead BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform delivery for Digitize. Placeholder only; no runtime or autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Planned"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
@@ -909,6 +1296,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   ensureDefaultSettings(db);
   migrateApprovalSchema(db);
   migrateFinancialBusinessSchema(db);
+  migrateProjectIntelligenceSchema(db);
   seedDatabase(db);
   return db;
 }
@@ -1006,11 +1394,25 @@ function migrateFinancialBusinessSchema(db) {
   `);
 }
 
+function migrateProjectIntelligenceSchema(db) {
+  const columnsFor = (table) => new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  const addColumn = (table, definition) => {
+    const name = definition.trim().split(/\s+/)[0];
+    if (!columnsFor(table).has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  };
+
+  addColumn("project_documents", "owner_name TEXT NOT NULL DEFAULT ''");
+  addColumn("project_documents", "location TEXT NOT NULL DEFAULT ''");
+  db.exec("CREATE VIEW IF NOT EXISTS project_emails AS SELECT * FROM project_email_signals");
+}
+
 export function seedDatabase(db) {
   const companyCount = db.prepare("SELECT COUNT(*) AS count FROM companies").get().count;
   if (companyCount > 0) {
     updateFinancialBusinessEntities(db);
     updateProjectProfiles(db);
+    updateDigitalConstructionDomains(db);
+    updateProjectTags(db);
     updateAgentDefinitions(db);
     updateIntegrationDefinitions(db);
     return;
@@ -1031,6 +1433,8 @@ export function seedDatabase(db) {
 
     updateFinancialBusinessEntities(db);
     updateProjectProfiles(db);
+    updateDigitalConstructionDomains(db);
+    updateProjectTags(db);
 
     db.prepare(`
       INSERT INTO risks (company_id, title, detail, priority, due)
@@ -1179,6 +1583,43 @@ function updateProjectProfiles(db) {
       seed.clientName,
       seed.projectName,
     );
+  }
+}
+
+function updateDigitalConstructionDomains(db) {
+  const insertDomain = db.prepare(`
+    INSERT OR IGNORE INTO digital_construction_domains (id, label, description, sarah_future_scope)
+    VALUES (?, ?, ?, ?)
+  `);
+  const updateDomain = db.prepare(`
+    UPDATE digital_construction_domains
+    SET label = ?, description = ?, sarah_future_scope = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const domain of DIGITAL_CONSTRUCTION_DOMAIN_SEEDS) {
+    insertDomain.run(...domain);
+    updateDomain.run(domain[1], domain[2], domain[3], domain[0]);
+  }
+}
+
+function updateProjectTags(db) {
+  const findProfile = db.prepare("SELECT id FROM project_profiles WHERE project_name = ?");
+  const insertTag = db.prepare(`
+    INSERT OR IGNORE INTO project_tags (
+      project_profile_id, domain_id, tag, confidence, source_type
+    )
+    VALUES (?, ?, ?, ?, 'seed')
+  `);
+  const updateTag = db.prepare(`
+    UPDATE project_tags
+    SET tag = ?, confidence = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE project_profile_id = ? AND domain_id = ?
+  `);
+  for (const [projectName, domainId, tag, confidence] of PROJECT_TAG_SEEDS) {
+    const profile = findProfile.get(projectName);
+    if (!profile) continue;
+    insertTag.run(profile.id, domainId, tag, confidence);
+    updateTag.run(tag, confidence, profile.id, domainId);
   }
 }
 
@@ -1970,7 +2411,13 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
       (SELECT COUNT(*) FROM project_documents d WHERE d.project_profile_id = p.id) AS document_count,
       (SELECT COUNT(*) FROM project_actions a WHERE a.project_profile_id = p.id AND a.status != 'complete') AS open_action_count,
       (SELECT COUNT(*) FROM project_risks r WHERE r.project_profile_id = p.id AND r.status != 'closed') AS open_risk_count,
-      (SELECT MAX(created_at) FROM project_updates u WHERE u.project_profile_id = p.id) AS latest_update_at
+      (SELECT MAX(created_at) FROM project_updates u WHERE u.project_profile_id = p.id) AS latest_update_at,
+      (
+        SELECT group_concat(d.label, ', ')
+        FROM project_tags t
+        JOIN digital_construction_domains d ON d.id = t.domain_id
+        WHERE t.project_profile_id = p.id
+      ) AS digital_domains
     FROM project_profiles p
     LEFT JOIN companies c ON c.id = p.company_id
     ORDER BY p.updated_at DESC, p.id DESC
@@ -1988,6 +2435,7 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         `Status: ${row.status}.`,
         `Service line: ${row.service_line}.`,
         `Phase: ${row.current_phase}.`,
+        row.digital_domains ? `Digital construction domains: ${row.digital_domains}.` : "",
         row.summary,
         `Documents linked: ${row.document_count || 0}.`,
         `Open project actions: ${row.open_action_count || 0}.`,
@@ -2015,6 +2463,8 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         `Project: ${row.project_name}.`,
         row.client_name ? `Client: ${row.client_name}.` : "",
         `Classification: ${row.classification}.`,
+        row.owner_name ? `Owner: ${row.owner_name}.` : "",
+        row.location ? `Location: ${row.location}.` : "",
         row.path ? `Path: ${row.path}.` : "",
         row.modified_datetime ? `Modified: ${row.modified_datetime}.` : "",
         `Association: ${row.association_reason || "metadata match"}.`,
@@ -2068,6 +2518,31 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.organizer ? `Organizer: ${row.organizer}.` : "",
         row.body_preview,
         `Association: ${row.association_reason || "metadata match"}.`,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const projectTags = db.prepare(`
+    SELECT t.*, d.label AS domain_label, d.description, p.project_name, p.client_name
+    FROM project_tags t
+    JOIN digital_construction_domains d ON d.id = t.domain_id
+    JOIN project_profiles p ON p.id = t.project_profile_id
+    ORDER BY t.updated_at DESC, t.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of projectTags) {
+    records.push(semanticRecord({
+      sourceType: "project_tag",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: `${row.project_name} ${row.domain_label}`,
+      summary: [
+        `Project digital construction tag: ${row.domain_label}.`,
+        `Project: ${row.project_name}.`,
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Tag: ${row.tag}.`,
+        `Confidence: ${row.confidence}.`,
+        row.description,
       ].filter(Boolean).join(" "),
     }));
   }

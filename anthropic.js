@@ -153,6 +153,21 @@ export const PROJECT_OUTPUT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    keyOpportunities: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          assessment: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["title", "assessment", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    confirmedFacts: { type: "array", items: { type: "string" } },
+    inferredInformation: { type: "array", items: { type: "string" } },
     missingInformation: {
       type: "array",
       items: {
@@ -203,6 +218,9 @@ export const PROJECT_OUTPUT_SCHEMA = {
     "executiveProjectSummary",
     "currentStatus",
     "keyRisks",
+    "keyOpportunities",
+    "confirmedFacts",
+    "inferredInformation",
     "missingInformation",
     "recommendedNextActions",
     "decisionsRequired",
@@ -265,7 +283,7 @@ export class AnthropicClient {
   async analyzeProject(input) {
     return this.requestStructured({
       analysisType: "project_analysis",
-      instruction: "Analyse the supplied project intelligence context for Patrick. Distinguish confirmed records, inferred associations, assumptions and missing information. Do not claim full documents were read unless fullDocumentContentsRetrieved is true.",
+      instruction: "Analyse the supplied project intelligence and digital construction context for Patrick. Distinguish confirmed facts, inferred associations, assumptions and missing information. Identify practical project risks and opportunities. Do not claim full documents were read unless fullDocumentContentsRetrieved is true. Do not recommend or imply any external write action has been executed.",
       input,
       schema: PROJECT_OUTPUT_SCHEMA,
       maxTokens: 2200,

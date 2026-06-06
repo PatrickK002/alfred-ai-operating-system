@@ -7,6 +7,7 @@ import { createAiReasoningService } from "../ai.js";
 import { createDatabase } from "../db.js";
 import { MICROSOFT_SCOPES } from "../microsoft.js";
 import {
+  DIGITAL_CONSTRUCTION_DOMAINS,
   associateEmailToProject,
   associateMeetingToProject,
   buildProjectAnalysisInput,
@@ -16,6 +17,9 @@ import {
   getProjectDashboard,
   getProjectDetail,
   importProjectDocuments,
+  importProjectEmailSignals,
+  importProjectMeetings,
+  listDigitalConstructionDomains,
   listProjectAudit,
   searchProjectKnowledge,
   updateProjectProfile,
@@ -75,7 +79,8 @@ test("project document metadata import classifies and preserves Microsoft refere
       size: 1024,
       createdDateTime: "2026-06-01T09:00:00Z",
       lastModifiedDateTime: "2026-06-02T09:00:00Z",
-      parentReference: { path: "/drive/root:/Clients/Westminster", name: "Westminster" },
+      createdBy: { user: { displayName: "Client Owner" } },
+      parentReference: { path: "/drive/root:/Clients/Westminster", name: "Westminster", driveId: "drive-1" },
       file: { mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
     }]);
     const detail = getProjectDetail(db, project.id);
@@ -83,9 +88,21 @@ test("project document metadata import classifies and preserves Microsoft refere
     assert.equal(result.documentsStored, 1);
     assert.equal(detail.documents[0].classification, "COBie");
     assert.equal(detail.documents[0].webUrl, "https://example.test/file");
+    assert.equal(detail.documents[0].ownerName, "Client Owner");
+    assert.equal(detail.documents[0].location, "drive-1");
     assert.equal(detail.documents[0].metadata.fullContentIndexed, false);
+    assert.ok(detail.knowledgeLinks.some((link) => link.toType === "project_document"));
     assert.equal(classifyProjectDocument({ name: "MIDP draft.docx" }), "MIDP");
   });
+});
+
+test("construction document classification recognises digital construction categories", () => {
+  assert.equal(classifyProjectDocument({ name: "Westminster Risk Register.xlsx" }), "Risk Registers");
+  assert.equal(classifyProjectDocument({ name: "RBKC Asset Information Requirements.docx" }), "AIR");
+  assert.equal(classifyProjectDocument({ name: "KSPF Digital Twin Strategy.pdf" }), "Digital Twin Documents");
+  assert.equal(classifyProjectDocument({ name: "Islington GIS spatial dataset.geojson" }), "GIS Documents");
+  assert.equal(classifyProjectDocument({ name: "Building Safety golden thread report.pdf" }), "Building Safety Documents");
+  assert.equal(classifyProjectDocument({ name: "Commercial fee proposal.xlsx" }), "Proposals");
 });
 
 test("project search returns projects, documents and related records", () => {
@@ -98,6 +115,31 @@ test("project search returns projects, documents and related records", () => {
     assert.equal(result.relevantDocuments[0].classification, "BEP");
     assert.ok(Array.isArray(result.relatedRisks));
     assert.ok(Array.isArray(result.memoryReferences));
+  });
+});
+
+test("project search spans emails, meetings, tags and source references", () => {
+  withDatabase((db) => {
+    const project = seededProject(db, "RBKC");
+    importProjectEmailSignals(db, project.id, [{
+      id: "mail-rbkc-1",
+      subject: "RBKC COBie issue",
+      bodyPreview: "COBie validation issue for asset information.",
+      from: { emailAddress: { name: "RBKC Lead", address: "lead@rbkc.gov.uk" } },
+      receivedDateTime: "2026-06-03T09:00:00Z",
+    }]);
+    importProjectMeetings(db, project.id, [{
+      id: "meeting-rbkc-1",
+      subject: "RBKC COBie review",
+      start: { dateTime: "2026-06-04T10:00:00Z" },
+      attendees: [{ emailAddress: { name: "RBKC Lead", address: "lead@rbkc.gov.uk" } }],
+    }]);
+    const result = searchProjectKnowledge(db, "COBie");
+
+    assert.ok(result.relatedEmails.some((email) => email.sourceReference.startsWith("project_email:")));
+    assert.ok(result.relatedMeetings.some((meeting) => meeting.sourceReference.startsWith("project_meeting:")));
+    assert.ok(result.matchingTags.some((tag) => tag.domainId === "COBie"));
+    assert.ok(result.sourceReferences.some((reference) => reference.category === "project_tag"));
   });
 });
 
@@ -157,12 +199,19 @@ test("Claude project analysis input is structured and recommendation-only", asyn
         assert.equal(projectInput.boundaries.readOnly, true);
         assert.equal(projectInput.boundaries.fileEditsEnabled, false);
         assert.equal(projectInput.fullDocumentContentsRetrieved, false);
+        assert.ok(projectInput.projectTags.length > 0);
+        assert.ok(projectInput.digitalConstructionContext.domains.includes("InformationManagement"));
+        assert.equal(projectInput.digitalConstructionContext.noSpecialistAnalysisYet, true);
+        assert.equal(projectInput.informationQuality.status !== undefined, true);
         assert.ok(projectInput.sourceRecordReferences.some((reference) => reference.reference.startsWith("project_profile:")));
         return {
           analysis: {
             executiveProjectSummary: "Islington needs baseline document metadata before deeper review.",
             currentStatus: "Confirmed project profile exists; Microsoft metadata is not yet linked.",
             keyRisks: [],
+            keyOpportunities: [{ title: "Baseline information review", assessment: "A read-only metadata refresh would improve confidence.", sourceReference: `project_profile:${project.id}` }],
+            confirmedFacts: ["A project profile exists for Islington."],
+            inferredInformation: ["Islington is tagged for information management and BIM readiness."],
             missingInformation: [{ item: "Document metadata", whyItMatters: "Health scoring is incomplete.", sourceReference: `project_profile:${project.id}` }],
             recommendedNextActions: [{ action: "Run read-only Microsoft discovery.", owner: "Patrick", timing: "This week", requiresApproval: false, sourceReference: `project_profile:${project.id}` }],
             decisionsRequired: [],
@@ -191,8 +240,30 @@ test("project dashboard seeds active Digitize profiles and read-only boundary", 
 
     assert.equal(dashboard.boundary.readOnly, true);
     assert.ok(dashboard.metrics.activeProjects >= 4);
+    assert.equal(typeof dashboard.metrics.informationQualityIndicators, "number");
     assert.ok(dashboard.projects.some((project) => project.profile.projectName === "KSPF"));
+    assert.ok(dashboard.projects.some((project) => project.domains.includes("InformationManagement")));
     assert.ok(dashboard.missingInformation.length > 0);
+  });
+});
+
+test("digital construction domain catalog and future placeholders are present", () => {
+  withDatabase((db) => {
+    const domains = listDigitalConstructionDomains(db);
+    const tableNames = db.prepare("SELECT name, type FROM sqlite_master WHERE name IN (?, ?, ?, ?, ?, ?)").all(
+      "project_tags",
+      "project_emails",
+      "cobie_facilities",
+      "gis_spatial_datasets",
+      "digital_twin_records",
+      "project_knowledge_links",
+    );
+    const sarah = db.prepare("SELECT * FROM agents WHERE id = 'sarah'").get();
+
+    assert.deepEqual([...DIGITAL_CONSTRUCTION_DOMAINS].sort(), domains.map((domain) => domain.id).sort());
+    assert.equal(tableNames.length, 6);
+    assert.equal(JSON.parse(sarah.tools).includes("COBie"), true);
+    assert.match(sarah.mission, /Placeholder only/);
   });
 });
 
