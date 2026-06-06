@@ -158,6 +158,26 @@ Health and aggregate workflows:
 | `POST` | `/api/meeting-intelligence/meetings/:id/feedback` | Capture Patrick feedback on meeting outputs and lessons learned |
 | `GET` | `/api/meeting-intelligence/search?q=Westminster` | Search meeting records, actions, decisions, risks and feedback |
 | `GET` | `/api/meeting-intelligence/audit` | Metadata-only meeting intelligence audit events |
+| `GET` | `/api/monday-os/dashboard` | Internal Monday Operating System dashboard with work items, workloads, deliverables, decisions, follow-ups and feedback |
+| `GET` | `/api/monday-os/briefing` | Monday OS signals for Alfred's executive briefing |
+| `POST` | `/api/monday-os/sync-meeting-followups` | Convert meeting actions, decisions, risks, opportunities and feedback into internal Alfred work records only |
+| `GET` | `/api/monday-os/work-items` | List internal Alfred work items |
+| `POST` | `/api/monday-os/work-items` | Create a local work item; does not create a Monday.com item |
+| `PATCH` | `/api/monday-os/work-items/:id` | Update a local work item |
+| `GET` | `/api/monday-os/deliverables` | List internal deliverables |
+| `POST` | `/api/monday-os/deliverables` | Create a local deliverable record |
+| `GET` | `/api/monday-os/risks` | List operational risks |
+| `POST` | `/api/monday-os/risks` | Create an operational risk |
+| `GET` | `/api/monday-os/opportunities` | List operational opportunities |
+| `POST` | `/api/monday-os/opportunities` | Create an operational opportunity |
+| `GET` | `/api/monday-os/decisions` | List operational decisions |
+| `POST` | `/api/monday-os/decisions` | Create an operational decision |
+| `GET` | `/api/monday-os/feedback` | List output feedback records |
+| `POST` | `/api/monday-os/feedback` | Store output feedback and create a local review work item |
+| `GET` | `/api/monday-os/board-mappings` | Planned future Monday board mappings for executive agents |
+| `GET` | `/api/monday-os/sync-status` | Planned Monday sync status; read and write remain disabled |
+| `GET` | `/api/monday-os/search?q=Westminster` | Search internal work records with source references |
+| `GET` | `/api/monday-os/audit` | Metadata-only Monday OS audit events |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -256,6 +276,7 @@ curl -X POST http://localhost:4173/api/actions \
 - Westbridge property opportunity, due diligence and cashflow signals
 - Sarah and Project Intelligence attention signals
 - Teams Meeting Intelligence actions, risks, decisions, missing transcripts and Sentinel confidentiality concerns
+- Monday Operating System internal workloads, blocked work, overdue items, decisions, meeting follow-ups, deliverables due and feedback requiring review
 
 No agent is presented as active unless its stored status says it is connected. Calendar meetings are explicitly unavailable until the calendar integration is connected.
 
@@ -493,31 +514,72 @@ Example future feedback loops:
 - Olivia produces a revenue forecast, Patrick requests more detail, the forecast model assumption is updated, and Alfred stores the improvement.
 - Westbridge produces a garage-block deal analysis, Patrick rejects the deal because location quality is too weak, and Alfred stores the investment preference.
 
-## Monday.com Operating System Roadmap
+## Monday.com Operating System Roadmap And Foundation
 
-Do not build the Monday.com operating system in this phase. Monday.com should become the future operational execution layer after the read-only intelligence foundations and approval controls are stable.
+Alfred now includes an internal Monday Operating System foundation.
 
-Future Monday.com Operating System scope:
+This is not a live Monday.com integration yet. It creates the local structured operating model that future Monday boards can map to after review and approval controls are stable.
 
-- Agent work queues
-- Agent workload tracking
-- Meeting actions
+Internal entities:
+
+- `work_items`
+- `agent_workloads`
+- `deliverables`
+- `workload_metrics`
+- `operational_risks`
+- `operational_opportunities`
+- `operational_decisions`
+- `meeting_followups`
+- `output_feedback`
+- `monday_board_mappings`
+- `monday_sync_status`
+- `monday_audit_events`
+
+Agent work board placeholders exist for Alfred, Sarah, Olivia, Westbridge Property Director, Sentinel, Maya, Alex, Ethan, Liam, Emma and James.
+
+The dashboard shows:
+
+- Agent workload overview
+- Workload health with Green, Amber and Red capacity signals
+- Internal work queue
 - Deliverables
-- Feedback on outputs
-- Risks
-- Opportunities
-- Decisions
-- Files produced
-- Links to OneDrive/SharePoint outputs
-- Links to Teams meeting summaries
+- Operational risks and opportunities
+- Decisions requiring review
+- Meeting follow-ups
+- Output feedback
+- Future Monday board mappings and sync status
 
-Monday.com writes should require the approval workflow.
+Statuses are standardised as `New`, `Planned`, `In Progress`, `Waiting`, `Blocked`, `Review`, `Approved`, `Rejected` and `Complete`.
+
+Priorities are standardised as `Low`, `Medium`, `High` and `Critical`.
+
+Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Executive Briefing, Memory and future Monday IDs.
+
+Workload metrics are calculated locally from open work, high-priority items, overdue work, blocked items and deliverables due. The result is a `workload_score` from 0 to 100 with a Green, Amber or Red health label for each executive agent workspace.
+
+Deliverables can preserve linked meeting, project, business and memory references. These are metadata links only; Alfred does not create files, update Monday.com items or write back to external systems.
+
+Meeting Intelligence can sync extracted meeting actions, decisions, risks, opportunities and feedback into local Alfred work records. This creates internal SQLite records only.
+
+Semantic memory indexes compact summaries of work items, deliverables, operational decisions and feedback when Voyage indexing is enabled. It does not index live Monday boards.
+
+Security boundary:
+
+- No live Monday.com writes
+- No Monday board creation
+- No Monday item creation
+- No Monday updates or mutations
+- No external writes
+- No autonomous execution
+- Future writes must go through explicit approval, preflight and a separate executor review
+
+The existing Monday finance connector remains read-only and separate. It can read invoice/debtor summaries into local SQLite when configured, but it does not update Monday boards.
 
 ## Recommended Roadmap Order
 
 1. Agent Avatar System and Sentinel Foundation
 2. Teams Meeting Intelligence foundation
-3. Monday.com Operating System
+3. Monday.com Operating System foundation
 4. Maya Marketing Director
 5. Alex Growth Director
 6. Ethan CTO
@@ -557,7 +619,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -574,6 +636,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
+- `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
@@ -587,7 +650,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 1. Add environment-based secrets management.
 2. Add a separately reviewed Microsoft write adapter that consumes approved requests.
 3. Add idempotency, expiry and re-authentication checks before any approved action can execute.
-4. Add Monday.com project and task synchronization.
+4. Add live Monday.com project and task synchronization only after a separate approval-gated write adapter review.
 5. Add explicit transcript connectors only after a permissions review; keep transcript unavailable states visible.
 6. Add retention controls, encryption and role-based access for financial intelligence tables.
 7. Add Xero, QuickBooks and bank feed read-only connectors after another security review.

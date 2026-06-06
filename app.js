@@ -250,6 +250,44 @@ const seedData = {
     transcriptUnavailable: [],
     boundary: { readOnly: true, advisoryOnly: true },
   },
+  mondayOperating: {
+    title: "Monday Operating System",
+    summary: "Internal Alfred work management foundation for future Monday.com boards.",
+    metrics: {
+      agents: 11,
+      plannedBoards: 0,
+      activeWorkItems: 0,
+      blockedItems: 0,
+      overdueItems: 0,
+      priorityItems: 0,
+      deliverablesDue: 0,
+      highPriorityRisks: 0,
+      decisionsAwaitingApproval: 0,
+      meetingFollowups: 0,
+      feedbackForReview: 0,
+      workloadHealth: { green: 0, amber: 0, red: 0 },
+      mondayWritesEnabled: false,
+    },
+    agentBoards: [],
+    agentWorkloads: [],
+    workloadMetrics: [],
+    workItems: [],
+    deliverables: [],
+    operationalRisks: [],
+    operationalOpportunities: [],
+    operationalDecisions: [],
+    meetingFollowups: [],
+    outputFeedback: [],
+    boardMappings: [],
+    syncStatus: [],
+    boundary: {
+      internalOnly: true,
+      advisoryOnly: true,
+      mondayWriteEnabled: false,
+      externalWritesEnabled: false,
+      autonomousExecutionEnabled: false,
+    },
+  },
   sarah: {
     profile: {
       name: "Sarah",
@@ -468,6 +506,7 @@ async function loadDashboard() {
     state.property = await apiRequest("/api/property/dashboard").catch(() => seedData.property);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
+    state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1757,6 +1796,162 @@ async function searchMeetings(event) {
   }
 }
 
+function mondayList(records, empty, formatter, limit = 8) {
+  return records?.length
+    ? `<div class="monday-card-list">${records.slice(0, limit).map((record) => `<article>${formatter(record)}</article>`).join("")}</div>`
+    : `<div class="empty-state project-empty">${empty}</div>`;
+}
+
+function mondayStatusClass(value = "") {
+  return String(value || "").toLowerCase().replace(/\s+/g, "-");
+}
+
+function renderMondayOperating() {
+  const monday = state.mondayOperating || seedData.mondayOperating;
+  const metrics = monday.metrics || {};
+  $("#monday-dashboard-metrics").innerHTML = [
+    ["AGENTS", metrics.agents],
+    ["ACTIVE WORK", metrics.activeWorkItems],
+    ["BLOCKED", metrics.blockedItems],
+    ["OVERDUE", metrics.overdueItems],
+    ["PRIORITY", metrics.priorityItems],
+    ["DELIVERABLES", metrics.deliverablesDue],
+    ["DECISIONS", metrics.decisionsAwaitingApproval],
+    ["FOLLOW-UPS", metrics.meetingFollowups],
+    ["FEEDBACK", metrics.feedbackForReview],
+    ["HEALTH", `${metrics.workloadHealth?.red || 0}R/${metrics.workloadHealth?.amber || 0}A`],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  $("#monday-agent-workloads").innerHTML = mondayList(monday.agentWorkloads || [], "No workload records calculated yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.agentName)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.healthStatus || item.workloadStatus)}">${escapeHTML(item.healthStatus || item.workloadStatus)}</span>
+    </div>
+    <span>${escapeHTML(item.businessArea || "Group")} · score ${item.workloadScore || 0}/100 · ${item.activeItems || 0} active · ${item.blockedItems || 0} blocked · ${item.overdueItems || 0} overdue · ${item.deliverablesDue || 0} deliverables due</span>
+    <small>${escapeHTML(item.notes || "No external Monday sync is enabled.")}</small>
+  `, 12);
+
+  $("#monday-workload-health").innerHTML = mondayList(monday.workloadMetrics || [], "No workload health metrics calculated yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.agentName)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.healthStatus)}">${escapeHTML(item.healthStatus || "Green")}</span>
+    </div>
+    <span>Score ${item.workloadScore || 0}/100 · ${item.openItems || 0} open · ${item.highPriorityItems || 0} high priority</span>
+    <small>${item.blockedItems || 0} blocked · ${item.overdueItems || 0} overdue · ${item.deliverablesDue || 0} deliverables due</small>
+  `, 12);
+
+  $("#monday-work-queue").innerHTML = mondayList(monday.workItems || [], "No internal work items yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.title)}</strong>
+      <span class="monday-priority ${String(item.priority || "Medium").toLowerCase()}">${escapeHTML(item.priority || "Medium")}</span>
+    </div>
+    <span>${escapeHTML(item.ownerAgentName || "Alfred")} · ${escapeHTML(item.status || "New")} · ${escapeHTML(item.projectName || item.clientName || item.businessEntityId || "Group")}</span>
+    <small>${escapeHTML(item.sourceReference || "Internal Alfred record")} ${item.dueDate ? `· due ${escapeHTML(item.dueDate)}` : ""}</small>
+  `, 12);
+
+  $("#monday-deliverables").innerHTML = mondayList(monday.deliverables || [], "No deliverables recorded yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.title)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.status)}">${escapeHTML(item.status || "Planned")}</span>
+    </div>
+    <span>${escapeHTML(item.ownerAgentName || "Alfred")} · ${escapeHTML(item.projectName || item.clientName || item.linkedBusinessId || "Group")}</span>
+    <small>${escapeHTML(item.linkedMemoryReference || item.linkedFilePlaceholder || item.sourceReference || "No external file write.")}</small>
+  `);
+
+  const riskOpportunityRows = [
+    ...(monday.operationalRisks || []).map((item) => ({ ...item, signalKind: "Risk" })),
+    ...(monday.operationalOpportunities || []).map((item) => ({ ...item, signalKind: "Opportunity" })),
+  ];
+  $("#monday-risks-opportunities").innerHTML = mondayList(riskOpportunityRows, "No operational risks or opportunities recorded yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.title)}</strong>
+      <span class="monday-priority ${String(item.priority || "Medium").toLowerCase()}">${escapeHTML(item.signalKind)}</span>
+    </div>
+    <span>${escapeHTML(item.ownerAgentName || "Alfred")} · ${escapeHTML(item.businessImpact || item.detail || "")}</span>
+    <small>${escapeHTML(item.sourceReference || "Internal source")}</small>
+  `, 10);
+
+  $("#monday-decisions").innerHTML = mondayList(monday.operationalDecisions || [], "No operational decisions queued yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.title)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.status)}">${escapeHTML(item.status || "New")}</span>
+    </div>
+    <span>${item.approvalRequired ? "Patrick review required" : "Review"} · ${escapeHTML(item.ownerAgentName || "Alfred")}</span>
+    <small>${escapeHTML(item.sourceReference || item.detail || "")}</small>
+  `);
+
+  $("#monday-meeting-followups").innerHTML = mondayList(monday.meetingFollowups || [], "No meeting follow-ups have been converted yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.extractedAction)}</strong>
+      <span class="monday-priority ${String(item.priority || "Medium").toLowerCase()}">${escapeHTML(item.priority || "Medium")}</span>
+    </div>
+    <span>${escapeHTML(item.meetingTitle || "Meeting")} · ${escapeHTML(item.ownerAgentName || "Alfred")}</span>
+    <small>${escapeHTML(item.sourceReference || "Meeting Intelligence")}</small>
+  `);
+
+  $("#monday-feedback").innerHTML = mondayList(monday.outputFeedback || [], "No output feedback has been captured yet.", (item) => `
+    <div class="monday-card-top">
+      <strong>${escapeHTML(item.outputTitle)}</strong>
+      <span class="monday-status ${mondayStatusClass(item.recommendationStatus)}">${escapeHTML(item.recommendationStatus || "unreviewed")}</span>
+    </div>
+    <span>${escapeHTML(item.agentName || "Alfred")} · ${escapeHTML(item.rating || "unrated")}</span>
+    <small>${escapeHTML(item.lessonLearned || item.futureWorkSuggestion || item.sourceReference || "Feedback review pending.")}</small>
+  `);
+
+  const mappings = (monday.boardMappings || []).slice(0, 16);
+  const syncByKey = new Map((monday.syncStatus || []).map((item) => [`${item.agentId}:${item.boardKind}`, item]));
+  $("#monday-board-mappings").innerHTML = mappings.length
+    ? `<div class="monday-board-grid">${mappings.map((mapping) => {
+        const sync = syncByKey.get(`${mapping.agentId}:${mapping.boardKind}`) || {};
+        return `
+          <article>
+            <strong>${escapeHTML(mapping.boardName)}</strong>
+            <span>${escapeHTML(mapping.status || "Planned")} · read ${sync.readEnabled ? "on" : "off"} · write ${sync.writeEnabled ? "on" : "off"}</span>
+          </article>
+        `;
+      }).join("")}</div>`
+    : '<div class="empty-state project-empty">Future Monday board mappings will appear here.</div>';
+}
+
+async function refreshMondayOperating() {
+  if (!backendAvailable) {
+    showToast("Monday Operating System requires the backend");
+    return;
+  }
+  try {
+    state.mondayOperating = await apiRequest("/api/monday-os/dashboard");
+    persist();
+    renderMondayOperating();
+    showToast("Monday OS board refreshed");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function syncMondayFollowups() {
+  if (!backendAvailable) {
+    showToast("Monday Operating System requires the backend");
+    return;
+  }
+  try {
+    const result = await apiRequest("/api/monday-os/sync-meeting-followups", {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:monday-os:sync-meeting-followups" }),
+    });
+    state.mondayOperating = await apiRequest("/api/monday-os/dashboard");
+    persist();
+    renderMondayOperating();
+    showToast(`Synced ${result.recordsCreated || 0} internal record(s)`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function sarahProjectOptions() {
   const projects = state.projectIntelligence?.projects || [];
   return projects.map((project) => `
@@ -1830,6 +2025,7 @@ function renderAll() {
   renderProperty();
   renderProjectIntelligence();
   renderMeetingIntelligence();
+  renderMondayOperating();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -1847,6 +2043,7 @@ function navigate(view) {
     property: "Property",
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
+    monday: "Monday Operating System",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -1900,7 +2097,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>12. AGENT STATUS</h4>
+      <h4>13. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -1955,6 +2152,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
     </div>
@@ -1972,7 +2170,8 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2027,6 +2226,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
     source: "localStorage",
@@ -3362,6 +3562,9 @@ function runCommand(command) {
   } else if (normalized.includes("opportun")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "opportunity").length} active opportunity record(s)`);
+  } else if (normalized.includes("monday") || normalized.includes("workload") || normalized.includes("blocked work") || normalized.includes("work queue") || normalized.includes("deliverable")) {
+    navigate("monday");
+    if (backendAvailable) refreshMondayOperating();
   } else if (normalized.includes("meeting") || normalized.includes("teams") || normalized.includes("transcript") || normalized.includes("follow up")) {
     navigate("meetings");
     if (backendAvailable && (normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("financial") || normalized.includes("risk"))) {
@@ -3426,6 +3629,8 @@ $("#project-search-form").addEventListener("submit", searchProjects);
 $("#import-meetings").addEventListener("click", importMeetingMetadata);
 $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
+$("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
+$("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });

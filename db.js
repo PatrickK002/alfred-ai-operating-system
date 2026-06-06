@@ -422,6 +422,258 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS meeting_risks_status
   ON meeting_risks(status, severity);
 
+  CREATE TABLE IF NOT EXISTS work_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT 'task',
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    client_name TEXT NOT NULL DEFAULT '',
+    project_name TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
+    due_date TEXT NOT NULL DEFAULT '',
+    blocked_reason TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    monday_board_mapping_id INTEGER REFERENCES monday_board_mappings(id) ON DELETE SET NULL,
+    monday_item_id TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_workloads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    business_area TEXT NOT NULL DEFAULT '',
+    active_items INTEGER NOT NULL DEFAULT 0,
+    overdue_items INTEGER NOT NULL DEFAULT 0,
+    blocked_items INTEGER NOT NULL DEFAULT 0,
+    priority_items INTEGER NOT NULL DEFAULT 0,
+    deliverables_due INTEGER NOT NULL DEFAULT 0,
+    workload_score INTEGER NOT NULL DEFAULT 0,
+    health_status TEXT NOT NULL DEFAULT 'Green',
+    workload_status TEXT NOT NULL DEFAULT 'Available',
+    capacity INTEGER NOT NULL DEFAULT 8,
+    notes TEXT NOT NULL DEFAULT '',
+    calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS deliverables (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    project_name TEXT NOT NULL DEFAULT '',
+    client_name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    due_date TEXT NOT NULL DEFAULT '',
+    linked_file_placeholder TEXT NOT NULL DEFAULT '',
+    linked_meeting_id INTEGER REFERENCES meeting_records(id) ON DELETE SET NULL,
+    linked_project_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    linked_business_id TEXT NOT NULL DEFAULT '',
+    linked_memory_reference TEXT NOT NULL DEFAULT '',
+    feedback_status TEXT NOT NULL DEFAULT 'unreviewed',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS workload_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    open_items INTEGER NOT NULL DEFAULT 0,
+    high_priority_items INTEGER NOT NULL DEFAULT 0,
+    overdue_items INTEGER NOT NULL DEFAULT 0,
+    blocked_items INTEGER NOT NULL DEFAULT 0,
+    deliverables_due INTEGER NOT NULL DEFAULT 0,
+    workload_score INTEGER NOT NULL DEFAULT 0,
+    health_status TEXT NOT NULL DEFAULT 'Green',
+    calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS operational_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    business_impact TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS operational_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    business_impact TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS operational_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    approval_required INTEGER NOT NULL DEFAULT 0 CHECK(approval_required IN (0, 1)),
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meeting_followups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER REFERENCES meeting_records(id) ON DELETE SET NULL,
+    meeting_title TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'meeting_action',
+    source_id TEXT NOT NULL DEFAULT '',
+    work_item_id INTEGER REFERENCES work_items(id) ON DELETE SET NULL,
+    owner_agent_id TEXT NOT NULL DEFAULT 'alfred',
+    owner_agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    extracted_action TEXT NOT NULL,
+    due_date TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS output_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL DEFAULT 'alfred',
+    agent_name TEXT NOT NULL DEFAULT 'Alfred',
+    output_type TEXT NOT NULL DEFAULT 'agent_output',
+    output_title TEXT NOT NULL,
+    rating TEXT NOT NULL DEFAULT 'unrated',
+    recommendation_status TEXT NOT NULL DEFAULT 'unreviewed',
+    lesson_learned TEXT NOT NULL DEFAULT '',
+    future_work_suggestion TEXT NOT NULL DEFAULT '',
+    memory_reference TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS monday_board_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    board_kind TEXT NOT NULL,
+    board_name TEXT NOT NULL,
+    monday_board_id TEXT NOT NULL DEFAULT '',
+    monday_group_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    description TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, board_kind)
+  );
+
+  CREATE TABLE IF NOT EXISTS monday_sync_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mapping_id INTEGER REFERENCES monday_board_mappings(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    board_kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Planned',
+    read_enabled INTEGER NOT NULL DEFAULT 0 CHECK(read_enabled IN (0, 1)),
+    write_enabled INTEGER NOT NULL DEFAULT 0 CHECK(write_enabled IN (0, 1)),
+    last_read_at TEXT NOT NULL DEFAULT '',
+    last_write_at TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, board_kind)
+  );
+
+  CREATE TABLE IF NOT EXISTS monday_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    record_type TEXT NOT NULL DEFAULT '',
+    record_id TEXT NOT NULL DEFAULT '',
+    agent_id TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS work_items_owner_status
+  ON work_items(owner_agent_id, status, priority);
+
+  CREATE INDEX IF NOT EXISTS work_items_source
+  ON work_items(source_type, source_id);
+
+  CREATE INDEX IF NOT EXISTS deliverables_owner_status
+  ON deliverables(owner_agent_id, status, due_date);
+
+  CREATE INDEX IF NOT EXISTS meeting_followups_status
+  ON meeting_followups(status, priority);
+
+  CREATE INDEX IF NOT EXISTS workload_metrics_agent_health
+  ON workload_metrics(agent_id, health_status);
+
   CREATE TABLE IF NOT EXISTS project_email_signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -1760,6 +2012,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateFinancialBusinessSchema(db);
   migrateProjectIntelligenceSchema(db);
   migrateMeetingIntelligenceSchema(db);
+  migrateMondayOperatingSchema(db);
   migratePropertySchema(db);
   seedDatabase(db);
   return db;
@@ -1910,6 +2163,56 @@ function migrateMeetingIntelligenceSchema(db) {
 
     CREATE INDEX IF NOT EXISTS meeting_risks_status
     ON meeting_risks(status, severity);
+  `);
+}
+
+function migrateMondayOperatingSchema(db) {
+  const columnsFor = (table) => new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  const addColumn = (table, definition) => {
+    const name = definition.trim().split(/\s+/)[0];
+    if (!columnsFor(table).has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  };
+
+  addColumn("agent_workloads", "deliverables_due INTEGER NOT NULL DEFAULT 0");
+  addColumn("agent_workloads", "workload_score INTEGER NOT NULL DEFAULT 0");
+  addColumn("agent_workloads", "health_status TEXT NOT NULL DEFAULT 'Green'");
+  addColumn("deliverables", "linked_meeting_id INTEGER");
+  addColumn("deliverables", "linked_project_id INTEGER");
+  addColumn("deliverables", "linked_business_id TEXT NOT NULL DEFAULT ''");
+  addColumn("deliverables", "linked_memory_reference TEXT NOT NULL DEFAULT ''");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workload_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      open_items INTEGER NOT NULL DEFAULT 0,
+      high_priority_items INTEGER NOT NULL DEFAULT 0,
+      overdue_items INTEGER NOT NULL DEFAULT 0,
+      blocked_items INTEGER NOT NULL DEFAULT 0,
+      deliverables_due INTEGER NOT NULL DEFAULT 0,
+      workload_score INTEGER NOT NULL DEFAULT 0,
+      health_status TEXT NOT NULL DEFAULT 'Green',
+      calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(agent_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS work_items_owner_status
+    ON work_items(owner_agent_id, status, priority);
+
+    CREATE INDEX IF NOT EXISTS work_items_source
+    ON work_items(source_type, source_id);
+
+    CREATE INDEX IF NOT EXISTS deliverables_owner_status
+    ON deliverables(owner_agent_id, status, due_date);
+
+    CREATE INDEX IF NOT EXISTS meeting_followups_status
+    ON meeting_followups(status, priority);
+
+    CREATE INDEX IF NOT EXISTS workload_metrics_agent_health
+    ON workload_metrics(agent_id, health_status);
   `);
 }
 
@@ -3495,6 +3798,108 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.recommendation_status ? `Recommendation status: ${row.recommendation_status}.` : "",
         row.follow_up_result ? `Follow-up result: ${row.follow_up_result}.` : "",
         row.lesson_learned ? `Lesson learned: ${row.lesson_learned}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const workItems = db.prepare(`
+    SELECT *
+    FROM work_items
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of workItems) {
+    records.push(semanticRecord({
+      sourceType: "work_item",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Monday operating work item: ${row.title}.`,
+        `Owner agent: ${row.owner_agent_name || row.owner_agent_id}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Status: ${row.status}. Priority: ${row.priority}.`,
+        row.due_date ? `Due: ${row.due_date}.` : "",
+        row.blocked_reason ? `Blocked reason: ${row.blocked_reason}.` : "",
+        row.detail,
+        row.source_reference ? `Source: ${row.source_reference}.` : "",
+        "Monday Operating System records are internal Alfred records only; no Monday.com write occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const deliverables = db.prepare(`
+    SELECT *
+    FROM deliverables
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of deliverables) {
+    records.push(semanticRecord({
+      sourceType: "deliverable",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Deliverable: ${row.title}.`,
+        `Owner agent: ${row.owner_agent_name || row.owner_agent_id}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.linked_meeting_id ? `Linked meeting ID: ${row.linked_meeting_id}.` : "",
+        row.linked_project_id ? `Linked project ID: ${row.linked_project_id}.` : "",
+        row.linked_business_id ? `Linked business: ${row.linked_business_id}.` : "",
+        row.linked_memory_reference ? `Linked memory: ${row.linked_memory_reference}.` : "",
+        `Status: ${row.status}. Feedback status: ${row.feedback_status}.`,
+        row.linked_file_placeholder ? `File placeholder: ${row.linked_file_placeholder}.` : "",
+        row.detail,
+        row.source_reference ? `Source: ${row.source_reference}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const operationalDecisions = db.prepare(`
+    SELECT *
+    FROM operational_decisions
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of operationalDecisions) {
+    records.push(semanticRecord({
+      sourceType: "operational_decision",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Operational decision: ${row.title}.`,
+        `Owner agent: ${row.owner_agent_name || row.owner_agent_id}.`,
+        `Status: ${row.status}. Priority: ${row.priority}.`,
+        row.approval_required ? "Patrick approval required." : "No approval flag set.",
+        row.detail,
+        row.source_reference ? `Source: ${row.source_reference}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const outputFeedback = db.prepare(`
+    SELECT *
+    FROM output_feedback
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of outputFeedback) {
+    records.push(semanticRecord({
+      sourceType: "output_feedback",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.output_title,
+      summary: [
+        `Agent output feedback: ${row.output_title}.`,
+        `Agent: ${row.agent_name || row.agent_id}.`,
+        `Rating: ${row.rating}. Recommendation status: ${row.recommendation_status}.`,
+        row.lesson_learned ? `Lesson learned: ${row.lesson_learned}.` : "",
+        row.future_work_suggestion ? `Future work suggestion: ${row.future_work_suggestion}.` : "",
+        row.memory_reference ? `Memory reference: ${row.memory_reference}.` : "",
+        row.source_reference ? `Source: ${row.source_reference}.` : "",
       ].filter(Boolean).join(" "),
     }));
   }
