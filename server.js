@@ -74,6 +74,21 @@ import {
   recordSarahAudit,
   sarahBriefingForDaily,
 } from "./sarah.js";
+import {
+  PROPERTY_READ_ONLY_BOUNDARY,
+  createPropertyOpportunity,
+  getPropertyDashboardData,
+  getPropertyOpportunity,
+  listPropertyAnalyses,
+  listPropertyAudit,
+  listPropertyDueDiligence,
+  listPropertyOpportunities,
+  savePropertyAnalysis,
+  searchPropertyKnowledge,
+  updatePropertyOpportunity,
+  upsertDueDiligenceItem,
+  westbridgeBriefingForDaily,
+} from "./property.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -197,6 +212,71 @@ async function handleApi(request, response, url) {
       ...result,
       semanticMemory: memory?.results || [],
     });
+  }
+  if (url.pathname === "/api/property/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getPropertyDashboardData(db));
+  }
+  if (url.pathname === "/api/property/briefing" && request.method === "GET") {
+    return sendJson(response, 200, westbridgeBriefingForDaily(db));
+  }
+  if (url.pathname === "/api/property/search" && request.method === "GET") {
+    const result = searchPropertyKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+    });
+  }
+  if (url.pathname === "/api/property/opportunities") {
+    if (request.method === "GET") return sendJson(response, 200, listPropertyOpportunities(db));
+    if (request.method === "POST") {
+      const opportunity = createPropertyOpportunity(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...opportunity, boundary: PROPERTY_READ_ONLY_BOUNDARY });
+    }
+  }
+  const propertyOpportunityMatch = url.pathname.match(/^\/api\/property\/opportunities\/(\d+)$/);
+  if (propertyOpportunityMatch) {
+    const opportunityId = Number(propertyOpportunityMatch[1]);
+    if (request.method === "GET") {
+      const opportunity = getPropertyOpportunity(db, opportunityId);
+      return opportunity
+        ? sendJson(response, 200, {
+            opportunity,
+            analyses: listPropertyAnalyses(db, opportunityId),
+            dueDiligence: listPropertyDueDiligence(db, opportunityId),
+            boundary: PROPERTY_READ_ONLY_BOUNDARY,
+          })
+        : sendJson(response, 404, { error: "Property opportunity not found" });
+    }
+    if (request.method === "PATCH" || request.method === "PUT") {
+      const opportunity = updatePropertyOpportunity(db, opportunityId, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, { ...opportunity, boundary: PROPERTY_READ_ONLY_BOUNDARY });
+    }
+  }
+  const propertyAnalysisMatch = url.pathname.match(/^\/api\/property\/opportunities\/(\d+)\/analyse$/);
+  if (propertyAnalysisMatch && request.method === "POST") {
+    const result = savePropertyAnalysis(db, Number(propertyAnalysisMatch[1]), await readJson(request), {
+      userAction: "api:property:analyse-deal",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, result);
+  }
+  const propertyDueDiligenceMatch = url.pathname.match(/^\/api\/property\/opportunities\/(\d+)\/due-diligence$/);
+  if (propertyDueDiligenceMatch) {
+    const opportunityId = Number(propertyDueDiligenceMatch[1]);
+    if (request.method === "GET") return sendJson(response, 200, listPropertyDueDiligence(db, opportunityId));
+    if (request.method === "POST" || request.method === "PATCH" || request.method === "PUT") {
+      const item = upsertDueDiligenceItem(db, opportunityId, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, { ...item, boundary: PROPERTY_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/property/audit" && request.method === "GET") {
+    return sendJson(response, 200, listPropertyAudit(db, url.searchParams.get("limit") || 50));
   }
   if (url.pathname === "/api/project-intelligence/dashboard" && request.method === "GET") {
     return sendJson(response, 200, getProjectDashboard(db));
@@ -440,6 +520,7 @@ async function handleApi(request, response, url) {
         "opportunities",
         "approval_queue",
         "briefing_history",
+        context.propertyBrief?.items?.length ? "westbridge_property" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -696,7 +777,15 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.executivePriorities = analysis.executivePriorities;
   brief.projectIntelligence = projectAttentionForBriefing(db);
   brief.sarah = sarahBriefingForDaily(db);
+  brief.property = westbridgeBriefingForDaily(db);
   brief.executivePriorities = [
+    ...brief.property.items.map((item, index) => ({
+      ...item,
+      id: `property-${index + 1}`,
+      rank: index + 1,
+      category: "property",
+      score: item.priority === "high" ? 84 : 57,
+    })),
     ...brief.sarah.items.map((item, index) => ({
       ...item,
       id: `sarah-${index + 1}`,
@@ -726,6 +815,11 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
+  brief.summary.propertySignals = brief.property.items.length;
+  brief.summary.propertyActiveOpportunities = brief.property.metrics.activeOpportunities;
+  brief.summary.propertyMonthlyCashflow = brief.property.metrics.monthlyCashflow;
+  brief.summary.propertyMonthlyCashflowForecast = brief.property.metrics.monthlyCashflowForecast;
+  brief.summary.propertyCashflowTargetProgress = brief.property.metrics.cashflowTargetProgress;
   brief.analysisMethod = "deterministic-v1";
 
   if (!save) return brief;
@@ -780,6 +874,11 @@ function sourceReferencesFor(context) {
     ...compactRecords(context.risks, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "risk", record)),
     ...compactRecords(context.decisions, ["id", "title", "sourceId"]).map((record) => sourceReference(record.sourceType || "decision", record)),
     ...compactRecords(context.opportunities, ["id", "title"]).map((record) => sourceReference("opportunity", record)),
+    ...compactRecords(context.propertyBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `property:${record.title}`,
+      label: record.title || "Westbridge property signal",
+      category: "property",
+    })),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
       reference: record.sourceReference || `sarah:${record.title}`,
@@ -844,6 +943,7 @@ function memoryQueryForBriefing(context) {
     ...(context.risks || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.decisions || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.opportunities || []).map((item) => `${item.title} ${item.detail || ""}`),
+    ...(context.propertyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
@@ -919,6 +1019,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       projectsWithMissingInformation: compactRecords(briefing.projectIntelligence?.projectsWithMissingInformation || [], ["projectProfileId", "projectName", "missing"], 6),
       projectsWithFinancialRisk: compactRecords(briefing.projectIntelligence?.projectsWithFinancialRisk || [], ["projectProfileId", "projectName", "financialSummary"], 6),
       projectsWithInformationQualityRisk: compactRecords(briefing.projectIntelligence?.projectsWithInformationQualityRisk || [], ["projectProfileId", "projectName", "informationQuality"], 6),
+    },
+    propertyBrief: {
+      title: briefing.property?.title || "Westbridge Property Brief",
+      summary: briefing.property?.summary || "",
+      metrics: compactValue(briefing.property?.metrics || {}),
+      items: compactRecords(briefing.property?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      boundary: briefing.property?.boundary || PROPERTY_READ_ONLY_BOUNDARY,
     },
     sarahDigitalConstructionBrief: {
       title: briefing.sarah?.title || "Daily Digital Construction Brief",

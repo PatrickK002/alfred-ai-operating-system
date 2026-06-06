@@ -1162,16 +1162,19 @@ h3 {
   text-transform: uppercase;
 }
 
-.project-actions {
+.project-actions,
+.property-actions {
   display: flex;
   justify-content: flex-end;
 }
 
-.project-boundary {
+.project-boundary,
+.property-boundary {
   margin-bottom: 18px;
 }
 
-.project-metrics {
+.project-metrics,
+.property-metrics {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 12px;
@@ -1179,10 +1182,12 @@ h3 {
 }
 
 .project-metrics article,
+.property-metrics article,
 .project-card,
 .project-record-list article,
 .project-health-card,
-.project-finance-summary {
+.project-finance-summary,
+.property-progress {
   padding: 15px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1190,6 +1195,7 @@ h3 {
 }
 
 .project-metrics small,
+.property-metrics small,
 .project-record-list small,
 .project-card small {
   display: block;
@@ -1199,7 +1205,8 @@ h3 {
   text-transform: uppercase;
 }
 
-.project-metrics strong {
+.project-metrics strong,
+.property-metrics strong {
   display: block;
   margin-top: 6px;
   color: var(--accent);
@@ -1207,14 +1214,16 @@ h3 {
   font-size: 18px;
 }
 
-.project-layout {
+.project-layout,
+.property-layout {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 16px;
   margin-bottom: 18px;
 }
 
-.project-panel {
+.project-panel,
+.property-panel {
   padding: 20px;
 }
 
@@ -1465,6 +1474,59 @@ h3 {
 .project-search-results {
   display: grid;
   gap: 12px;
+}
+
+.property-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.property-progress {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.property-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  transition: width 240ms ease;
+}
+
+.property-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.property-form input,
+.property-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.property-form button {
+  grid-column: 1 / -1;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.property-card.selected {
+  border-color: rgba(215, 181, 109, 0.5);
+  background: rgba(215, 181, 109, 0.06);
 }
 
 .finance-empty {
@@ -2330,11 +2392,13 @@ dialog::backdrop {
   .approval-card dl { grid-template-columns: repeat(2, 1fr); }
   .finance-metrics { grid-template-columns: repeat(3, 1fr); }
   .finance-grid { grid-template-columns: 1fr; }
-  .project-metrics { grid-template-columns: repeat(3, 1fr); }
+  .project-metrics,
+  .property-metrics { grid-template-columns: repeat(3, 1fr); }
   .sarah-metrics { grid-template-columns: repeat(3, 1fr); }
   .sarah-grid { grid-template-columns: 1fr; }
   .project-intelligence-signals { grid-template-columns: 1fr; }
   .project-layout,
+  .property-layout,
   .project-detail-grid { grid-template-columns: 1fr; }
 }
 
@@ -2347,7 +2411,7 @@ dialog::backdrop {
     padding: 16px;
   }
   .nav {
-    grid-template-columns: repeat(9, 1fr);
+    grid-template-columns: repeat(10, 1fr);
     margin-top: 18px;
     overflow-x: auto;
   }
@@ -2382,11 +2446,14 @@ dialog::backdrop {
   .finance-metrics,
   .forecast-cases,
   .project-metrics,
+  .property-metrics,
   .sarah-metrics,
   .sarah-grid,
   .project-intelligence-signals,
-  .project-search-form { grid-template-columns: 1fr; }
+  .project-search-form,
+  .property-form { grid-template-columns: 1fr; }
   .project-detail-header { flex-direction: column; }
   .sarah-actions,
-  .project-actions { justify-content: flex-start; }
+  .project-actions,
+  .property-actions { justify-content: flex-start; }
 }

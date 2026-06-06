@@ -1153,10 +1153,172 @@ const SCHEMA = `
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS property_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'westbridge-property-group' REFERENCES financial_business_entities(id),
+    company_id TEXT NOT NULL DEFAULT 'westbridge' REFERENCES companies(id),
+    address TEXT NOT NULL,
+    asset_type TEXT NOT NULL DEFAULT 'Unknown',
+    tenure TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Held',
+    purchase_price REAL NOT NULL DEFAULT 0,
+    current_value REAL NOT NULL DEFAULT 0,
+    outstanding_debt REAL NOT NULL DEFAULT 0,
+    monthly_rent REAL NOT NULL DEFAULT 0,
+    monthly_costs REAL NOT NULL DEFAULT 0,
+    net_monthly_cashflow REAL NOT NULL DEFAULT 0,
+    acquired_at TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'westbridge-property-group' REFERENCES financial_business_entities(id),
+    company_id TEXT NOT NULL DEFAULT 'westbridge' REFERENCES companies(id),
+    title TEXT NOT NULL,
+    address TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_metadata TEXT NOT NULL DEFAULT '{}',
+    stage TEXT NOT NULL DEFAULT 'Lead',
+    asset_type TEXT NOT NULL DEFAULT 'Unknown',
+    tenure TEXT NOT NULL DEFAULT '',
+    purchase_price REAL NOT NULL DEFAULT 0,
+    rent_monthly REAL NOT NULL DEFAULT 0,
+    refurb_cost REAL NOT NULL DEFAULT 0,
+    management_cost_monthly REAL NOT NULL DEFAULT 0,
+    other_costs REAL NOT NULL DEFAULT 0,
+    committed_capital REAL NOT NULL DEFAULT 0,
+    forecast_net_monthly_cashflow REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS property_opportunities_stage
+  ON property_opportunities(stage, updated_at);
+
+  CREATE TABLE IF NOT EXISTS property_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE SET NULL,
+    document_type TEXT NOT NULL DEFAULT 'metadata_placeholder',
+    name TEXT NOT NULL,
+    source_url TEXT NOT NULL DEFAULT '',
+    file_name TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'metadata_only',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_deal_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL REFERENCES property_opportunities(id) ON DELETE CASCADE,
+    analysis_type TEXT NOT NULL DEFAULT 'deal_analysis',
+    inputs TEXT NOT NULL DEFAULT '{}',
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    results TEXT NOT NULL DEFAULT '{}',
+    rules TEXT NOT NULL DEFAULT '[]',
+    recommendation TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT 'Westbridge Property Director',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS property_deal_analyses_opportunity
+  ON property_deal_analyses(opportunity_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS property_due_diligence_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL REFERENCES property_opportunities(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Amber' CHECK(status IN ('Green', 'Amber', 'Red')),
+    detail TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(opportunity_id, category)
+  );
+
+  CREATE TABLE IF NOT EXISTS property_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low', 'medium', 'high')),
+    status TEXT NOT NULL DEFAULT 'open',
+    source_ref TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    decision_required_by TEXT NOT NULL DEFAULT 'Patrick King',
+    source_ref TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_valuations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE CASCADE,
+    asset_id INTEGER REFERENCES property_assets(id) ON DELETE CASCADE,
+    valuation_type TEXT NOT NULL DEFAULT 'desktop',
+    amount_gbp REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_refinance_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE CASCADE,
+    asset_id INTEGER REFERENCES property_assets(id) ON DELETE CASCADE,
+    refinance_value_gbp REAL NOT NULL DEFAULT 0,
+    loan_to_value REAL NOT NULL DEFAULT 0.75,
+    expected_debt_gbp REAL NOT NULL DEFAULT 0,
+    cash_released_gbp REAL NOT NULL DEFAULT 0,
+    cash_left_in_deal_gbp REAL NOT NULL DEFAULT 0,
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS property_memory_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    semantic_memory_id INTEGER REFERENCES semantic_memory(id),
+    summary TEXT NOT NULL DEFAULT '',
+    sensitivity_category TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(opportunity_id, source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS property_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'Westbridge Property Director',
+    user_action TEXT NOT NULL DEFAULT '',
+    opportunity_id INTEGER REFERENCES property_opportunities(id) ON DELETE SET NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `;
 
 const COMPANY_SEEDS = [
   ["digitize", "Digitize Consultants", "Digitize", "DC", "#62ead5", "Digital construction and information consultancy", "Operating", ["BIM", "ISO 19650", "Information Management", "GIS", "Digital Twin", "Power Platform", "AI Solutions"]],
+  ["westbridge", "Westbridge Property Group", "Westbridge", "WP", "#d7b56d", "Acquire and manage cashflow-producing property assets targeting £10,000-£15,000 net monthly income within five years.", "Building", ["Property Investment", "Portfolio Management", "Acquisition Analysis", "Due Diligence"]],
   ["product", "Product Studio", "Product", "PS", "#7fa9e2", "Create scalable SaaS businesses", "Building", ["Council Construction Assurance Platform"]],
   ["venture", "AI Venture Studio", "Venture", "AV", "#b18ae2", "Build recurring-income online businesses", "Discovery", ["Target: £5,000+ monthly profit"]],
   ["media", "Media Studio", "Media", "MS", "#e2b46b", "Build automated YouTube and content businesses", "Discovery", ["Target: £5,000+ monthly income"]],
@@ -1165,6 +1327,7 @@ const COMPANY_SEEDS = [
 const FINANCIAL_BUSINESS_ENTITY_SEEDS = [
   ["group", "Patrick King Group", "group", null, null, "active", "Consolidated reporting scope for all Alfred-managed businesses."],
   ["digitize", "Digitize Consultants", "business", "group", "digitize", "active", "Digital construction consultancy and current order book source."],
+  ["westbridge-property-group", "Westbridge Property Group", "business", "group", "westbridge", "active", "Property investment business targeting £10,000-£15,000 net monthly income over five years."],
   ["council-assurance-platform", "Council Assurance Platform", "product", "group", "product", "planned", "Future SaaS product for council construction assurance."],
   ["media-businesses", "Media Businesses", "division", "group", "media", "planned", "Media Studio and automated content businesses."],
   ["ai-businesses", "AI Businesses", "division", "group", "venture", "planned", "AI Venture Studio and AI-led businesses."],
@@ -1264,6 +1427,7 @@ const PROJECT_TAG_SEEDS = [
 
 const AGENT_SEEDS = [
   ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Executive Specialist reporting to Alfred. Provides advisory-only BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform intelligence for Digitize. No autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Active"],
+  ["westbridge-property-director", "Westbridge Property Director", "AI Investment Director", "westbridge", "Property Investment", "Board-level investment director for Westbridge Property Group. Analyses acquisition pipeline, portfolio cashflow, due diligence, refinance potential and investment risks. Advisory only; no purchases, offers, legal instructions, communications or external execution.", ["Portfolio Metrics", "Deal Analysis", "Westbridge Rules", "Due Diligence", "Refinance Scenarios", "Property Memory"], "Active"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
@@ -1335,6 +1499,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateApprovalSchema(db);
   migrateFinancialBusinessSchema(db);
   migrateProjectIntelligenceSchema(db);
+  migratePropertySchema(db);
   seedDatabase(db);
   return db;
 }
@@ -1444,9 +1609,20 @@ function migrateProjectIntelligenceSchema(db) {
   db.exec("CREATE VIEW IF NOT EXISTS project_emails AS SELECT * FROM project_email_signals");
 }
 
+function migratePropertySchema(db) {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS property_opportunities_stage
+    ON property_opportunities(stage, updated_at);
+
+    CREATE INDEX IF NOT EXISTS property_deal_analyses_opportunity
+    ON property_deal_analyses(opportunity_id, created_at);
+  `);
+}
+
 export function seedDatabase(db) {
   const companyCount = db.prepare("SELECT COUNT(*) AS count FROM companies").get().count;
   if (companyCount > 0) {
+    updateCompanyDefinitions(db);
     updateFinancialBusinessEntities(db);
     updateProjectProfiles(db);
     updateDigitalConstructionDomains(db);
@@ -1454,6 +1630,7 @@ export function seedDatabase(db) {
     updateAgentDefinitions(db);
     updateSarahTeamPlaceholders(db);
     updateIntegrationDefinitions(db);
+    updateWestbridgePropertySeeds(db);
     return;
   }
 
@@ -1515,11 +1692,29 @@ export function seedDatabase(db) {
     insertMemory.run("idea", "Council Construction Assurance Platform", "Initial Product Studio SaaS concept focused on council construction assurance.", "product", "2026-06-05");
 
     updateIntegrationDefinitions(db);
+    updateWestbridgePropertySeeds(db);
 
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
+  }
+}
+
+function updateCompanyDefinitions(db) {
+  const insertCompany = db.prepare(`
+    INSERT OR IGNORE INTO companies (id, name, short_name, symbol, color, purpose, status, services)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateCompany = db.prepare(`
+    UPDATE companies
+    SET name = ?, short_name = ?, symbol = ?, color = ?, purpose = ?,
+        status = ?, services = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const company of COMPANY_SEEDS) {
+    insertCompany.run(...company.slice(0, 7), JSON.stringify(company[7]));
+    updateCompany.run(company[1], company[2], company[3], company[4], company[5], company[6], JSON.stringify(company[7]), company[0]);
   }
 }
 
@@ -1573,6 +1768,125 @@ function updateFinancialBusinessEntities(db) {
     insertEntity.run(...entity);
     updateEntity.run(entity[1], entity[2], entity[3], entity[4], entity[5], entity[6], entity[0]);
   }
+}
+
+function insertOperatingRecordIfMissing(db, table, companyId, title, detail, priority = "medium", due = "Next") {
+  db.prepare(`
+    INSERT INTO ${table} (company_id, title, detail, priority, due)
+    SELECT ?, ?, ?, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM ${table}
+      WHERE company_id = ? AND title = ?
+    )
+  `).run(companyId, title, detail, priority, due, companyId, title);
+}
+
+function updateWestbridgePropertySeeds(db) {
+  insertOperatingRecordIfMissing(
+    db,
+    "opportunities",
+    "westbridge",
+    "Build Westbridge acquisition pipeline",
+    "Create a disciplined property acquisition pipeline focused on long-term cashflow, no HMOs, acquisition costs, management costs, refinance potential and capital preservation.",
+    "high",
+    "This quarter",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "risks",
+    "westbridge",
+    "Property investment execution boundary",
+    "All Westbridge recommendations require Patrick review and professional legal, tax, lending and survey due diligence. Alfred cannot make offers, purchases, legal instructions or external communications.",
+    "high",
+    "Always",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "decisions",
+    "westbridge",
+    "Confirm first Westbridge acquisition criteria",
+    "Approve the first written investment criteria before reviewing live property opportunities: asset types, locations, minimum cashflow, maximum leverage, capital allocation and due diligence rules.",
+    "high",
+    "Before first offer",
+  );
+
+  db.prepare(`
+    INSERT INTO memories (type, title, detail, company_id, recorded_at)
+    SELECT 'strategy', 'Westbridge Property Group target',
+      'Westbridge Property Group is a property investment business owned by Patrick King. The objective is to build a cashflow-producing portfolio generating £10,000-£15,000 net monthly income within five years. Advisory only; no external execution is permitted.',
+      'westbridge', '2026-06-06'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM memories
+      WHERE company_id = 'westbridge' AND title = 'Westbridge Property Group target'
+    )
+  `).run();
+
+  db.prepare(`
+    INSERT INTO property_opportunities (
+      business_entity_id, company_id, title, address, source_type, stage,
+      asset_type, tenure, notes
+    )
+    SELECT 'westbridge-property-group', 'westbridge', 'Garage block acquisition search', '',
+      'manual', 'Lead', 'Garage block', '',
+      'Pipeline placeholder only. No live property has been sourced; use this record to capture garage block opportunities when real references are available.'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM property_opportunities
+      WHERE company_id = 'westbridge' AND title = 'Garage block acquisition search'
+    )
+  `).run();
+  const opportunity = db.prepare(`
+    SELECT id FROM property_opportunities
+    WHERE company_id = 'westbridge' AND title = 'Garage block acquisition search'
+  `).get();
+  if (opportunity) {
+    const insertDueDiligence = db.prepare(`
+      INSERT OR IGNORE INTO property_due_diligence_items (
+        opportunity_id, category, status, detail
+      )
+      VALUES (?, ?, 'Amber', 'Not reviewed yet.')
+    `);
+    for (const category of [
+      "Legal Review",
+      "Planning Review",
+      "Flood Risk",
+      "EPC",
+      "Insurance",
+      "Survey",
+      "Finance",
+      "Tenancy Review",
+      "Environmental Review",
+    ]) {
+      insertDueDiligence.run(opportunity.id, category);
+    }
+    db.prepare(`
+      INSERT OR IGNORE INTO property_memory_links (
+        opportunity_id, source_type, source_id, summary, sensitivity_category
+      )
+      VALUES (?, 'property_opportunity', ?, 'Garage block acquisition search is a placeholder pipeline record for Westbridge. No property has been sourced or analysed yet.', 'local_sensitive_business_data')
+    `).run(opportunity.id, String(opportunity.id));
+  }
+
+  db.prepare(`
+    INSERT INTO property_risks (opportunity_id, title, detail, severity, source_ref)
+    SELECT ?, 'No live deal evidence yet',
+      'The current Westbridge pipeline contains a placeholder search record only. Do not treat it as a sourced investment opportunity.',
+      'medium', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM property_risks
+      WHERE title = 'No live deal evidence yet'
+    )
+  `).run(opportunity?.id || null, opportunity ? `property_opportunity:${opportunity.id}` : "");
+
+  db.prepare(`
+    INSERT INTO property_decisions (opportunity_id, title, detail, status, decision_required_by, source_ref)
+    SELECT ?, 'Approve Westbridge investment criteria',
+      'Patrick should approve written investment criteria before any offer-stage property opportunity is considered.',
+      'open', 'Patrick King', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM property_decisions
+      WHERE title = 'Approve Westbridge investment criteria'
+    )
+  `).run(opportunity?.id || null, opportunity ? `property_opportunity:${opportunity.id}` : "");
 }
 
 function updateProjectProfiles(db) {
@@ -2601,6 +2915,105 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         `Confidence: ${row.confidence}.`,
         row.description,
       ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const propertyOpportunities = db.prepare(`
+    SELECT o.*, c.short_name AS company_short_name, c.name AS company_name
+    FROM property_opportunities o
+    LEFT JOIN companies c ON c.id = o.company_id
+    ORDER BY o.updated_at DESC, o.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of propertyOpportunities) {
+    records.push(semanticRecord({
+      sourceType: "property_opportunity",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Westbridge property opportunity: ${row.title}.`,
+        `Company: ${companyLabel(row)}.`,
+        `Stage: ${row.stage}.`,
+        row.address ? `Address: ${row.address}.` : "",
+        `Asset type: ${row.asset_type || "Unknown"}.`,
+        row.tenure ? `Tenure: ${row.tenure}.` : "",
+        `Purchase price: £${row.purchase_price || 0}.`,
+        `Monthly rent: £${row.rent_monthly || 0}.`,
+        `Forecast net monthly cashflow: £${row.forecast_net_monthly_cashflow || 0}.`,
+        row.source_url ? `URL reference: ${row.source_url}. Metadata only; no scraping was performed.` : "",
+        row.notes,
+        "Advisory only. No offer, purchase, legal instruction or external communication has been made.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const propertyAnalyses = db.prepare(`
+    SELECT a.*, o.title AS opportunity_title, o.stage, o.asset_type
+    FROM property_deal_analyses a
+    JOIN property_opportunities o ON o.id = a.opportunity_id
+    ORDER BY a.created_at DESC, a.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of propertyAnalyses) {
+    const results = safeJsonParse(row.results, {});
+    records.push(semanticRecord({
+      sourceType: "property_deal_analysis",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: `${row.opportunity_title} deal analysis`,
+      summary: [
+        `Westbridge deal analysis for ${row.opportunity_title}.`,
+        `Stage: ${row.stage}.`,
+        `Asset type: ${row.asset_type || "Unknown"}.`,
+        `Gross yield: ${results.grossYield || 0}%.`,
+        `Net yield: ${results.netYield || 0}%.`,
+        `ROI: ${results.roi || 0}%.`,
+        `Net monthly cashflow: £${results.netMonthlyCashflow || 0}.`,
+        `Cash left in deal: £${results.cashLeftInDeal || 0}.`,
+        row.recommendation ? `Recommendation: ${row.recommendation}.` : "",
+        "Recommendation only; no investment action was executed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const propertyDueDiligence = db.prepare(`
+    SELECT d.*, o.title AS opportunity_title
+    FROM property_due_diligence_items d
+    JOIN property_opportunities o ON o.id = d.opportunity_id
+    ORDER BY d.updated_at DESC, d.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of propertyDueDiligence) {
+    records.push(semanticRecord({
+      sourceType: "property_due_diligence",
+      sourceId: row.id,
+      sourceCreatedAt: row.reviewed_at || row.updated_at || row.created_at,
+      title: `${row.opportunity_title} ${row.category}`,
+      summary: [
+        `Westbridge due diligence: ${row.category}.`,
+        `Opportunity: ${row.opportunity_title}.`,
+        `Status: ${row.status}.`,
+        row.detail,
+        "Due diligence status is tracked inside Alfred only; no external instruction was issued.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const propertyMemory = db.prepare(`
+    SELECT *
+    FROM property_memory_links
+    ORDER BY created_at DESC, id DESC
+    LIMIT 300
+  `).all();
+  for (const row of propertyMemory) {
+    records.push(semanticRecord({
+      sourceType: "property_memory",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: `${row.source_type}:${row.source_id}`,
+      summary: row.summary,
+      sensitivityCategory: row.sensitivity_category || "local_sensitive_business_data",
     }));
   }
 
