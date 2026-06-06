@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Alex abstract growth avatar</title>
+  <desc id="desc">Premium dark abstract avatar with blue growth identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#7fa9e2" stroke-opacity=".28" stroke-width="2"/>
+  <path d="M45 106c18-32 34-44 70-52" fill="none" stroke="#7fa9e2" stroke-width="5" stroke-linecap="round"/>
+  <path d="M101 48h20v20" fill="none" stroke="#dcecff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="59" cy="94" r="8" fill="#7fa9e2" fill-opacity=".28" stroke="#7fa9e2" stroke-width="2"/>
+  <text x="80" y="121" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#edf5ff">A</text>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Ethan abstract CTO avatar</title>
+  <desc id="desc">Premium dark abstract avatar with cyan technology identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#72d6ff" stroke-opacity=".28" stroke-width="2"/>
+  <path d="M51 55h58v50H51z" fill="#72d6ff" fill-opacity=".1" stroke="#72d6ff" stroke-opacity=".55" stroke-width="3"/>
+  <path d="M64 72h32M64 86h20M57 119h46" stroke="#e0f7ff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="109" cy="55" r="8" fill="#72d6ff" fill-opacity=".45"/>
+  <text x="80" y="143" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#ebfbff">E</text>
+</svg>

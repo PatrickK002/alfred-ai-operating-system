@@ -101,6 +101,59 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
+.agent-avatar-frame {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 48%, transparent);
+  border-radius: 14px;
+  color: var(--agent-accent, var(--accent));
+  background:
+    radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--agent-accent, var(--accent)) 22%, transparent), transparent 48%),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 0 22px color-mix(in srgb, var(--agent-accent, var(--accent)) 12%, transparent);
+}
+
+.agent-avatar-frame.large {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+}
+
+.agent-avatar-frame.small {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+}
+
+.agent-avatar-image {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-avatar-initials {
+  position: relative;
+  z-index: 1;
+  font: 600 13px/1 var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.agent-avatar-frame.large .agent-avatar-initials {
+  font-size: 20px;
+}
+
+.agent-avatar-frame.missing-image .agent-avatar-initials {
+  z-index: 3;
+}
+
 .brand strong,
 .brand small {
   display: block;
@@ -674,18 +727,26 @@ h3 {
   gap: 16px;
 }
 
+.voice-agent-identity {
+  width: 100%;
+}
+
+.voice-agent-identity .specialist-identity {
+  width: 100%;
+}
+
 .voice-button {
   position: relative;
   display: grid;
   width: 116px;
   height: 116px;
   place-items: center;
-  border: 1px solid rgba(98, 234, 213, 0.48);
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 48%, transparent);
   border-radius: 50%;
-  color: var(--accent);
+  color: var(--agent-accent, var(--accent));
   background:
-    radial-gradient(circle, rgba(98, 234, 213, 0.18), rgba(8, 19, 20, 0.94) 64%);
-  box-shadow: 0 0 28px rgba(98, 234, 213, 0.14);
+    radial-gradient(circle, color-mix(in srgb, var(--agent-accent, var(--accent)) 18%, transparent), rgba(8, 19, 20, 0.94) 64%);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--agent-accent, var(--accent)) 14%, transparent);
   cursor: pointer;
 }
 
@@ -918,6 +979,12 @@ h3 {
 .voice-answer strong,
 .voice-answer small {
   display: block;
+}
+
+.voice-answer-agent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .voice-answer p {
@@ -1257,6 +1324,58 @@ h3 {
   line-height: 1.6;
 }
 
+.specialist-identity-shell {
+  margin: -4px 0 20px;
+}
+
+.specialist-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 28%, var(--line));
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--agent-accent, var(--accent)) 11%, transparent), rgba(255, 255, 255, 0.018)),
+    var(--panel);
+}
+
+.specialist-identity.compact {
+  padding: 13px;
+}
+
+.specialist-identity h3 {
+  margin: 7px 0 4px;
+  font: 600 17px/1.2 var(--font-display);
+}
+
+.specialist-identity p,
+.specialist-identity small {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.specialist-identity .agent-status {
+  color: var(--agent-accent, var(--accent));
+  background: color-mix(in srgb, var(--agent-accent, var(--accent)) 12%, transparent);
+}
+
+.agent-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.agent-chip {
+  border-color: color-mix(in srgb, var(--agent-accent, var(--accent)) 26%, var(--line));
+  color: color-mix(in srgb, var(--agent-accent, var(--accent)) 74%, var(--text));
+  background: color-mix(in srgb, var(--agent-accent, var(--accent)) 8%, transparent);
+}
+
 .portfolio-grid,
 .agent-grid,
 .integration-grid {
@@ -1315,6 +1434,17 @@ h3 {
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.settings-facts.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-avatar-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 14px;
 }
 
 .deployment-warning {
@@ -2376,6 +2506,62 @@ h3 {
   background: linear-gradient(90deg, var(--line), var(--line-bright), var(--line));
 }
 
+.executive-team-panel {
+  margin-bottom: 18px;
+  padding: 20px;
+}
+
+.executive-team-identity {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.executive-identity-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 24%, var(--line));
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.executive-identity-card.status-active {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--agent-accent, var(--accent)) 10%, transparent), rgba(255, 255, 255, 0.02));
+}
+
+.executive-identity-card h3,
+.executive-identity-card p,
+.executive-identity-card span,
+.executive-identity-card small {
+  display: block;
+  margin: 0;
+}
+
+.executive-identity-card span {
+  color: var(--agent-accent, var(--accent));
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.executive-identity-card h3 {
+  margin-top: 5px;
+  font: 600 13px/1.2 var(--font-display);
+}
+
+.executive-identity-card p,
+.executive-identity-card small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
 .hierarchy-node {
   display: grid;
   grid-template-columns: 36px auto;
@@ -2411,6 +2597,7 @@ h3 {
 
 .agent-card {
   padding: 20px;
+  border-color: color-mix(in srgb, var(--agent-accent, var(--accent)) 18%, var(--line));
 }
 
 .agent-card header {
@@ -2422,6 +2609,7 @@ h3 {
 
 .agent-identity {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -2450,8 +2638,8 @@ h3 {
 .agent-status {
   padding: 5px 8px;
   border-radius: 999px;
-  color: var(--amber);
-  background: var(--amber-soft);
+  color: var(--agent-accent, var(--amber));
+  background: color-mix(in srgb, var(--agent-accent, var(--amber)) 12%, transparent);
   font-size: 8px;
   font-weight: 600;
   text-transform: uppercase;
@@ -2465,9 +2653,43 @@ h3 {
   line-height: 1.55;
 }
 
+.agent-capability-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.agent-capability-summary div {
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 16%, var(--line));
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.agent-capability-summary small,
+.agent-capability-summary span {
+  display: block;
+}
+
+.agent-capability-summary small {
+  color: color-mix(in srgb, var(--agent-accent, var(--accent)) 72%, var(--muted));
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.agent-capability-summary span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .agent-meta {
-  display: flex;
-  gap: 25px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
@@ -2843,6 +3065,40 @@ dialog::backdrop {
   line-height: 1.5;
 }
 
+.brief-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.brief-agent-grid article {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 20%, var(--line));
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.brief-agent-grid strong,
+.brief-agent-grid span,
+.brief-agent-grid small {
+  display: block;
+}
+
+.brief-agent-grid strong {
+  font-size: 10px;
+}
+
+.brief-agent-grid span,
+.brief-agent-grid small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.35;
+}
+
 #record-form {
   display: grid;
   gap: 15px;
@@ -2922,6 +3178,8 @@ dialog::backdrop {
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
   .company-strip { grid-template-columns: repeat(2, 1fr); }
   .integration-grid { grid-template-columns: repeat(2, 1fr); }
+  .executive-team-identity,
+  .brief-agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .approval-card dl { grid-template-columns: repeat(2, 1fr); }
   .finance-metrics { grid-template-columns: repeat(3, 1fr); }
   .finance-grid { grid-template-columns: 1fr; }
@@ -2990,8 +3248,11 @@ dialog::backdrop {
   .company-strip,
   .portfolio-grid,
   .agent-grid,
+  .executive-team-identity,
+  .brief-agent-grid,
   .integration-grid,
   .settings-grid { grid-template-columns: 1fr; }
+  .settings-facts.compact { grid-template-columns: 1fr; }
   .memory-toolbar { align-items: stretch; flex-direction: column; }
   #semantic-memory-form { grid-template-columns: 1fr; }
   .semantic-search-meta { align-items: flex-start; flex-direction: column; }
@@ -3000,6 +3261,8 @@ dialog::backdrop {
   .memory-record time { grid-row: 1; }
   .agent-hierarchy { flex-direction: column; }
   .agent-hierarchy > i { width: 1px; height: 35px; }
+  .agent-meta { grid-template-columns: 1fr; }
+  .specialist-identity { align-items: flex-start; flex-direction: column; }
   #brief-content { grid-template-columns: 1fr; }
   .brief-feedback { grid-template-columns: 1fr; }
   .approval-boundary { align-items: flex-start; flex-direction: column; }

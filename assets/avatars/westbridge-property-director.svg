@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Westbridge Property Director abstract avatar</title>
+  <desc id="desc">Premium dark abstract avatar with gold investment identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#d7b56d" stroke-opacity=".3" stroke-width="2"/>
+  <path d="M44 100l36-54 36 54H44z" fill="#d7b56d" fill-opacity=".12" stroke="#d7b56d" stroke-opacity=".6" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M62 100V78h20v22M91 100V70h17v30" fill="none" stroke="#fff0c9" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+  <text x="80" y="123" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#fff3d4">W</text>
+</svg>

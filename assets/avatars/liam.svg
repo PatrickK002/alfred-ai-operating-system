@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Liam abstract Power Platform avatar</title>
+  <desc id="desc">Premium dark abstract avatar with green platform identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#9ee080" stroke-opacity=".28" stroke-width="2"/>
+  <rect x="44" y="51" width="40" height="40" rx="12" fill="#9ee080" fill-opacity=".12" stroke="#9ee080" stroke-opacity=".55" stroke-width="3"/>
+  <rect x="76" y="84" width="40" height="40" rx="12" fill="#9ee080" fill-opacity=".12" stroke="#9ee080" stroke-opacity=".55" stroke-width="3"/>
+  <path d="M84 71h26M64 91v22" stroke="#efffe9" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+  <text x="80" y="146" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#f3ffef">L</text>
+</svg>
