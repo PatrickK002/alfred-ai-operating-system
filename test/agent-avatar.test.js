@@ -17,6 +17,7 @@ const REQUIRED_AGENT_IDS = [
   "olivia",
   "sarah",
   "westbridge-property-director",
+  "sentinel",
   "maya",
   "alex",
   "ethan",
@@ -36,8 +37,24 @@ test("agent avatar metadata exists for all executive identities", () => {
     assert.match(agent.accentColor, /^#[0-9a-f]{6}$/i);
     assert.ok(agent.voicePersonaPlaceholder);
     assert.ok(agent.reportingLine);
+    assert.ok(agent.currentCapabilitySummary);
+    assert.ok(agent.plannedCapabilitySummary);
     assert.ok(agent.expertiseTags.length);
   }
+});
+
+test("Sentinel CISO metadata exists as planned advisory governance only", () => {
+  const sentinel = buildAgentAvatarRenderModel({ id: "sentinel" });
+  assert.equal(sentinel.name, "Sentinel");
+  assert.equal(sentinel.title, "Chief Information Security Officer");
+  assert.equal(sentinel.department, "Security");
+  assert.equal(sentinel.statusCategory, "planned");
+  assert.equal(sentinel.reportingLine, "Patrick King");
+  assert.equal(sentinel.fallbackInitials, "S");
+  assert.ok(sentinel.expertiseTags.includes("AI Governance"));
+  assert.ok(sentinel.expertiseTags.includes("Prompt Injection Defence"));
+  assert.match(sentinel.currentCapabilitySummary, /placeholder/i);
+  assert.match(sentinel.plannedCapabilitySummary, /MFA|GitHub|dependencies|incident/i);
 });
 
 test("fallback initials are generated and known long names can override safely", () => {
@@ -104,4 +121,14 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);
   assert.match(app, /enhanceAvatarFallbacks/);
+  assert.doesNotMatch(app, /roster\.slice\(0,\s*9\)/);
+});
+
+test("roadmap documents Sentinel, Teams Meeting Intelligence, feedback loops and Monday operating layer", () => {
+  const readme = readFileSync("README.md", "utf8");
+  assert.match(readme, /Sentinel CISO Foundation/);
+  assert.match(readme, /Teams Meeting Intelligence/i);
+  assert.match(readme, /Agent Feedback Loop Roadmap/);
+  assert.match(readme, /Monday\.com Operating System Roadmap/);
+  assert.match(readme, /Sentinel must exist before future write-capable or autonomous agents/);
 });

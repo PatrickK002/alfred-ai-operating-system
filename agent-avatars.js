@@ -8,6 +8,7 @@ export const CURRENT_AGENT_IDS = Object.freeze([
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
+  "sentinel",
   "maya",
   "alex",
   "ethan",
@@ -32,6 +33,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "active",
     reportingLine: "Patrick King",
     mission: "Protect Patrick's time, coordinate the executive team and keep recommendations factual, sourced and approval-led.",
+    currentCapabilitySummary: "Executive briefing, prioritisation, read-only reasoning and approval-aware coordination.",
+    plannedCapabilitySummary: "Coordinate future specialists and controlled write actions only after explicit approval and security review.",
   },
   {
     id: "olivia",
@@ -49,6 +52,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "active",
     reportingLine: "Alfred",
     mission: "Act as Group CFO across Alfred-managed businesses with read-only financial intelligence and board-level recommendations.",
+    currentCapabilitySummary: "Read-only forecasting, order book intelligence, debtor summaries and board reporting.",
+    plannedCapabilitySummary: "Future deeper finance system integrations remain read-only first and require approval gates for any writes.",
   },
   {
     id: "sarah",
@@ -66,6 +71,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "active",
     reportingLine: "Alfred",
     mission: "Provide advisory-only BIM, GIS, ISO 19650, COBie and project information intelligence for Digitize.",
+    currentCapabilitySummary: "Advisory digital construction review using project records, metadata, memory and Olivia context.",
+    plannedCapabilitySummary: "Future Sarah runtime may support deeper project review, still approval-led and read-only before writes.",
   },
   {
     id: "westbridge-property-director",
@@ -83,6 +90,43 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "active",
     reportingLine: "Alfred",
     mission: "Analyse property pipeline, portfolio cashflow, due diligence and investment risk without offers, purchases or legal instructions.",
+    currentCapabilitySummary: "Advisory property portfolio metrics, deal analysis, due diligence and Westbridge rule checks.",
+    plannedCapabilitySummary: "Future property workflows may link to meetings and documents; no offers or purchases without explicit governance.",
+  },
+  {
+    id: "sentinel",
+    name: "Sentinel",
+    title: "Chief Information Security Officer",
+    businessArea: "Group Security",
+    companyId: null,
+    department: "Security",
+    avatarPath: "/assets/avatars/sentinel.svg",
+    fallbackInitials: "S",
+    accentColor: "#ff6f8f",
+    voicePersonaPlaceholder: "sentinel-ciso-voice",
+    expertiseTags: [
+      "Cyber Security",
+      "Microsoft 365 Security",
+      "Azure Security",
+      "Identity Management",
+      "Access Control",
+      "Threat Detection",
+      "Data Protection",
+      "AI Governance",
+      "Prompt Injection Defence",
+      "Secrets Management",
+      "GitHub Security",
+      "Dependency Risk",
+      "Audit Integrity",
+      "Compliance",
+      "Incident Response",
+    ],
+    status: "Planned",
+    statusCategory: "planned",
+    reportingLine: "Patrick King",
+    mission: "Protect Alfred, Digitize, Westbridge and all connected systems from cyber, data, identity, integration and AI-governance risk.",
+    currentCapabilitySummary: "Identity and roadmap placeholder only. No monitoring, tenant administration or enforcement automation exists.",
+    plannedCapabilitySummary: "Future advisory reviews for MFA, Microsoft 365, Azure, GitHub, secrets, dependencies, AI governance, approvals and incident response.",
   },
   {
     id: "maya",
@@ -100,6 +144,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "planned",
     reportingLine: "Alfred",
     mission: "Future placeholder for media business strategy and production operating systems.",
+    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
+    plannedCapabilitySummary: "Future media strategy, content systems and monetisation intelligence.",
   },
   {
     id: "alex",
@@ -117,6 +163,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "planned",
     reportingLine: "Alfred",
     mission: "Future placeholder for growth strategy, lead qualification and revenue opportunity intelligence.",
+    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
+    plannedCapabilitySummary: "Future pipeline, partnerships, growth experiments and revenue opportunity analysis.",
   },
   {
     id: "ethan",
@@ -134,6 +182,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "planned",
     reportingLine: "Alfred",
     mission: "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.",
+    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
+    plannedCapabilitySummary: "Future CTO review of architecture, security, cloud posture and engineering delivery risk.",
   },
   {
     id: "liam",
@@ -151,6 +201,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "planned",
     reportingLine: "Alfred",
     mission: "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.",
+    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
+    plannedCapabilitySummary: "Future Power Apps, Dataverse, Power Automate, Power BI and low-code delivery intelligence.",
   },
   {
     id: "james",
@@ -168,6 +220,8 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     statusCategory: "planned",
     reportingLine: "Alfred",
     mission: "Future placeholder for SaaS product validation, product strategy and operating discipline.",
+    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
+    plannedCapabilitySummary: "Future SaaS product validation, customer discovery, MVP strategy and product operating reviews.",
   },
 ]);
 
@@ -226,6 +280,8 @@ export function buildAgentAvatarRenderModel(agent = {}) {
     statusCategory: profile.statusCategory || String(agent.status || "planned").toLowerCase(),
     reportingLine: profile.reportingLine || agent.reportingLine || "Alfred",
     mission: profile.mission || agent.mission || "Future executive specialist placeholder. No autonomous execution.",
+    currentCapabilitySummary: profile.currentCapabilitySummary || agent.currentCapabilitySummary || "Identity placeholder only.",
+    plannedCapabilitySummary: profile.plannedCapabilitySummary || agent.plannedCapabilitySummary || "Future capability requires approval and security review.",
     tools: Array.isArray(agent.tools) ? agent.tools : [],
     databaseStatus: agent.status || "",
   };

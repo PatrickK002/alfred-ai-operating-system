@@ -912,6 +912,10 @@ function renderAgents() {
             <span class="agent-status">${escapeHTML(agent.status)}</span>
           </header>
           <p class="agent-mission">${escapeHTML(agent.mission)}</p>
+          <div class="agent-capability-summary">
+            <div><small>Current capability</small><span>${escapeHTML(agent.currentCapabilitySummary)}</span></div>
+            <div><small>Planned capability</small><span>${escapeHTML(agent.plannedCapabilitySummary)}</span></div>
+          </div>
           <div class="agent-chip-row">${expertiseChips(agent.expertiseTags, 5)}</div>
           <div class="agent-meta">
             <div><small>Business area</small><strong>${escapeHTML(agent.businessArea || company?.shortName || "Group")}</strong></div>
@@ -1065,13 +1069,14 @@ function renderSettings() {
 
   $("#settings-avatar-summary").innerHTML = `
     <div class="settings-avatar-strip">
-      ${roster.slice(0, 9).map((agent) => renderAgentAvatar(agent, "small")).join("")}
+      ${roster.map((agent) => renderAgentAvatar(agent, "small")).join("")}
     </div>
     <div class="settings-facts compact">
       ${factRows([
         ["Avatar assets", "/assets/avatars/"],
         ["Current identities", roster.filter((agent) => agent.statusCategory === "active").length],
         ["Planned identities", roster.filter((agent) => agent.statusCategory === "planned").length],
+        ["Security identity", roster.some((agent) => agent.id === "sentinel") ? "Sentinel planned" : "Not defined"],
         ["Fallback", "Styled initials badge"],
         ["External images", "Blocked by policy"],
         ["Multi-voice", "Metadata placeholders only"],

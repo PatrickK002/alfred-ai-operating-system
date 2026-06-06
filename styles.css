@@ -2653,6 +2653,39 @@ h3 {
   line-height: 1.55;
 }
 
+.agent-capability-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.agent-capability-summary div {
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent, var(--accent)) 16%, var(--line));
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.agent-capability-summary small,
+.agent-capability-summary span {
+  display: block;
+}
+
+.agent-capability-summary small {
+  color: color-mix(in srgb, var(--agent-accent, var(--accent)) 72%, var(--muted));
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.agent-capability-summary span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .agent-meta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

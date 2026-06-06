@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Sentinel abstract CISO avatar</title>
+  <desc id="desc">Premium dark abstract avatar with rose security and governance identity mark.</desc>
+  <rect width="160" height="160" rx="32" fill="#071011"/>
+  <circle cx="80" cy="80" r="58" fill="none" stroke="#ff6f8f" stroke-opacity=".28" stroke-width="2"/>
+  <path d="M80 38l42 16v31c0 28-18 48-42 60-24-12-42-32-42-60V54z" fill="#ff6f8f" fill-opacity=".1" stroke="#ff6f8f" stroke-opacity=".58" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M63 82l12 12 25-29" fill="none" stroke="#ffe4ea" stroke-opacity=".72" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="80" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#fff0f4">S</text>
+</svg>

@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Maya, Alex, Ethan, Liam and James as planned future identities
+- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan, Liam and James as planned future identities
 
 Database files are excluded from Git.
 
@@ -347,13 +347,14 @@ Alfred includes a local executive avatar identity layer for:
 - Olivia
 - Sarah
 - Westbridge Property Director
+- Sentinel
 - Maya
 - Alex
 - Ethan
 - Liam
 - James
 
-The source of truth is `agent-avatars.js`. It stores each agent's name, title, business area, department, local avatar path, fallback initials, accent colour, voice persona placeholder, expertise tags, status and reporting line.
+The source of truth is `agent-avatars.js`. It stores each agent's name, title, business area, department, local avatar path, fallback initials, accent colour, voice persona placeholder, expertise tags, status, reporting line, current capability summary and planned capability summary.
 
 Avatar assets live in:
 
@@ -372,7 +373,127 @@ Rules:
 
 The avatar layer is visual identity only. It does not add autonomous agents, write actions, external integrations, email sending, calendar updates, Microsoft writes, Monday writes, financial writes or property actions.
 
-Voice persona fields are placeholders for future multi-voice support. Alfred remains the only primary voice in the current voice phase.
+Voice persona fields are placeholders for future multi-voice support across Alfred, Olivia, Sarah, Westbridge, Sentinel, Maya, Alex, Ethan, Liam and James. Alfred remains the only primary voice in the current voice phase.
+
+## Sentinel CISO Foundation
+
+Sentinel is a planned executive agent and future Chief Information Security Officer.
+
+- Name: Sentinel
+- Title: Chief Information Security Officer
+- Role: Head of Security / CISO
+- Reports to: Patrick King
+- Status: Planned
+- Department: Security
+- Mission: protect Alfred, Digitize, Westbridge and connected systems from cyber, data, identity, integration and AI-governance risk.
+
+Sentinel expertise includes cyber security, Microsoft 365 security, Azure security, identity management, access control, threat detection, data protection, AI governance, prompt injection defence, secrets management, GitHub security, dependency risk, audit integrity, compliance and incident response.
+
+Future Sentinel responsibilities are roadmap-only in this phase:
+
+- MFA monitoring
+- Microsoft 365 security review
+- Azure security review
+- SharePoint and OneDrive permission review
+- GitHub security monitoring
+- Secret exposure monitoring
+- Dependency vulnerability monitoring
+- AI governance controls
+- Agent permission reviews
+- Approval framework validation
+- Suspicious login review
+- Integration token review
+- Backup and security posture review
+
+Sentinel is advisory and planned only. This phase adds no tenant administration, Microsoft writes, Azure writes, GitHub writes, permission changes, user management, security enforcement automation or external actions.
+
+Sentinel must exist before future write-capable or autonomous agents.
+
+## Teams Meeting Intelligence Roadmap
+
+Future branch: `feature/teams-meeting-intelligence`.
+
+Do not implement Teams integration yet. The future read-only phase should allow Alfred to use Microsoft Teams meeting transcripts, calendar context and meeting metadata to support executive operations.
+
+Future scope:
+
+- Read Teams meeting transcripts where available
+- Read meeting metadata from calendar
+- Identify related project, client, business and agent
+- Generate meeting summaries
+- Extract actions, decisions, risks, opportunities, questions and follow-ups
+- Link meeting intelligence to project records
+- Link meeting intelligence to Olivia financial context
+- Link meeting intelligence to Sarah project context
+- Link meeting intelligence to Westbridge property context
+- Store meeting memory
+- Produce source references
+
+Future meeting agent contributions:
+
+- Alfred: executive summary, actions, decisions, risks, opportunities and follow-ups
+- Sarah: project/digital construction review, BIM/ISO 19650/COBie/GIS observations and information management risks
+- Olivia: financial impact, forecast impact, revenue/order-book implications and commercial risk
+- Westbridge: property opportunity implications, due diligence implications and portfolio risk
+- Sentinel: security/data protection concerns, confidentiality risks, access-control risks and AI-governance risks
+
+Teams Meeting Intelligence should be read-only first.
+
+## Agent Feedback Loop Roadmap
+
+Do not implement the full feedback engine in this phase. The future system should track:
+
+- Agent output
+- Deliverable produced
+- Meeting where output was discussed
+- Feedback received
+- Whether a recommendation was accepted or rejected
+- Outcome
+- Lessons learned
+- Memory update
+- Quality rating
+
+Example future feedback loops:
+
+- Sarah produces a Westminster project review, Patrick marks it useful, the client accepts two recommendations, one risk is downgraded after evidence review, and Alfred stores the outcome in memory.
+- Olivia produces a revenue forecast, Patrick requests more detail, the forecast model assumption is updated, and Alfred stores the improvement.
+- Westbridge produces a garage-block deal analysis, Patrick rejects the deal because location quality is too weak, and Alfred stores the investment preference.
+
+## Monday.com Operating System Roadmap
+
+Do not build the Monday.com operating system in this phase. Monday.com should become the future operational execution layer after the read-only intelligence foundations and approval controls are stable.
+
+Future Monday.com Operating System scope:
+
+- Agent work queues
+- Agent workload tracking
+- Meeting actions
+- Deliverables
+- Feedback on outputs
+- Risks
+- Opportunities
+- Decisions
+- Files produced
+- Links to OneDrive/SharePoint outputs
+- Links to Teams meeting summaries
+
+Monday.com writes should require the approval workflow.
+
+## Recommended Roadmap Order
+
+1. Agent Avatar System and Sentinel Foundation
+2. Teams Meeting Intelligence foundation
+3. Monday.com Operating System
+4. Maya Marketing Director
+5. Alex Growth Director
+6. Ethan CTO
+7. Liam Power Platform Director
+8. James Product CEO
+9. Group Executive Intelligence
+10. Controlled Write Actions
+11. Autonomous Agent Framework
+
+Security-first principle: read-only intelligence comes before writes, write actions require explicit approval, and autonomous agents must wait until Sentinel, approval safeguards and audit controls are mature.
 
 ## Integration States
 
@@ -402,7 +523,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre and the Agent Avatar System.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
