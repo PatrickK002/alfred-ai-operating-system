@@ -151,11 +151,31 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="sarah-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);
+  assert.match(html, /id="vision-alignment-panel"/);
   assert.match(app, /renderBriefAgentStatus/);
   assert.match(app, /renderSidebarExecutiveTeam/);
   assert.match(app, /renderCommandOperatingDeck/);
+  assert.match(app, /renderVisionAlignment/);
   assert.match(app, /enhanceAvatarFallbacks/);
   assert.doesNotMatch(app, /roster\.slice\(0,\s*9\)/);
+});
+
+test("ChatGPT upload brief is standalone and preserves Alfred boundaries", () => {
+  const html = readFileSync("alfred-chatgpt-upload.html", "utf8");
+  const contextMatch = html.match(/<script type="application\/json" id="alfred-chatgpt-context">([\s\S]*?)<\/script>/);
+  assert.ok(contextMatch);
+  const context = JSON.parse(contextMatch[1]);
+
+  assert.match(html, /Vision Alignment/);
+  assert.match(html, /No external assets/);
+  assert.doesNotMatch(html, /<link\b/i);
+  assert.doesNotMatch(html, /<script[^>]+src=/i);
+  assert.equal(context.project.name, "Alfred AI Operating System");
+  assert.equal(context.securityBoundary.externalWrites, false);
+  assert.equal(context.securityBoundary.autonomousExecution, false);
+  assert.equal(context.visionAlignment.safety, "Read-only, advisory and approval-led. No autonomous execution.");
+  assert.ok(context.visualStandard.use.includes("Executive boardroom feel"));
+  assert.ok(context.chatgptInstruction.includes("Preserve the read-only advisory boundary"));
 });
 
 test("roadmap documents Sentinel, Teams Meeting Intelligence, feedback loops and Monday operating layer", () => {
@@ -165,6 +185,8 @@ test("roadmap documents Sentinel, Teams Meeting Intelligence, feedback loops and
   assert.match(readme, /Agent Feedback Loop Roadmap/);
   assert.match(readme, /Monday\.com Operating System Roadmap/);
   assert.match(readme, /Provider-Neutral Talking Avatar Architecture/);
+  assert.match(readme, /Executive OS compass/);
+  assert.match(readme, /alfred-chatgpt-upload\.html/);
   assert.match(readme, /No celebrity likenesses/);
   assert.match(readme, /Sentinel must exist before future write-capable or autonomous agents/);
 });

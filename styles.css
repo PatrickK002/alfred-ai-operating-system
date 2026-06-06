@@ -1676,6 +1676,144 @@ h3 {
   margin-bottom: 14px;
 }
 
+.vision-alignment-grid {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(2, minmax(0, 0.85fr));
+  gap: 12px;
+}
+
+.vision-card {
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid rgba(98, 234, 213, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(177, 138, 226, 0.16), transparent 95px),
+    rgba(255, 255, 255, 0.026);
+}
+
+.vision-card-primary {
+  border-color: rgba(98, 234, 213, 0.22);
+  background:
+    radial-gradient(circle at 84% 8%, rgba(98, 234, 213, 0.18), transparent 120px),
+    linear-gradient(145deg, rgba(98, 234, 213, 0.08), rgba(177, 138, 226, 0.035));
+}
+
+.vision-card h4,
+.vision-lists h4 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.vision-card p,
+.vision-card span {
+  display: block;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vision-card small {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vision-card strong {
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.vision-status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 12px;
+  padding: 5px 9px;
+  border: 1px solid rgba(98, 234, 213, 0.22);
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vision-lists {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.vision-lists section {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.vision-pill-list,
+.vision-gap-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vision-pill-list li,
+.vision-gap-list li,
+.vision-boundary-list article {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.024);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.vision-pill-list li {
+  border-color: rgba(98, 234, 213, 0.14);
+}
+
+.vision-gap-list li {
+  border-color: rgba(226, 180, 107, 0.18);
+  background: var(--amber-soft);
+}
+
+.vision-boundary-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.vision-boundary-list small,
+.vision-boundary-list strong {
+  display: block;
+}
+
+.vision-boundary-list small {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vision-boundary-list strong {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
 .deployment-warning {
   margin-bottom: 18px;
 }
@@ -3571,6 +3709,8 @@ dialog::backdrop {
   .monday-layout,
   .voice-layout,
   .settings-grid,
+  .vision-alignment-grid,
+  .vision-lists,
   .property-layout,
   .executive-operating-deck,
   .project-detail-grid { grid-template-columns: 1fr; }
@@ -3673,6 +3813,8 @@ dialog::backdrop {
   .property-actions { justify-content: flex-start; }
   .voice-provider-grid,
   .voice-avatar-presence,
+  .vision-alignment-grid,
+  .vision-lists,
   .voice-transcript-form { grid-template-columns: 1fr; }
   .voice-setup-header,
   .voice-history-panel .section-heading { align-items: flex-start; flex-direction: column; }

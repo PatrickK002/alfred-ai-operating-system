@@ -1154,6 +1154,69 @@ function factRows(rows) {
   `).join("");
 }
 
+function renderVisionAlignment({ roster, pwa, security }) {
+  const activeAgents = roster.filter((agent) => agent.statusCategory === "active");
+  const plannedAgents = roster.filter((agent) => agent.statusCategory === "planned");
+  const designPillars = AVATAR_VISUAL_STANDARD.designLanguage.slice(0, 7);
+  const blockedActions = [
+    ["External writes", security.externalWritesEnabled ? "Review required" : "Blocked"],
+    ["Autonomous execution", AVATAR_VISUAL_STANDARD.securityBoundary.autonomousActionsEnabled ? "Review required" : "Blocked"],
+    ["Avatar provider calls", AVATAR_VISUAL_STANDARD.securityBoundary.externalAvatarProviderCallsEnabled ? "Review required" : "Disabled"],
+    ["Deepfake generation", AVATAR_VISUAL_STANDARD.securityBoundary.deepfakeGenerationAllowed ? "Review required" : "Blocked"],
+  ];
+  const knownGaps = [
+    "Production Microsoft Entra ID authentication must be enabled before public exposure.",
+    "Final brand icon and avatar artwork can replace local placeholders later.",
+    "Talking avatar providers remain planned only; no live provider calls are made.",
+    "Voice and AI provider status becomes Connected only after verified configuration.",
+  ];
+
+  $("#vision-alignment-panel").innerHTML = `
+    <div class="vision-alignment-grid">
+      <article class="vision-card vision-card-primary">
+        <span class="vision-status-pill">Aligned</span>
+        <h4>${escapeHTML(AVATAR_VISUAL_STANDARD.experience)}</h4>
+        <p>Alfred is being shaped as a board-level executive command centre: specialist intelligence, premium presence, PWA access and approval-led safeguards.</p>
+      </article>
+      <article class="vision-card">
+        <small>Executive team</small>
+        <strong>${activeAgents.length} active · ${plannedAgents.length} planned</strong>
+        <span>${escapeHTML(activeAgents.map((agent) => agent.name).join(", "))}</span>
+      </article>
+      <article class="vision-card">
+        <small>Device target</small>
+        <strong>${escapeHTML((pwa.installTargets || []).join(" · ") || "PWA ready")}</strong>
+        <span>${escapeHTML(pwa.iconStrategy || "Premium local icon placeholders")}</span>
+      </article>
+    </div>
+    <div class="vision-lists">
+      <section>
+        <h4>Design pillars</h4>
+        <ul class="vision-pill-list">
+          ${designPillars.map((pillar) => `<li>${escapeHTML(pillar)}</li>`).join("")}
+        </ul>
+      </section>
+      <section>
+        <h4>Safety boundary</h4>
+        <div class="vision-boundary-list">
+          ${blockedActions.map(([label, value]) => `
+            <article>
+              <small>${escapeHTML(label)}</small>
+              <strong>${escapeHTML(value)}</strong>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section>
+        <h4>Known gaps</h4>
+        <ul class="vision-gap-list">
+          ${knownGaps.map((gap) => `<li>${escapeHTML(gap)}</li>`).join("")}
+        </ul>
+      </section>
+    </div>
+  `;
+}
+
 function renderSettings() {
   const deployment = state.deployment || seedData.deployment;
   const app = deployment.app || seedData.deployment.app;
@@ -1214,6 +1277,8 @@ function renderSettings() {
     ["Standalone mode", pwa.displayMode || "standalone"],
     ["Icon strategy", pwa.iconStrategy || "Brand-ready local SVG placeholders"],
   ]);
+
+  renderVisionAlignment({ roster, pwa, security });
 
   $("#security-boundary-list").innerHTML = [
     ["HTTPS required in production", security.httpsRequired],

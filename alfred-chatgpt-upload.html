@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Standalone Alfred AI Operating System project brief for ChatGPT upload."
+    />
+    <title>Alfred AI Operating System - ChatGPT Upload Brief</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05080d;
+        --panel: rgba(11, 19, 32, 0.78);
+        --panel-strong: rgba(14, 25, 42, 0.92);
+        --line: rgba(139, 199, 255, 0.18);
+        --text: #eef7ff;
+        --muted: #a9b8c9;
+        --subtle: #77869a;
+        --cyan: #62ead5;
+        --blue: #8bc7ff;
+        --purple: #b18ae2;
+        --gold: #d7b56d;
+        --red: #ff6f8f;
+        --green: #9ee080;
+        --pink: #ff9fb2;
+        --shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+        --radius: 26px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 18% 8%, rgba(98, 234, 213, 0.18), transparent 28rem),
+          radial-gradient(circle at 82% 14%, rgba(177, 138, 226, 0.22), transparent 32rem),
+          linear-gradient(140deg, #04060a 0%, #071011 42%, #0a1020 100%);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--cyan);
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 34px 0 56px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 34px;
+        background:
+          linear-gradient(135deg, rgba(98, 234, 213, 0.09), transparent 34%),
+          linear-gradient(225deg, rgba(177, 138, 226, 0.14), transparent 38%),
+          var(--panel-strong);
+        box-shadow: var(--shadow);
+        padding: clamp(28px, 5vw, 64px);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -20% -55% 35%;
+        height: 360px;
+        background: radial-gradient(circle, rgba(139, 199, 255, 0.18), transparent 68%);
+        pointer-events: none;
+      }
+
+      .kicker,
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--cyan);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        letter-spacing: -0.035em;
+      }
+
+      h1 {
+        max-width: 850px;
+        font-size: clamp(2.5rem, 7vw, 5.9rem);
+        line-height: 0.94;
+      }
+
+      h2 {
+        font-size: clamp(1.55rem, 3vw, 2.4rem);
+      }
+
+      h3 {
+        font-size: 1.18rem;
+      }
+
+      .hero-copy {
+        max-width: 770px;
+        margin: 24px 0 0;
+        color: #d7e5f4;
+        font-size: clamp(1.05rem, 2vw, 1.24rem);
+      }
+
+      .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 30px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        border: 1px solid rgba(98, 234, 213, 0.2);
+        border-radius: 999px;
+        background: rgba(98, 234, 213, 0.08);
+        color: #dffdf9;
+        padding: 7px 13px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015)),
+          var(--panel);
+        box-shadow: 0 20px 70px rgba(0, 0, 0, 0.24);
+        padding: 24px;
+      }
+
+      .span-12 {
+        grid-column: span 12;
+      }
+
+      .span-8 {
+        grid-column: span 8;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+
+      .span-4 {
+        grid-column: span 4;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .small {
+        color: var(--subtle);
+        font-size: 0.88rem;
+      }
+
+      .hierarchy {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .hierarchy-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.7fr) 42px minmax(220px, 1.3fr);
+        align-items: center;
+        gap: 14px;
+      }
+
+      .person,
+      .role-card {
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.045);
+        padding: 16px;
+      }
+
+      .arrow {
+        color: var(--cyan);
+        font-size: 1.5rem;
+        text-align: center;
+      }
+
+      .team {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .agent {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at 88% 12%, var(--agent-glow, rgba(98, 234, 213, 0.18)), transparent 8rem),
+          rgba(255, 255, 255, 0.045);
+        padding: 18px;
+      }
+
+      .agent-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .avatar {
+        display: grid;
+        width: 54px;
+        height: 54px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--accent, var(--cyan)) 52%, transparent);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 50% 22%, color-mix(in srgb, var(--accent, var(--cyan)) 34%, transparent), transparent 46%),
+          linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+        box-shadow: 0 0 28px color-mix(in srgb, var(--accent, var(--cyan)) 22%, transparent);
+        color: #fff;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+
+      .agent strong {
+        display: block;
+      }
+
+      .agent small {
+        color: var(--muted);
+      }
+
+      .status {
+        display: inline-flex;
+        margin-top: 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.065);
+        color: #d7e5f4;
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 14px;
+      }
+
+      .tag {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        color: #cbd8e8;
+        padding: 4px 8px;
+        font-size: 0.76rem;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .metric {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 16px;
+      }
+
+      .metric b {
+        display: block;
+        font-size: 1.5rem;
+      }
+
+      .capabilities,
+      .rules {
+        display: grid;
+        gap: 10px;
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .capabilities li,
+      .rules li {
+        border-left: 2px solid rgba(98, 234, 213, 0.48);
+        background: rgba(255, 255, 255, 0.035);
+        border-radius: 0 14px 14px 0;
+        padding: 11px 13px;
+        color: #d8e5f5;
+      }
+
+      .rules li {
+        border-left-color: rgba(255, 111, 143, 0.65);
+      }
+
+      .mock-screen {
+        min-height: 360px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 26px;
+        background:
+          radial-gradient(circle at 52% 42%, rgba(98, 234, 213, 0.14), transparent 11rem),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+        padding: 18px;
+      }
+
+      .mock-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .mock-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 14px;
+      }
+
+      .core-orb {
+        display: grid;
+        min-height: 210px;
+        place-items: center;
+        border: 1px solid rgba(98, 234, 213, 0.16);
+        border-radius: 24px;
+        background: rgba(0, 0, 0, 0.18);
+      }
+
+      .orb {
+        display: grid;
+        width: 116px;
+        height: 116px;
+        place-items: center;
+        border: 1px solid rgba(98, 234, 213, 0.55);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(98, 234, 213, 0.26), rgba(98, 234, 213, 0.04) 58%, transparent);
+        box-shadow: 0 0 60px rgba(98, 234, 213, 0.2);
+        font-size: 2.5rem;
+        font-weight: 900;
+      }
+
+      .topic {
+        margin-bottom: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 12px;
+      }
+
+      .footer {
+        margin-top: 22px;
+        color: var(--subtle);
+        text-align: center;
+      }
+
+      @media (max-width: 850px) {
+        .grid,
+        .mock-grid,
+        .hierarchy-row,
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .span-4,
+        .span-6,
+        .span-8,
+        .span-12 {
+          grid-column: span 1;
+        }
+
+        .arrow {
+          transform: rotate(90deg);
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+          color: #111;
+        }
+
+        .hero,
+        .panel {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="kicker">ChatGPT Upload Brief</p>
+        <h1>Alfred AI Operating System</h1>
+        <p class="hero-copy">
+          A premium, read-only executive command centre for Patrick King. Alfred coordinates
+          specialist AI executives, protects Patrick's time, surfaces risk, supports decisions and
+          keeps recommendations sourced, advisory and approval-led.
+        </p>
+        <div class="hero-meta">
+          <span class="badge">Generated 6 June 2026</span>
+          <span class="badge">Standalone HTML</span>
+          <span class="badge">No external assets</span>
+          <span class="badge">Read-only intelligence</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel span-12">
+          <p class="eyebrow">Operating Structure</p>
+          <h2>Patrick King to Alfred to the AI Executive Team</h2>
+          <div class="hierarchy">
+            <div class="hierarchy-row">
+              <div class="person">
+                <strong>Patrick King</strong>
+                <div class="small">Founder / Chairman</div>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="role-card">
+                <strong>Board-level direction, approvals and final judgement</strong>
+                <div class="small">All external actions remain subject to explicit approval workflows.</div>
+              </div>
+            </div>
+            <div class="hierarchy-row">
+              <div class="person">
+                <strong>Alfred</strong>
+                <div class="small">AI Chief of Staff / Operating Partner</div>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="role-card">
+                <strong>Executive coordination and briefing layer</strong>
+                <div class="small">
+                  Alfred synthesises business records, Microsoft read-only signals, semantic memory,
+                  finance, projects, security and specialist recommendations.
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-8">
+          <p class="eyebrow">Current Stack</p>
+          <h2>What Alfred already represents</h2>
+          <ul class="capabilities">
+            <li>SQLite-backed operating records for companies, projects, actions, risks, opportunities, decisions, agents, memories and integrations.</li>
+            <li>Microsoft 365 read-only foundations for Outlook, calendar and file metadata signals.</li>
+            <li>Anthropic Claude reasoning layer for executive briefings, risk review, decision support and prioritisation.</li>
+            <li>Voyage semantic memory foundation using compact summaries and source references.</li>
+            <li>Olivia CFO financial intelligence for order book, forecasting, debtors and board reporting. Not accounting.</li>
+            <li>Project Intelligence, Digital Construction knowledge and Sarah Digital Construction Director advisory views.</li>
+            <li>Westbridge Property Group and Property Director advisory pipeline for cashflow-focused property investment.</li>
+            <li>Voice Command Centre architecture with Deepgram, Claude and ElevenLabs as read-only advisory interaction.</li>
+            <li>PWA and mobile install preparation for MacBook Dock, iPhone Home Screen and iPad Pro Home Screen.</li>
+            <li>Executive avatar and visual identity system with provider-neutral talking avatar placeholders.</li>
+          </ul>
+        </article>
+
+        <article class="panel span-4">
+          <p class="eyebrow">Non-negotiables</p>
+          <h2>Security boundary</h2>
+          <ul class="rules">
+            <li>No autonomous execution.</li>
+            <li>No email sending or calendar updates.</li>
+            <li>No Microsoft, SharePoint, OneDrive or Monday writes.</li>
+            <li>No financial transactions, invoices or payments.</li>
+            <li>No property purchases, offers or legal instructions.</li>
+            <li>No celebrity likenesses, deepfakes or human likeness without consent.</li>
+            <li>All future external write actions require explicit approval and audit logging.</li>
+          </ul>
+        </article>
+
+        <article class="panel span-12">
+          <p class="eyebrow">Vision Alignment</p>
+          <h2>How the current build lines up with the Alfred vision</h2>
+          <div class="metrics">
+            <div class="metric"><small>Experience</small><b>Aligned</b><span class="small">Premium executive OS, not a generic dashboard.</span></div>
+            <div class="metric"><small>Team</small><b>4 + 6</b><span class="small">Four active advisory agents and six planned specialists.</span></div>
+            <div class="metric"><small>Devices</small><b>PWA</b><span class="small">MacBook Dock, iPhone Home Screen and iPad Pro target.</span></div>
+            <div class="metric"><small>Safety</small><b>Read-only</b><span class="small">No external writes or autonomous execution.</span></div>
+          </div>
+          <ul class="capabilities">
+            <li>Aligned: board-level command centre, specialist executive routing, dark premium UI, agent presence and PWA install direction.</li>
+            <li>Aligned: Alfred remains advisory and approval-led; recommendations are not presented as completed actions.</li>
+            <li>Still to mature: production authentication, final brand artwork, live provider verification and future talking-avatar runtime.</li>
+          </ul>
+        </article>
+
+        <article class="panel span-12">
+          <p class="eyebrow">Executive Team</p>
+          <h2>Active and planned AI executives</h2>
+          <div class="team">
+            <div class="agent" style="--accent: #62ead5; --agent-glow: rgba(98, 234, 213, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">A</div>
+                <div><strong>Alfred</strong><small>AI Chief of Staff / Operating Partner</small></div>
+              </div>
+              <span class="status">Active advisory</span>
+              <div class="tags"><span class="tag">Briefings</span><span class="tag">Prioritisation</span><span class="tag">Risk</span></div>
+            </div>
+            <div class="agent" style="--accent: #8bc7ff; --agent-glow: rgba(139, 199, 255, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">O</div>
+                <div><strong>Olivia</strong><small>Group Chief Financial Officer</small></div>
+              </div>
+              <span class="status">Active advisory</span>
+              <div class="tags"><span class="tag">Forecasting</span><span class="tag">Order book</span><span class="tag">Board reporting</span></div>
+            </div>
+            <div class="agent" style="--accent: #b18ae2; --agent-glow: rgba(177, 138, 226, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">S</div>
+                <div><strong>Sarah</strong><small>Digital Construction Director</small></div>
+              </div>
+              <span class="status">Active advisory</span>
+              <div class="tags"><span class="tag">BIM</span><span class="tag">ISO 19650</span><span class="tag">COBie</span></div>
+            </div>
+            <div class="agent" style="--accent: #d7b56d; --agent-glow: rgba(215, 181, 109, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">W</div>
+                <div><strong>Westbridge Property Director</strong><small>AI Investment Director</small></div>
+              </div>
+              <span class="status">Active advisory</span>
+              <div class="tags"><span class="tag">Cashflow</span><span class="tag">Due diligence</span><span class="tag">Refinance</span></div>
+            </div>
+            <div class="agent" style="--accent: #ff6f8f; --agent-glow: rgba(255, 111, 143, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">S</div>
+                <div><strong>Sentinel</strong><small>Chief Information Security Officer</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">Security</span><span class="tag">Identity</span><span class="tag">AI governance</span></div>
+            </div>
+            <div class="agent" style="--accent: #e2b46b; --agent-glow: rgba(226, 180, 107, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">M</div>
+                <div><strong>Maya</strong><small>Media Director</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">Content</span><span class="tag">Production</span><span class="tag">Monetisation</span></div>
+            </div>
+            <div class="agent" style="--accent: #7fa9e2; --agent-glow: rgba(127, 169, 226, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">A</div>
+                <div><strong>Alex</strong><small>Growth Director</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">Pipeline</span><span class="tag">Partnerships</span><span class="tag">Sales</span></div>
+            </div>
+            <div class="agent" style="--accent: #72d6ff; --agent-glow: rgba(114, 214, 255, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">E</div>
+                <div><strong>Ethan</strong><small>Chief Technology Officer</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">Architecture</span><span class="tag">Cloud</span><span class="tag">Engineering</span></div>
+            </div>
+            <div class="agent" style="--accent: #9ee080; --agent-glow: rgba(158, 224, 128, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">L</div>
+                <div><strong>Liam</strong><small>Power Platform Director</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">Power Apps</span><span class="tag">Dataverse</span><span class="tag">Power BI</span></div>
+            </div>
+            <div class="agent" style="--accent: #ff9fb2; --agent-glow: rgba(255, 159, 178, 0.18)">
+              <div class="agent-head">
+                <div class="avatar">J</div>
+                <div><strong>James</strong><small>Product CEO</small></div>
+              </div>
+              <span class="status">Planned</span>
+              <div class="tags"><span class="tag">SaaS</span><span class="tag">Product</span><span class="tag">MVP</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-6">
+          <p class="eyebrow">Experience Target</p>
+          <h2>Premium command centre</h2>
+          <p class="muted">
+            Alfred should feel like an AI executive operating system launched from a MacBook Dock,
+            iPhone Home Screen or iPad Pro Home Screen. The UI direction is dark, glassy,
+            board-level and calm, with subtle blue and purple AI glow.
+          </p>
+          <ul class="capabilities">
+            <li>Executive Team sidebar and agent presence indicators.</li>
+            <li>Current topics panel and suggested actions panel.</li>
+            <li>Voice waveform with listening, thinking and speaking states.</li>
+            <li>Professional abstract avatars, not cartoons or celebrity-like portraits.</li>
+            <li>Provider-neutral talking avatar architecture for Synthesia, HeyGen, Tavus, D-ID or a native Alfred engine later.</li>
+          </ul>
+        </article>
+
+        <article class="panel span-6">
+          <p class="eyebrow">Visual Reference</p>
+          <h2>Static command screen sketch</h2>
+          <div class="mock-screen">
+            <div class="mock-top">
+              <div>
+                <p class="eyebrow">AI Operating Partner</p>
+                <h3>Executive Command</h3>
+              </div>
+              <span class="badge">Live advisory</span>
+            </div>
+            <div class="mock-grid">
+              <div class="core-orb"><div class="orb">A</div></div>
+              <div>
+                <div class="topic"><strong>Current Topic</strong><div class="small">Westminster status and project risk.</div></div>
+                <div class="topic"><strong>Suggested Action</strong><div class="small">Review overdue decisions before external execution.</div></div>
+                <div class="topic"><strong>Agent Handoff</strong><div class="small">Sarah and Olivia can provide specialist advisory summaries.</div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-4">
+          <p class="eyebrow">Business Entities</p>
+          <h2>Group-ready model</h2>
+          <ul class="capabilities">
+            <li>Digitize Consultants</li>
+            <li>Council Assurance Platform</li>
+            <li>Media Studio</li>
+            <li>AI Venture Studio</li>
+            <li>Product Studio</li>
+            <li>Westbridge Property Group</li>
+            <li>Future SaaS products and ventures</li>
+          </ul>
+        </article>
+
+        <article class="panel span-4">
+          <p class="eyebrow">Board Questions</p>
+          <h2>Alfred should answer</h2>
+          <ul class="capabilities">
+            <li>What requires Patrick's attention today?</li>
+            <li>What are the biggest risks?</li>
+            <li>What is the status of Westminster, RBKC, Islington or KSPF?</li>
+            <li>What is the forecast revenue and cashflow position?</li>
+            <li>What property opportunities need attention?</li>
+            <li>What decisions are waiting for approval?</li>
+          </ul>
+        </article>
+
+        <article class="panel span-4">
+          <p class="eyebrow">Use With ChatGPT</p>
+          <h2>Instruction</h2>
+          <p class="muted">
+            Upload this HTML file to ChatGPT as project context. Ask ChatGPT to treat Alfred as a
+            premium executive operating system, preserve the advisory-only boundary and avoid
+            suggesting fake automation, fake agents or external write actions.
+          </p>
+        </article>
+      </section>
+
+      <p class="footer">
+        This file is a standalone project brief. It contains no secrets, no API keys and no live
+        integration code.
+      </p>
+    </main>
+
+    <script type="application/json" id="alfred-chatgpt-context">
+      {
+        "documentPurpose": "Standalone project context for ChatGPT upload.",
+        "generatedDate": "2026-06-06",
+        "project": {
+          "name": "Alfred AI Operating System",
+          "owner": "Patrick King",
+          "positioning": "Premium AI Executive Operating System",
+          "primaryUserExperience": [
+            "MacBook Dock",
+            "iPhone Home Screen",
+            "iPad Pro Home Screen"
+          ]
+        },
+        "hierarchy": [
+          {
+            "name": "Patrick King",
+            "role": "Founder / Chairman"
+          },
+          {
+            "name": "Alfred",
+            "role": "AI Chief of Staff / Operating Partner"
+          },
+          {
+            "name": "AI Executive Team",
+            "role": "Specialist advisory executives"
+          }
+        ],
+        "activeAgents": [
+          "Alfred",
+          "Olivia",
+          "Sarah",
+          "Westbridge Property Director"
+        ],
+        "plannedAgents": [
+          "Sentinel",
+          "Maya",
+          "Alex",
+          "Ethan",
+          "Liam",
+          "James"
+        ],
+        "capabilities": [
+          "SQLite-backed backend foundation",
+          "Executive briefing",
+          "Microsoft 365 read-only signals",
+          "Approval safeguards",
+          "Anthropic reasoning",
+          "Voyage semantic memory",
+          "Olivia CFO financial intelligence",
+          "Project intelligence",
+          "Digital construction knowledge",
+          "Sarah Digital Construction Director",
+          "Westbridge Property Group",
+          "Voice Command Centre",
+          "PWA and mobile install preparation",
+          "Executive avatar visual identity system"
+        ],
+        "securityBoundary": {
+          "externalWrites": false,
+          "autonomousExecution": false,
+          "microsoftWrites": false,
+          "mondayWrites": false,
+          "financialTransactions": false,
+          "propertyPurchasesOrOffers": false,
+          "legalInstructions": false,
+          "deepfakeGeneration": false,
+          "audioVideoStorageByDefault": false,
+          "approvalRequiredForFutureWrites": true
+        },
+        "visionAlignment": {
+          "experience": "Aligned with premium AI Executive Operating System direction.",
+          "executiveTeam": "Four active advisory executives plus six planned specialist identities.",
+          "deviceTarget": "MacBook Dock, iPhone Home Screen and iPad Pro PWA experience.",
+          "safety": "Read-only, advisory and approval-led. No autonomous execution.",
+          "knownGaps": [
+            "Production Microsoft Entra ID authentication before public exposure.",
+            "Final brand icon and avatar artwork.",
+            "Talking avatar providers remain planned only.",
+            "Voice, AI and avatar providers show Connected only after verified configuration."
+          ]
+        },
+        "visualStandard": {
+          "use": [
+            "Executive boardroom feel",
+            "Dark premium interface",
+            "Glass panels",
+            "Subtle blue and purple AI glow",
+            "Professional avatar portraits",
+            "Voice waveform",
+            "Speaking/listening/thinking states",
+            "Agent presence indicators",
+            "Executive Team sidebar",
+            "Current topics panel",
+            "Suggested actions panel"
+          ],
+          "avoid": [
+            "Cartoon avatars",
+            "Gaming UI",
+            "Childish icons",
+            "Generic chatbot bubbles",
+            "Consumer social-media styling",
+            "Celebrity likenesses",
+            "Real human likeness without consent"
+          ]
+        },
+        "chatgptInstruction": "Use this file as Alfred project context. Preserve the read-only advisory boundary. Clearly distinguish confirmed records, inferred associations, assumptions and missing information. Do not invent completed actions or recommend external writes without approval workflows."
+      }
+    </script>
+  </body>
+</html>

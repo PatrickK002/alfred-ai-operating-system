@@ -84,6 +84,13 @@ PWA icon strategy:
 - Keep the icon direction premium, dark, executive and AI command-centre aligned.
 - Future final brand artwork should replace the same local paths without adding remote images or large binary assets.
 
+Vision alignment:
+
+- The Settings view includes an **Executive OS compass** panel showing how the current build aligns with the target Alfred experience.
+- Alignment is measured against the premium executive command-centre vision, active/planned executive team identities, PWA install targets and the no-external-write safety boundary.
+- Known gaps are shown honestly: production authentication, final brand artwork, live talking-avatar providers and verified provider connection states.
+- `alfred-chatgpt-upload.html` is a standalone, no-secret project context file that can be uploaded to ChatGPT when discussing Alfred's product direction.
+
 Production security notes:
 
 - HTTPS is enforced in `production` unless `ENFORCE_HTTPS=false` is explicitly set.
