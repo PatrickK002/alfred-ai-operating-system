@@ -92,6 +92,19 @@ import {
   westbridgeBriefingForDaily,
 } from "./property.js";
 import { createVoiceCommandService } from "./voice.js";
+import {
+  MEETING_READ_ONLY_BOUNDARY,
+  createMeetingRecord,
+  getMeetingDashboard,
+  getMeetingDetail,
+  importMeetingMetadata,
+  listMeetingAudit,
+  listMeetings,
+  meetingBriefingForDaily,
+  processMeetingTranscript,
+  recordMeetingFeedback,
+  searchMeetingKnowledge,
+} from "./meeting-intelligence.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -258,6 +271,84 @@ async function handleApi(request, response, url) {
   }
   if (url.pathname === "/api/voice/command" && request.method === "POST") {
     return sendJson(response, 200, await voiceCommandCentre.handleCommand(await readJson(request)));
+  }
+  if (url.pathname === "/api/meeting-intelligence/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getMeetingDashboard(db));
+  }
+  if (url.pathname === "/api/meeting-intelligence/meetings") {
+    if (request.method === "GET") return sendJson(response, 200, listMeetings(db, { limit: url.searchParams.get("limit") || 30 }));
+    if (request.method === "POST") {
+      const detail = createMeetingRecord(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, detail);
+    }
+  }
+  if (url.pathname === "/api/meeting-intelligence/import-calendar" && request.method === "POST") {
+    const body = await readJson(request);
+    try {
+      const meetings = await microsoft.listCalendar({
+        start: body.start || undefined,
+        end: body.end || undefined,
+        limit: body.limit || 25,
+      });
+      const result = importMeetingMetadata(db, meetings, {
+        sourceSystem: "microsoft_calendar",
+        userAction: body.userAction || "api:meeting-intelligence:import-calendar",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, result);
+    } catch (error) {
+      return sendJson(response, error.statusCode === 401 ? 200 : error.statusCode || 500, {
+        readOnly: true,
+        meetingsRead: 0,
+        meetingsStored: 0,
+        transcriptContentRead: false,
+        message: error.statusCode === 401
+          ? "Microsoft Calendar is not connected. Meeting Intelligence can still use existing Alfred meeting records."
+          : error.message,
+        boundary: MEETING_READ_ONLY_BOUNDARY,
+      });
+    }
+  }
+  if (url.pathname === "/api/meeting-intelligence/search" && request.method === "GET") {
+    const result = searchMeetingKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: MEETING_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/meeting-intelligence/audit" && request.method === "GET") {
+    return sendJson(response, 200, listMeetingAudit(db, url.searchParams.get("limit") || 50));
+  }
+  const meetingDetailMatch = url.pathname.match(/^\/api\/meeting-intelligence\/meetings\/(\d+)(?:\/(transcript|feedback))?$/);
+  if (meetingDetailMatch) {
+    const meetingId = Number(meetingDetailMatch[1]);
+    const action = meetingDetailMatch[2];
+    if (request.method === "GET" && !action) {
+      const detail = getMeetingDetail(db, meetingId);
+      return detail ? sendJson(response, 200, detail) : sendJson(response, 404, { error: "Meeting not found" });
+    }
+    if (request.method === "POST" && action === "transcript") {
+      const detail = processMeetingTranscript(db, meetingId, {
+        ...(await readJson(request)),
+        userAction: "api:meeting-intelligence:process-transcript",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, detail);
+    }
+    if (request.method === "POST" && action === "feedback") {
+      const detail = recordMeetingFeedback(db, {
+        ...(await readJson(request)),
+        meetingId,
+        userAction: "api:meeting-intelligence:feedback",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, detail);
+    }
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
     const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
@@ -577,6 +668,7 @@ async function handleApi(request, response, url) {
         "approval_queue",
         "briefing_history",
         context.propertyBrief?.items?.length ? "westbridge_property" : "",
+        context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -834,7 +926,15 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.projectIntelligence = projectAttentionForBriefing(db);
   brief.sarah = sarahBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
+  brief.meetingIntelligence = meetingBriefingForDaily(db);
   brief.executivePriorities = [
+    ...brief.meetingIntelligence.items.map((item, index) => ({
+      ...item,
+      id: `meeting-intelligence-${index + 1}`,
+      rank: index + 1,
+      category: "meeting",
+      score: item.priority === "high" ? 86 : 56,
+    })),
     ...brief.property.items.map((item, index) => ({
       ...item,
       id: `property-${index + 1}`,
@@ -871,6 +971,10 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
+  brief.summary.meetingIntelligenceSignals = brief.meetingIntelligence.items.length;
+  brief.summary.meetingActions = brief.meetingIntelligence.metrics.openActions;
+  brief.summary.meetingRisks = brief.meetingIntelligence.metrics.risks;
+  brief.summary.meetingTranscriptUnavailable = brief.meetingIntelligence.metrics.transcriptUnavailable;
   brief.summary.propertySignals = brief.property.items.length;
   brief.summary.propertyActiveOpportunities = brief.property.metrics.activeOpportunities;
   brief.summary.propertyMonthlyCashflow = brief.property.metrics.monthlyCashflow;
@@ -934,6 +1038,11 @@ function sourceReferencesFor(context) {
       reference: record.sourceReference || `property:${record.title}`,
       label: record.title || "Westbridge property signal",
       category: "property",
+    })),
+    ...compactRecords(context.meetingIntelligenceBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `meeting:${record.title}`,
+      label: record.title || "Meeting intelligence signal",
+      category: "meeting_intelligence",
     })),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
@@ -1002,6 +1111,7 @@ function memoryQueryForBriefing(context) {
     ...(context.propertyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -1082,6 +1192,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       metrics: compactValue(briefing.property?.metrics || {}),
       items: compactRecords(briefing.property?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
       boundary: briefing.property?.boundary || PROPERTY_READ_ONLY_BOUNDARY,
+    },
+    meetingIntelligenceBrief: {
+      title: briefing.meetingIntelligence?.title || "Teams Meeting Intelligence Brief",
+      summary: briefing.meetingIntelligence?.summary || "",
+      metrics: compactValue(briefing.meetingIntelligence?.metrics || {}),
+      items: compactRecords(briefing.meetingIntelligence?.items || [], ["title", "detail", "priority", "sourceReference"], 8),
+      boundary: briefing.meetingIntelligence?.boundary || MEETING_READ_ONLY_BOUNDARY,
     },
     sarahDigitalConstructionBrief: {
       title: briefing.sarah?.title || "Daily Digital Construction Brief",

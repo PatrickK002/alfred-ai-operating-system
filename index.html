@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=0.4.5" />
   </head>
   <body>
     <div class="shell">
@@ -45,6 +45,9 @@
           </button>
           <button class="nav-item" data-view="projects">
             <span class="nav-icon">▣</span> Projects
+          </button>
+          <button class="nav-item" data-view="meetings">
+            <span class="nav-icon">T</span> Meetings
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -475,6 +478,96 @@
             </form>
             <div id="project-search-results" class="project-search-results">
               <div class="empty-state">Search project records, document metadata, risks, actions, decisions and memory links.</div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="meetings-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">TEAMS MEETING INTELLIGENCE</p>
+              <h2>Meeting intelligence</h2>
+              <p>Read-only meeting metadata, transcript-aware summaries, follow-ups, feedback and executive specialist review placeholders.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="import-meetings">Import calendar metadata</button>
+            </div>
+          </div>
+          <div class="approval-boundary meeting-boundary">
+            <strong>Read-only meeting mode</strong>
+            <span>Alfred may analyse calendar metadata and permitted transcript summaries. It cannot post to Teams, send emails, update calendars, write to Microsoft 365, update Monday.com or create external actions.</span>
+          </div>
+          <div class="meeting-metrics" id="meeting-dashboard-metrics"></div>
+          <div class="meeting-layout">
+            <section class="panel meeting-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OVERVIEW</p>
+                  <h3>Recent meetings</h3>
+                </div>
+              </div>
+              <div id="meeting-list"></div>
+            </section>
+            <section class="panel meeting-panel meeting-detail-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DETAIL</p>
+                  <h3>Meeting record</h3>
+                </div>
+              </div>
+              <div id="meeting-detail"></div>
+            </section>
+          </div>
+          <div class="meeting-layout">
+            <section class="panel meeting-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FOLLOW-UP QUEUE</p>
+                  <h3>Outstanding meeting actions</h3>
+                </div>
+              </div>
+              <div id="meeting-follow-ups"></div>
+            </section>
+            <section class="panel meeting-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FEEDBACK LOOP</p>
+                  <h3>Capture output feedback</h3>
+                </div>
+              </div>
+              <form id="meeting-feedback-form" class="meeting-feedback-form">
+                <select id="meeting-feedback-meeting" aria-label="Select meeting for feedback"></select>
+                <select id="meeting-feedback-agent" aria-label="Select agent for feedback">
+                  <option value="alfred">Alfred</option>
+                  <option value="sarah">Sarah</option>
+                  <option value="olivia">Olivia</option>
+                  <option value="westbridge-property-director">Westbridge</option>
+                  <option value="sentinel">Sentinel</option>
+                </select>
+                <select id="meeting-feedback-status" aria-label="Recommendation status">
+                  <option value="unreviewed">Unreviewed</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <textarea id="meeting-feedback-notes" placeholder="Useful / not useful, outcome or lesson learned"></textarea>
+                <button class="secondary-button" type="submit">Store feedback</button>
+              </form>
+              <div id="meeting-feedback-list"></div>
+            </section>
+          </div>
+          <section class="panel meeting-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SEARCH</p>
+                <h3>Search meeting memory</h3>
+              </div>
+            </div>
+            <form id="meeting-search-form" class="project-search-form">
+              <input id="meeting-search-query" placeholder='Try “Westminster risks”, “RBKC feedback” or “financial concerns”' />
+              <button class="secondary-button" type="submit">Search Meetings</button>
+            </form>
+            <div id="meeting-search-results" class="project-search-results">
+              <div class="empty-state">Search meeting metadata, summaries, actions, decisions, risks, feedback and memory references.</div>
             </div>
           </section>
         </section>
@@ -915,6 +1008,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=0.4.5"></script>
   </body>
 </html>

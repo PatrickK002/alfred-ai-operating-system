@@ -228,6 +228,28 @@ const seedData = {
     missingInformation: [],
     boundary: { readOnly: true },
   },
+  meetingIntelligence: {
+    metrics: {
+      totalMeetings: 0,
+      recentMeetings: 0,
+      meetingsNeedingFollowUp: 0,
+      openActions: 0,
+      decisions: 0,
+      risks: 0,
+      feedbackSignals: 0,
+      transcriptUnavailable: 0,
+      sentinelConcerns: 0,
+    },
+    recentMeetings: [],
+    meetingsNeedingFollowUp: [],
+    followUpQueue: [],
+    decisions: [],
+    risks: [],
+    feedback: [],
+    agentReviews: [],
+    transcriptUnavailable: [],
+    boundary: { readOnly: true, advisoryOnly: true },
+  },
   sarah: {
     profile: {
       name: "Sarah",
@@ -385,6 +407,7 @@ let semanticMemoryStatus = null;
 let currentBoardReportMarkdown = "";
 let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
+let currentMeetingDetail = null;
 let sarahCurrentProjectId = null;
 let currentPropertyOpportunityId = null;
 let voiceMediaRecorder = null;
@@ -444,6 +467,7 @@ async function loadDashboard() {
     state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
     state.property = await apiRequest("/api/property/dashboard").catch(() => seedData.property);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
+    state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1494,6 +1518,245 @@ function renderProjectIntelligence() {
   renderProjectDetail(currentProjectDetail);
 }
 
+function meetingList(records, empty, formatter) {
+  return records?.length
+    ? `<div class="project-record-list">${records.slice(0, 10).map((record) => `<article>${formatter(record)}</article>`).join("")}</div>`
+    : `<div class="empty-state project-empty">${empty}</div>`;
+}
+
+function renderMeetingDetail(detail) {
+  if (!detail) {
+    $("#meeting-detail").innerHTML = '<div class="empty-state project-empty">Select a meeting to inspect summary, attendees, actions, decisions, risks, opportunities, feedback, agent reviews and source references.</div>';
+    return;
+  }
+  const meeting = detail.meeting;
+  const summary = detail.summary;
+  $("#meeting-detail").innerHTML = `
+    <div class="project-detail-header">
+      <div>
+        <span class="project-health ${meeting.transcriptAvailable ? "green" : "amber"}">${meeting.transcriptAvailable ? "transcript available" : "transcript unavailable"}</span>
+        <h3>${escapeHTML(meeting.title)}</h3>
+        <p>${escapeHTML(meeting.clientName || "Client not linked")} · ${escapeHTML(meeting.projectName || "Project not linked")} · ${escapeHTML(meeting.startDatetime || "No date")}</p>
+      </div>
+    </div>
+    <div class="project-health-card">
+      <strong>${escapeHTML(meeting.confidenceLevel || "inferred")}</strong>
+      <span>${escapeHTML(summary?.summary || "Transcript not available. Alfred reviewed calendar metadata only and has not inferred meeting content.")}</span>
+    </div>
+    <div class="project-intelligence-signals">
+      <article><small>ATTENDEES</small><strong>${detail.attendees.length}</strong><span>${detail.attendees.slice(0, 3).map((item) => escapeHTML(item.name || item.email)).join(", ") || "No attendees captured"}</span></article>
+      <article><small>ACTIONS</small><strong>${detail.actions.length}</strong><span>Internal Alfred records only; no external actions created.</span></article>
+      <article><small>AGENT REVIEWS</small><strong>${detail.agentReviews.length}</strong><span>${detail.agentReviews.map((review) => escapeHTML(review.agentName)).join(", ") || "No reviews yet"}</span></article>
+    </div>
+    <div class="project-detail-grid">
+      <section>
+        <h4>Actions</h4>
+        ${meetingList(detail.actions, "No actions extracted. Transcript may be unavailable.", (item) => `
+          <strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.priority)} · ${escapeHTML(item.status)}</small><span>${escapeHTML(item.detail)}</span>
+        `)}
+      </section>
+      <section>
+        <h4>Decisions</h4>
+        ${meetingList(detail.decisions, "No decisions extracted.", (item) => `
+          <strong>${escapeHTML(item.title)}</strong><small>${item.approvalRequired ? "Patrick approval may be required" : "Review"} · ${escapeHTML(item.confidenceLevel)}</small><span>${escapeHTML(item.detail)}</span>
+        `)}
+      </section>
+      <section>
+        <h4>Risks & Opportunities</h4>
+        ${meetingList([...(detail.risks || []), ...(detail.opportunities || [])], "No risks or opportunities extracted.", (item) => `
+          <strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.severity || item.status || "open")} · ${escapeHTML(item.confidenceLevel)}</small><span>${escapeHTML(item.detail)}</span>
+        `)}
+      </section>
+      <section>
+        <h4>Agent reviews</h4>
+        ${meetingList(detail.agentReviews, "No agent reviews yet.", (review) => `
+          <strong>${escapeHTML(review.agentName)}</strong><small>${escapeHTML(review.status)} · ${escapeHTML(review.relevance)}</small><span>${escapeHTML(review.summary)}</span>
+        `)}
+      </section>
+    </div>
+    <div class="project-finance-summary">
+      <h4>Source references</h4>
+      <span>${escapeHTML(meeting.sourceReference)} · ${escapeHTML(meeting.webUrl || "No web URL captured")} · Raw audio stored: no</span>
+    </div>
+  `;
+}
+
+function renderMeetingIntelligence() {
+  const meetingState = state.meetingIntelligence || seedData.meetingIntelligence;
+  const metrics = meetingState.metrics || {};
+  $("#meeting-dashboard-metrics").innerHTML = [
+    ["MEETINGS", metrics.totalMeetings],
+    ["FOLLOW-UP", metrics.meetingsNeedingFollowUp],
+    ["ACTIONS", metrics.openActions],
+    ["DECISIONS", metrics.decisions],
+    ["RISKS", metrics.risks],
+    ["FEEDBACK", metrics.feedbackSignals],
+    ["NO TRANSCRIPT", metrics.transcriptUnavailable],
+    ["SENTINEL", metrics.sentinelConcerns],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  const meetings = meetingState.recentMeetings || [];
+  $("#meeting-list").innerHTML = meetings.length
+    ? `<div class="project-list">${meetings.map((meeting) => `
+        <article class="project-card meeting-card" data-meeting-id="${meeting.id}">
+          <div>
+            <span class="project-health ${meeting.transcriptAvailable ? "green" : "amber"}">${meeting.transcriptAvailable ? "summary ready" : "transcript unavailable"}</span>
+            <h3>${escapeHTML(meeting.title)}</h3>
+            <p>${escapeHTML(meeting.clientName || "No client linked")} · ${escapeHTML(meeting.projectName || "No project linked")}</p>
+          </div>
+          <small>${escapeHTML(meeting.startDatetime || "No date")} · ${escapeHTML(meeting.organizerName || "Unknown organiser")}</small>
+          <span class="project-card-domains">${escapeHTML(meeting.relatedAgent || "alfred")} · ${escapeHTML(meeting.confidenceLevel || "inferred")}</span>
+          <button class="text-button meeting-select" data-meeting-id="${meeting.id}">Open meeting →</button>
+        </article>
+      `).join("")}</div>`
+    : '<div class="empty-state project-empty">No meeting records yet. Import read-only calendar metadata to begin.</div>';
+
+  $("#meeting-follow-ups").innerHTML = meetingList(meetingState.followUpQueue || [], "No outstanding meeting actions.", (item) => `
+    <strong>${escapeHTML(item.title)}</strong>
+    <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")} · ${escapeHTML(item.owner || "Owner placeholder")}</span>
+    <small>${escapeHTML(item.priority || "medium")} · ${escapeHTML(item.dueDate || "Due date placeholder")}</small>
+  `);
+
+  $("#meeting-feedback-meeting").innerHTML = meetings.length
+    ? meetings.map((meeting) => `<option value="${meeting.id}">${escapeHTML(meeting.title)}</option>`).join("")
+    : '<option value="">No meetings available</option>';
+  $("#meeting-feedback-list").innerHTML = meetingList(meetingState.feedback || [], "No feedback captured yet.", (item) => `
+    <strong>${escapeHTML(item.userFeedback || item.notes || "Meeting feedback")}</strong>
+    <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")} · ${escapeHTML(item.agentId || "alfred")}</span>
+    <small>${escapeHTML(item.recommendationStatus || "unreviewed")} · ${escapeHTML(item.memoryUpdateReference || "memory not created")}</small>
+  `);
+  renderMeetingDetail(currentMeetingDetail);
+}
+
+async function refreshMeetingIntelligence() {
+  if (!backendAvailable) {
+    showToast("Meeting intelligence requires the backend");
+    return;
+  }
+  state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard");
+  persist();
+  renderMeetingIntelligence();
+}
+
+async function importMeetingMetadata() {
+  if (!backendAvailable) {
+    showToast("Meeting import requires the backend");
+    return;
+  }
+  try {
+    showToast("Importing calendar metadata in read-only mode...");
+    const result = await apiRequest("/api/meeting-intelligence/import-calendar", {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:meetings:import-calendar" }),
+    });
+    await refreshMeetingIntelligence();
+    showToast(result.message || `Stored ${result.meetingsStored || 0} meeting metadata record(s)`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function openMeetingDetail(meetingId) {
+  if (!backendAvailable) {
+    showToast("Meeting detail requires the backend");
+    return;
+  }
+  try {
+    currentMeetingDetail = await apiRequest(`/api/meeting-intelligence/meetings/${meetingId}`);
+    renderMeetingDetail(currentMeetingDetail);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function submitMeetingFeedback(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Meeting feedback requires the backend");
+    return;
+  }
+  const meetingId = $("#meeting-feedback-meeting").value;
+  const notes = $("#meeting-feedback-notes").value.trim();
+  if (!meetingId || !notes) {
+    showToast("Select a meeting and add feedback notes");
+    return;
+  }
+  try {
+    await apiRequest(`/api/meeting-intelligence/meetings/${meetingId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({
+        outputType: "meeting_intelligence_output",
+        agentId: $("#meeting-feedback-agent").value,
+        userFeedback: notes,
+        recommendationStatus: $("#meeting-feedback-status").value,
+        lessonLearned: notes,
+      }),
+    });
+    $("#meeting-feedback-notes").value = "";
+    await refreshMeetingIntelligence();
+    if (currentMeetingDetail?.meeting?.id === Number(meetingId)) await openMeetingDetail(meetingId);
+    showToast("Meeting feedback stored in Alfred memory");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function searchMeetings(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Meeting search requires the backend");
+    return;
+  }
+  const query = $("#meeting-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a meeting search topic");
+    return;
+  }
+  $("#meeting-search-results").innerHTML = '<div class="ai-loading">Searching meeting intelligence...</div>';
+  try {
+    const result = await apiRequest(`/api/meeting-intelligence/search?q=${encodeURIComponent(query)}`);
+    $("#meeting-search-results").innerHTML = `
+      ${renderList("Matching meetings", result.matchingMeetings || [], (meeting) => `
+        <strong>${escapeHTML(meeting.title)}</strong>
+        <span>${escapeHTML(meeting.clientName || "No client linked")} · ${escapeHTML(meeting.projectName || "No project linked")}</span>
+        <small>${escapeHTML(meeting.sourceReference || "")} · relevance ${meeting.relevanceScore}</small>
+      `)}
+      ${renderList("Actions", result.relatedActions || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")} · ${escapeHTML(item.status || "")}</span>
+        <small>${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Decisions", result.relatedDecisions || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")} · ${escapeHTML(item.status || "")}</span>
+        <small>${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Risks", result.relatedRisks || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")} · ${escapeHTML(item.severity || "")}</span>
+        <small>${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Feedback", result.feedbackSignals || [], (item) => `
+        <strong>${escapeHTML(item.userFeedback || item.lessonLearned || "Feedback")}</strong>
+        <span>${escapeHTML(item.meetingTitle || item.meeting_title || "")}</span>
+        <small>${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#meeting-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
 function sarahProjectOptions() {
   const projects = state.projectIntelligence?.projects || [];
   return projects.map((project) => `
@@ -1566,6 +1829,7 @@ function renderAll() {
   renderCompanies();
   renderProperty();
   renderProjectIntelligence();
+  renderMeetingIntelligence();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -1582,6 +1846,7 @@ function navigate(view) {
     companies: "Companies",
     property: "Property",
     projects: "Project Intelligence",
+    meetings: "Meeting Intelligence",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -1635,7 +1900,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>11. AGENT STATUS</h4>
+      <h4>12. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -1690,6 +1955,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
     </div>
     ${section("1. EXECUTIVE PRIORITIES", (brief.executivePriorities || []).map((item) => ({
@@ -1706,6 +1972,7 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
+    ${section("11. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -1760,6 +2027,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
     source: "localStorage",
   };
@@ -3094,6 +3362,20 @@ function runCommand(command) {
   } else if (normalized.includes("opportun")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "opportunity").length} active opportunity record(s)`);
+  } else if (normalized.includes("meeting") || normalized.includes("teams") || normalized.includes("transcript") || normalized.includes("follow up")) {
+    navigate("meetings");
+    if (backendAvailable && (normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("financial") || normalized.includes("risk"))) {
+      $("#meeting-search-query").value = normalized.includes("westminster")
+        ? "Westminster"
+        : normalized.includes("rbkc")
+          ? "RBKC"
+          : normalized.includes("islington")
+            ? "Islington"
+            : normalized.includes("financial")
+              ? "financial concerns"
+              : "risk";
+      $("#meeting-search-form").requestSubmit();
+    }
   } else if (normalized.includes("project") || normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("kspf")) {
     navigate("projects");
     if (backendAvailable && (normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("kspf"))) {
@@ -3141,6 +3423,9 @@ $("#analyse-property-opportunity").addEventListener("click", analyseSelectedProp
 $("#property-search-form").addEventListener("submit", searchProperty);
 $("#discover-projects").addEventListener("click", discoverProjectMetadata);
 $("#project-search-form").addEventListener("submit", searchProjects);
+$("#import-meetings").addEventListener("click", importMeetingMetadata);
+$("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
+$("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });
@@ -3213,6 +3498,8 @@ document.addEventListener("click", (event) => {
   }
   const projectButton = event.target.closest(".project-select");
   if (projectButton) openProjectDetail(projectButton.dataset.projectId);
+  const meetingButton = event.target.closest(".meeting-select");
+  if (meetingButton) openMeetingDetail(meetingButton.dataset.meetingId);
   const projectAnalysisButton = event.target.closest(".ask-project-analysis");
   if (projectAnalysisButton) askProjectAnalysis(projectAnalysisButton.dataset.projectId);
   const approvalButton = event.target.closest(".approval-decision");

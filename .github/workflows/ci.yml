@@ -72,6 +72,9 @@ jobs:
       - name: Check voice command centre syntax
         run: node --check voice.js
 
+      - name: Check meeting intelligence syntax
+        run: node --check meeting-intelligence.js
+
       - name: Check order book importer syntax
         run: node --check excel-orderbook.js
 
