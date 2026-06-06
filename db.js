@@ -1558,6 +1558,10 @@ function ensureDefaultSettings(db) {
   const transcriptLoggingDefault = String(process.env.VOICE_TRANSCRIPT_LOGGING_ENABLED || "true").toLowerCase() === "false"
     ? "false"
     : "true";
+  const transcriptRetentionDays = Math.min(
+    Math.max(Number(process.env.VOICE_TRANSCRIPT_RETENTION_DAYS) || 30, 1),
+    3650,
+  );
   db.prepare(`
     INSERT OR IGNORE INTO app_settings (key, value)
     VALUES ('semantic_indexing_enabled', ?)
@@ -1578,6 +1582,10 @@ function ensureDefaultSettings(db) {
     INSERT OR IGNORE INTO app_settings (key, value)
     VALUES ('voice_speech_speed', '1')
   `).run();
+  db.prepare(`
+    INSERT OR IGNORE INTO app_settings (key, value)
+    VALUES ('voice_transcript_retention_days', ?)
+  `).run(String(transcriptRetentionDays));
 }
 
 function migrateApprovalSchema(db) {
@@ -2716,6 +2724,7 @@ export function getVoiceSettings(db) {
     transcriptLoggingEnabled: getSetting(db, "voice_transcript_logging_enabled", "true") === "true",
     voiceSelection: getSetting(db, "voice_selection", process.env.ELEVENLABS_VOICE_ID || "alfred"),
     speechSpeed: Number(getSetting(db, "voice_speech_speed", "1")) || 1,
+    transcriptRetentionDays: Number(getSetting(db, "voice_transcript_retention_days", "30")) || 30,
   };
 }
 
@@ -2728,6 +2737,10 @@ export function setVoiceSettings(db, settings = {}) {
   if (settings.speechSpeed !== undefined) {
     const speed = Math.min(Math.max(Number(settings.speechSpeed) || 1, 0.5), 1.5);
     setSetting(db, "voice_speech_speed", String(speed));
+  }
+  if (settings.transcriptRetentionDays !== undefined) {
+    const days = Math.min(Math.max(Number(settings.transcriptRetentionDays) || 30, 1), 3650);
+    setSetting(db, "voice_transcript_retention_days", String(days));
   }
   return getVoiceSettings(db);
 }
@@ -2928,6 +2941,18 @@ export function listVoiceConversationTurns(db, limit = 20) {
     specialistContributions: safeJson(row.specialist_contributions, []),
     createdAt: toIsoTimestamp(row.created_at),
   }));
+}
+
+export function purgeVoiceConversationTurns(db, { olderThanDays = 30 } = {}) {
+  const days = Math.min(Math.max(Number(olderThanDays) || 30, 1), 3650);
+  const result = db.prepare(`
+    DELETE FROM voice_conversation_turns
+    WHERE datetime(created_at) < datetime('now', ?)
+  `).run(`-${days} days`);
+  return {
+    deletedCount: result.changes,
+    olderThanDays: days,
+  };
 }
 
 function semanticRecord({

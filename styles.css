@@ -748,6 +748,7 @@ h3 {
 
 .voice-transcript-form input,
 .voice-settings input[type="text"],
+.voice-settings input[type="number"],
 .voice-settings input:not([type]) {
   min-width: 0;
   border: 1px solid var(--line);
@@ -809,6 +810,98 @@ h3 {
 .voice-provider-grid strong {
   margin-top: 5px;
   font-size: 12px;
+}
+
+.voice-setup {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid rgba(98, 234, 213, 0.14);
+  border-radius: 14px;
+  background: rgba(98, 234, 213, 0.045);
+}
+
+.voice-setup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voice-setup-header strong {
+  color: var(--text);
+  font: 500 12px/1 var(--font-display);
+}
+
+.voice-setup-summary {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.voice-setup-checklist {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.voice-setup-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.voice-setup-item > span {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.025);
+}
+
+.voice-setup-item.connected > span {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(98, 234, 213, 0.08);
+}
+
+.voice-setup-item.planned > span {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(226, 180, 107, 0.09);
+}
+
+.voice-setup-item.missing > span {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(255, 97, 97, 0.08);
+}
+
+.voice-setup-item strong,
+.voice-setup-item small,
+.voice-setup-item em {
+  display: block;
+}
+
+.voice-setup-item strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.voice-setup-item small,
+.voice-setup-item em {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.voice-setup-item em {
+  color: var(--amber);
+  font-style: normal;
 }
 
 .voice-response {
@@ -2752,7 +2845,10 @@ dialog::backdrop {
   .property-actions { justify-content: flex-start; }
   .voice-provider-grid,
   .voice-transcript-form { grid-template-columns: 1fr; }
+  .voice-setup-header,
+  .voice-history-panel .section-heading { align-items: flex-start; flex-direction: column; }
   .voice-settings label,
   .voice-settings label:has(input[type="range"]),
+  .voice-settings label:has(input[type="number"]),
   .voice-settings label:has(input:not([type])) { grid-template-columns: 1fr; }
 }

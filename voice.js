@@ -5,6 +5,7 @@ import {
   listApprovalRequests,
   listBriefings,
   listVoiceConversationTurns,
+  purgeVoiceConversationTurns,
   recordVoiceAudit,
   recordVoiceConversationTurn,
   setVoiceSettings,
@@ -162,6 +163,7 @@ export class DeepgramSpeechClient {
     return {
       provider: "deepgram",
       configured: Boolean(this.apiKey),
+      apiKeyConfigured: Boolean(this.apiKey),
       model: this.model,
       storesRawAudio: false,
     };
@@ -225,6 +227,7 @@ export class ElevenLabsSpeechClient {
     return {
       provider: "elevenlabs",
       configured: Boolean(this.apiKey && this.voiceId),
+      apiKeyConfigured: Boolean(this.apiKey),
       model: this.model,
       voiceIdConfigured: Boolean(this.voiceId),
     };
@@ -273,6 +276,83 @@ export class ElevenLabsSpeechClient {
 
 function providerStatus(provider) {
   return provider?.status ? provider.status() : { configured: false };
+}
+
+function providerChecklistItem({ id, label, configured, connected = false, requiredEnv = [], missingEnv = [], nextStep }) {
+  return {
+    id,
+    label,
+    configured: Boolean(configured),
+    connected: Boolean(connected),
+    state: connected ? "Connected" : configured ? "Planned" : "Not connected",
+    requiredEnv,
+    missingEnv,
+    nextStep,
+  };
+}
+
+function voiceProviderSetupStatus(settings, deepgram = {}, elevenlabs = {}) {
+  const deepgramConfigured = Boolean(deepgram.configured);
+  const elevenLabsKeyConfigured = Boolean(elevenlabs.apiKeyConfigured || elevenlabs.configured);
+  const elevenLabsConfigured = Boolean(elevenlabs.configured);
+  const checklist = [
+    providerChecklistItem({
+      id: "voice-enabled",
+      label: "Voice interface enabled",
+      configured: settings.enabled,
+      connected: settings.enabled,
+      requiredEnv: ["VOICE_ENABLED"],
+      missingEnv: settings.enabled ? [] : ["VOICE_ENABLED"],
+      nextStep: settings.enabled ? "Voice UI is enabled." : "Set VOICE_ENABLED=true or enable Voice in settings.",
+    }),
+    providerChecklistItem({
+      id: "deepgram",
+      label: "Deepgram speech-to-text",
+      configured: deepgramConfigured,
+      connected: deepgram.state === "Connected",
+      requiredEnv: ["DEEPGRAM_API_KEY"],
+      missingEnv: deepgramConfigured ? [] : ["DEEPGRAM_API_KEY"],
+      nextStep: deepgramConfigured
+        ? "Run a microphone command to verify speech-to-text."
+        : "Add DEEPGRAM_API_KEY to .env for live microphone transcription.",
+    }),
+    providerChecklistItem({
+      id: "elevenlabs",
+      label: "ElevenLabs text-to-speech",
+      configured: elevenLabsConfigured,
+      connected: elevenlabs.state === "Connected",
+      requiredEnv: ["ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID"],
+      missingEnv: [
+        elevenLabsKeyConfigured ? "" : "ELEVENLABS_API_KEY",
+        elevenlabs.voiceIdConfigured ? "" : "ELEVENLABS_VOICE_ID",
+      ].filter(Boolean),
+      nextStep: elevenLabsConfigured
+        ? "Run a voice command to verify audio playback."
+        : "Add ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID to .env for spoken output.",
+    }),
+    providerChecklistItem({
+      id: "transcript-retention",
+      label: "Transcript retention",
+      configured: true,
+      connected: true,
+      requiredEnv: ["VOICE_TRANSCRIPT_LOGGING_ENABLED", "VOICE_TRANSCRIPT_RETENTION_DAYS"],
+      missingEnv: [],
+      nextStep: settings.transcriptLoggingEnabled
+        ? `Transcripts are stored locally for manual review. Retention purge threshold is ${settings.transcriptRetentionDays} day(s).`
+        : "Transcript content is not persisted while logging is disabled.",
+    }),
+  ];
+  return {
+    readyForTypedCommands: Boolean(settings.enabled),
+    readyForMicrophone: Boolean(settings.enabled && deepgramConfigured),
+    readyForSpokenOutput: Boolean(settings.enabled && elevenLabsConfigured),
+    rawAudioStored: false,
+    secretsExposed: false,
+    checklist,
+    summary: checklist.every((item) => item.configured)
+      ? "Voice providers are configured. Connections verify only after successful provider calls."
+      : "Voice works with typed transcript fallback. Add missing provider keys for live speech input/output.",
+  };
 }
 
 function summarizeBrief(brief = {}) {
@@ -578,22 +658,88 @@ export function createVoiceCommandService({
     const settings = getVoiceSettings(db);
     const deepgram = providerStatus(speechToText);
     const elevenlabs = providerStatus(textToSpeech);
+    const providers = {
+      deepgram: {
+        ...deepgram,
+        state: deepgram.configured ? "Planned" : "Not connected",
+      },
+      elevenlabs: {
+        ...elevenlabs,
+        state: elevenlabs.configured ? "Planned" : "Not connected",
+      },
+    };
     return {
       settings,
       personas: VOICE_PERSONAS,
       supportedCommands: SUPPORTED_VOICE_COMMANDS,
-      providers: {
-        deepgram: {
-          ...deepgram,
-          state: deepgram.configured ? "Planned" : "Not connected",
-        },
-        elevenlabs: {
-          ...elevenlabs,
-          state: elevenlabs.configured ? "Planned" : "Not connected",
-        },
+      providers,
+      setup: voiceProviderSetupStatus(settings, providers.deepgram, providers.elevenlabs),
+      retention: {
+        transcriptLoggingEnabled: settings.transcriptLoggingEnabled,
+        transcriptRetentionDays: settings.transcriptRetentionDays,
+        rawAudioStored: false,
+        localSensitiveBusinessData: true,
       },
-      microphone: { required: true, rawAudioStored: false },
+      microphone: {
+        required: true,
+        rawAudioStored: false,
+        browserPermissionRequired: true,
+        mobileSafariNote: "Requires microphone permission and MediaRecorder support; typed transcript fallback remains available.",
+      },
       boundary: VOICE_READ_ONLY_BOUNDARY,
+    };
+  }
+
+  function diagnostics({ userAction = "voice:setup-diagnostics" } = {}) {
+    const result = status();
+    const audit = recordVoiceAudit(db, {
+      eventType: "voice_setup_diagnostics",
+      userAction,
+      dataCategories: ["voice_provider_configuration", "voice_retention_settings"],
+      model: "local-voice-diagnostics",
+      status: "success",
+      outputSaved: false,
+      executionAttempted: false,
+      metadata: {
+        deepgramState: result.providers.deepgram.state,
+        elevenlabsState: result.providers.elevenlabs.state,
+        readyForMicrophone: result.setup.readyForMicrophone,
+        readyForSpokenOutput: result.setup.readyForSpokenOutput,
+        secretsExposed: false,
+      },
+    });
+    return {
+      ...result,
+      audit,
+      executionAttempted: false,
+      externalCallsMade: false,
+    };
+  }
+
+  function purgeConversations({ olderThanDays, userAction = "voice:purge-conversations" } = {}) {
+    const settings = getVoiceSettings(db);
+    const result = purgeVoiceConversationTurns(db, {
+      olderThanDays: olderThanDays ?? settings.transcriptRetentionDays,
+    });
+    const audit = recordVoiceAudit(db, {
+      eventType: "voice_retention_purge",
+      userAction,
+      dataCategories: ["voice_conversation_history"],
+      model: "local-retention-policy",
+      status: "success",
+      outputSaved: false,
+      executionAttempted: false,
+      metadata: {
+        deletedCount: result.deletedCount,
+        olderThanDays: result.olderThanDays,
+        rawAudioStored: false,
+      },
+    });
+    return {
+      ...result,
+      audit,
+      boundary: VOICE_READ_ONLY_BOUNDARY,
+      executionAttempted: false,
     };
   }
 
@@ -809,6 +955,8 @@ export function createVoiceCommandService({
     listConversations: (limit = 20) => listVoiceConversationTurns(db, limit),
     getSettings: () => getVoiceSettings(db),
     setSettings: (settings) => setVoiceSettings(db, settings),
+    diagnostics,
+    purgeConversations,
     handleCommand,
   };
 }
