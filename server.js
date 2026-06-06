@@ -107,15 +107,19 @@ import {
 } from "./meeting-intelligence.js";
 import {
   MONDAY_OPERATING_BOUNDARY,
+  MONDAY_READONLY_OPERATING_BOUNDARY,
   getMondayOperatingDashboard,
   listMondayAudit,
   listMondayOperatingCollection,
   mondayOperatingBriefForDaily,
   mondayOperatingCollection,
+  recordMondayAudit,
   searchMondayOperatingSystem,
   syncMeetingFollowupsToWorkItems,
+  syncMondayReadOnlyOperatingItems,
   updateWorkItem,
 } from "./monday-operating-system.js";
+import { MondayOperatingReadClient } from "./monday-readonly-operating.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -131,6 +135,7 @@ const microsoft = new MicrosoftGraphClient();
 const anthropic = new AnthropicClient();
 const voyage = new VoyageClient();
 const mondayFinance = new MondayFinanceClient();
+const mondayOperatingRead = new MondayOperatingReadClient();
 const aiReasoning = createAiReasoningService({
   db,
   client: anthropic,
@@ -374,6 +379,74 @@ async function handleApi(request, response, url) {
       semanticMemory: memory?.results || [],
       boundary: MONDAY_OPERATING_BOUNDARY,
     });
+  }
+  if (url.pathname === "/api/monday-os/monday-readonly/status" && request.method === "GET") {
+    return sendJson(response, 200, syncMondayOperatingReadStatus());
+  }
+  if (url.pathname === "/api/monday-os/monday-readonly/refresh" && request.method === "POST") {
+    const body = await readJson(request);
+    const userAction = body.userAction || "api:monday-os:monday-readonly:refresh";
+    const status = syncMondayOperatingReadStatus();
+    if (!status.configured) {
+      recordMondayAudit(db, {
+        eventType: "monday_readonly_sync_skipped",
+        userAction,
+        recordType: "monday_readonly_sync",
+        dataCategories: ["monday_readonly", "internal_monday_operating_system"],
+        outputSaved: false,
+        metadata: {
+          reason: "not_configured",
+          readOnly: true,
+          writesEnabled: false,
+        },
+      });
+      return sendJson(response, 200, {
+        ...status,
+        itemsRead: 0,
+        importedRecords: 0,
+        updatedRecords: 0,
+        skippedRecords: 0,
+        message: "Monday.com operating read-only sync is not configured. Set MONDAY_API_TOKEN and MONDAY_OPERATING_BOARD_IDS.",
+        boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+      });
+    }
+    try {
+      const fetched = await mondayOperatingRead.fetchOperatingItems();
+      const result = syncMondayReadOnlyOperatingItems(db, {
+        items: fetched.items,
+        userAction,
+      });
+      setIntegrationStatus(db, "monday", "Connected");
+      await tryIndexSemanticMemory();
+      return sendJson(response, 200, {
+        ...status,
+        ...fetched,
+        ...result,
+        status: "Connected",
+        message: `Imported ${result.importedRecords} and updated ${result.updatedRecords} Monday.com read-only operating item(s).`,
+        boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+      });
+    } catch (error) {
+      recordMondayAudit(db, {
+        eventType: "monday_readonly_sync_failed",
+        userAction,
+        recordType: "monday_readonly_sync",
+        dataCategories: ["monday_readonly", "internal_monday_operating_system"],
+        outputSaved: false,
+        metadata: {
+          errorCode: error.code || "MONDAY_OPERATING_READ_FAILED",
+          message: error.message,
+          readOnly: true,
+          writesEnabled: false,
+        },
+      });
+      return sendJson(response, error.statusCode || 503, {
+        ...status,
+        error: error.message,
+        errorCode: error.code || "MONDAY_OPERATING_READ_FAILED",
+        boundary: MONDAY_READONLY_OPERATING_BOUNDARY,
+      });
+    }
   }
   if (url.pathname === "/api/monday-os/sync-meeting-followups" && request.method === "POST") {
     const result = syncMeetingFollowupsToWorkItems(db);
@@ -1393,15 +1466,37 @@ function syncVoyageStatus() {
 
 function syncMondayFinanceStatus() {
   const status = mondayFinance.status();
+  const operatingStatus = mondayOperatingRead.status();
   const current = listResource(db, "integrations").find((integration) => integration.id === "monday");
-  if (!status.configured) {
+  const anyMondayConfigured = Boolean(status.configured || operatingStatus.configured);
+  if (!anyMondayConfigured) {
     setIntegrationStatus(db, "monday", "Not connected");
   } else if (current?.status !== "Connected") {
     setIntegrationStatus(db, "monday", "Planned");
   }
+  const integrationStatus = !anyMondayConfigured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned";
+  return {
+    ...status,
+    configured: Boolean(status.configured),
+    financeConfigured: Boolean(status.configured),
+    operatingConfigured: Boolean(operatingStatus.configured),
+    mondayConfigured: anyMondayConfigured,
+    operatingBoardIds: operatingStatus.boardIds,
+    readOnly: true,
+    writesEnabled: false,
+    integrationStatus,
+    status: !status.configured ? "Not connected" : integrationStatus,
+  };
+}
+
+function syncMondayOperatingReadStatus() {
+  const status = mondayOperatingRead.status();
+  const current = listResource(db, "integrations").find((integration) => integration.id === "monday");
   return {
     ...status,
     status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
+    readOnly: true,
+    writesEnabled: false,
   };
 }
 

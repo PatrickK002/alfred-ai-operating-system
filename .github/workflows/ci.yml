@@ -84,6 +84,9 @@ jobs:
       - name: Check Monday operating system syntax
         run: node --check monday-operating-system.js
 
+      - name: Check Monday read-only operating sync syntax
+        run: node --check monday-readonly-operating.js
+
       - name: Check briefing intelligence syntax
         run: node --check briefing.js
 
