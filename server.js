@@ -33,6 +33,19 @@ import { AnthropicClient } from "./anthropic.js";
 import { createAiReasoningService } from "./ai.js";
 import { VoyageClient } from "./voyage.js";
 import { createSemanticMemoryService } from "./semantic-memory.js";
+import {
+  FINANCIAL_READ_ONLY_BOUNDARY,
+  generateBoardReport,
+  generateOliviaAnalysis,
+  getBoardReport,
+  getFinancialDashboardData,
+  importOrderBookWorkbook,
+  listBoardReports,
+  listFinancialAudit,
+  listFinancialImports,
+  saveMondayFinancialSummaries,
+} from "./financial.js";
+import { MondayFinanceClient } from "./monday-finance.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -46,6 +59,7 @@ const db = createDatabase();
 const microsoft = new MicrosoftGraphClient();
 const anthropic = new AnthropicClient();
 const voyage = new VoyageClient();
+const mondayFinance = new MondayFinanceClient();
 const aiReasoning = createAiReasoningService({
   db,
   client: anthropic,
@@ -79,7 +93,7 @@ async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) {
+    if (size > 15_000_000) {
       const error = new Error("Request body is too large");
       error.statusCode = 413;
       throw error;
@@ -96,6 +110,14 @@ async function readJson(request) {
   }
 }
 
+function financialScopeFromSearch(searchParams) {
+  return {
+    scopeType: searchParams.get("scopeType") || "",
+    scopeId: searchParams.get("scopeId") || "",
+    businessEntityId: searchParams.get("businessEntityId") || "",
+  };
+}
+
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
     return sendJson(response, 200, { status: "ok", database: "connected" });
@@ -103,6 +125,7 @@ async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
     syncAnthropicStatus();
     syncVoyageStatus();
+    syncMondayFinanceStatus();
     return sendJson(response, 200, getDashboardData(db));
   }
   if (request.method === "GET" && url.pathname === "/api/morning-brief") {
@@ -136,6 +159,46 @@ async function handleApi(request, response, url) {
       limit: url.searchParams.get("limit") || 8,
     });
     return sendJson(response, 200, result);
+  }
+  if (url.pathname === "/api/financial/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)));
+  }
+  if (url.pathname === "/api/financial/forecast" && request.method === "GET") {
+    return sendJson(response, 200, getFinancialDashboardData(db, financialScopeFromSearch(url.searchParams)).forecast);
+  }
+  if (url.pathname === "/api/financial/order-book/import" && request.method === "POST") {
+    const result = importOrderBookWorkbook(db, await readJson(request));
+    await tryIndexSemanticMemory();
+    return sendJson(response, result.approvalRequired ? 409 : 201, result);
+  }
+  if (url.pathname === "/api/financial/imports" && request.method === "GET") {
+    return sendJson(response, 200, listFinancialImports(db, url.searchParams.get("limit") || 20));
+  }
+  if (url.pathname === "/api/financial/monday/status" && request.method === "GET") {
+    return sendJson(response, 200, syncMondayFinanceStatus());
+  }
+  if (url.pathname === "/api/financial/monday/refresh" && request.method === "POST") {
+    const body = await readJson(request);
+    const summaries = await mondayFinance.fetchFinancialSummaries();
+    const result = saveMondayFinancialSummaries(db, { ...summaries, businessEntityId: body.businessEntityId });
+    setIntegrationStatus(db, "monday", "Connected");
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, { ...result, boundary: FINANCIAL_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/financial/board-reports") {
+    if (request.method === "GET") return sendJson(response, 200, listBoardReports(db, url.searchParams.get("limit") || 20));
+    if (request.method === "POST") return sendJson(response, 201, generateBoardReport(db, await readJson(request)));
+  }
+  const boardReportMatch = url.pathname.match(/^\/api\/financial\/board-reports\/(\d+)$/);
+  if (boardReportMatch && request.method === "GET") {
+    const report = getBoardReport(db, Number(boardReportMatch[1]));
+    return report ? sendJson(response, 200, report) : sendJson(response, 404, { error: "Board report not found" });
+  }
+  if (url.pathname === "/api/financial/olivia-analysis" && request.method === "POST") {
+    return sendJson(response, 200, generateOliviaAnalysis(db, await readJson(request)));
+  }
+  if (url.pathname === "/api/financial/audit" && request.method === "GET") {
+    return sendJson(response, 200, listFinancialAudit(db, url.searchParams.get("limit") || 50));
   }
   if (url.pathname === "/api/ai/briefing" && request.method === "POST") {
     const body = await readJson(request);
@@ -609,6 +672,20 @@ function syncVoyageStatus() {
     setIntegrationStatus(db, "voyage", "Not connected");
   } else if (current?.status !== "Connected") {
     setIntegrationStatus(db, "voyage", "Planned");
+  }
+  return {
+    ...status,
+    status: !status.configured ? "Not connected" : current?.status === "Connected" ? "Connected" : "Planned",
+  };
+}
+
+function syncMondayFinanceStatus() {
+  const status = mondayFinance.status();
+  const current = listResource(db, "integrations").find((integration) => integration.id === "monday");
+  if (!status.configured) {
+    setIntegrationStatus(db, "monday", "Not connected");
+  } else if (current?.status !== "Connected") {
+    setIntegrationStatus(db, "monday", "Planned");
   }
   return {
     ...status,

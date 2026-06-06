@@ -34,6 +34,9 @@
           <button class="nav-item" data-view="companies">
             <span class="nav-icon">◇</span> Companies
           </button>
+          <button class="nav-item" data-view="finance">
+            <span class="nav-icon">£</span> Finance
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon">◎</span> Memory
           </button>
@@ -167,6 +170,80 @@
             <button class="secondary-button" id="add-operating-item">+ Add operating item</button>
           </div>
           <div class="portfolio-grid" id="portfolio-grid"></div>
+        </section>
+
+        <section class="view" id="finance-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">CFO FINANCIAL INTELLIGENCE</p>
+              <h2>Olivia Finance Dashboard</h2>
+              <p>Group CFO view across businesses, divisions, products and ventures. No invoices, payments or accounting records can be changed.</p>
+            </div>
+            <div class="finance-actions">
+              <label class="finance-scope">
+                <span>Reporting scope</span>
+                <select id="finance-scope"></select>
+              </label>
+              <input id="order-book-file" type="file" accept=".xlsx,.csv" hidden />
+              <button class="secondary-button" id="import-order-book">Import order book</button>
+              <button class="secondary-button" id="refresh-monday-finance">Refresh Monday read-only</button>
+              <button class="primary-button" id="generate-board-report">Generate board report</button>
+            </div>
+          </div>
+          <div class="approval-boundary finance-boundary">
+            <strong>Read-only finance mode</strong>
+            <span>Olivia analyses and recommends only. Alfred cannot raise invoices, chase debtors, process payments, update Monday.com or modify accounting systems.</span>
+          </div>
+          <div class="finance-metrics" id="finance-metrics"></div>
+          <div class="finance-grid">
+            <section class="panel finance-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FORECAST</p>
+                  <h3>Revenue by period</h3>
+                </div>
+              </div>
+              <div id="finance-forecast"></div>
+            </section>
+            <section class="panel finance-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CLIENTS</p>
+                  <h3>Revenue concentration</h3>
+                </div>
+              </div>
+              <div id="finance-clients"></div>
+            </section>
+            <section class="panel finance-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DEBTORS</p>
+                  <h3>Invoice status</h3>
+                </div>
+              </div>
+              <div id="finance-debtors"></div>
+            </section>
+            <section class="panel finance-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OLIVIA</p>
+                  <h3>CFO analysis</h3>
+                </div>
+                <button class="text-button" id="ask-olivia">Ask Olivia</button>
+              </div>
+              <div id="finance-insights"></div>
+            </section>
+          </div>
+          <section class="panel finance-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">BOARD REPORT</p>
+                <h3>Quarterly board report</h3>
+              </div>
+              <button class="text-button" id="copy-board-report">Copy markdown</button>
+            </div>
+            <pre id="board-report-output" class="board-report-output">Generate a report to view markdown here.</pre>
+          </section>
         </section>
 
         <section class="view" id="memory-view">
