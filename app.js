@@ -635,6 +635,46 @@ function escapeHTML(value = "") {
     .replaceAll("'", "&#039;");
 }
 
+function renderVoiceResponseText(value = "") {
+  const text = String(value || "").replace(/\r/g, "").trim();
+  if (!text) return "<p>No response returned.</p>";
+  const lines = text.split("\n");
+  let html = "";
+  let listOpen = false;
+  const closeList = () => {
+    if (!listOpen) return;
+    html += "</ul>";
+    listOpen = false;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      continue;
+    }
+    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    if (heading) {
+      closeList();
+      html += `<h4>${escapeHTML(heading[1])}</h4>`;
+      continue;
+    }
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!listOpen) {
+        html += "<ul>";
+        listOpen = true;
+      }
+      html += `<li>${escapeHTML(bullet[1])}</li>`;
+      continue;
+    }
+    closeList();
+    html += `<p>${escapeHTML(line)}</p>`;
+  }
+  closeList();
+  return html;
+}
+
 function executiveTeamRoster(records = state.agents || []) {
   return buildExecutiveTeamRoster(records);
 }
@@ -859,7 +899,7 @@ function renderVoiceCommandCentre() {
           ${renderAgentAvatar(alfred, "small")}
           <strong>Alfred</strong>
         </div>
-        <p>${escapeHTML(last.response || last.message || "")}</p>
+        <div class="voice-answer-text">${renderVoiceResponseText(last.response || last.message || "")}</div>
         <div class="voice-answer-actions">
           <button class="secondary-button" id="voice-play-response" type="button">
             ${last.audio?.audioBase64 ? "Play Alfred audio" : "Speak response"}
@@ -895,7 +935,7 @@ function renderVoiceCommandCentre() {
     ? conversations.map((turn) => `
         <article class="voice-history-item">
           <strong>${turn.transcriptLogged ? escapeHTML(turn.transcript || "Voice transcript") : "Transcript logging disabled"}</strong>
-          <span>${escapeHTML(turn.response || "")}</span>
+          <div class="voice-history-response">${renderVoiceResponseText(turn.response || "")}</div>
           <small>${escapeHTML(turn.detectedIntent || "unknown")} · ${escapeHTML(turn.linkedAgent || "alfred")} · ${new Date(turn.createdAt).toLocaleString("en-GB")}</small>
         </article>
       `).join("")
@@ -3816,7 +3856,7 @@ async function replayLastVoiceResponse() {
     }
   }
   const settings = state.voice?.status?.settings || seedData.voice.status.settings;
-  const spoke = await speakWithBrowserFallback(result.response || result.message || "", settings.speechSpeed);
+  const spoke = await speakWithBrowserFallback(result.spokenResponse || result.response || result.message || "", settings.speechSpeed);
   setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio playback is blocked. Check Safari tab sound settings.");
   if (!spoke) showToast("Audio playback was blocked. Check Safari tab sound settings.");
 }
@@ -3834,7 +3874,7 @@ async function playVoiceResult(result) {
     showToast("Safari blocked automatic audio. Use Play Alfred audio if needed.");
   }
   setVoiceUiState("Speaking", result.audio?.errorCode ? "Using local browser speech fallback." : "Speaking locally.");
-  const spoke = await speakWithBrowserFallback(result.response, settings.speechSpeed);
+  const spoke = await speakWithBrowserFallback(result.spokenResponse || result.response, settings.speechSpeed);
   setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio ready. Click Play Alfred audio.");
 }
 

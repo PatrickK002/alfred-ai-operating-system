@@ -394,6 +394,7 @@ export const VOICE_COMMAND_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
     spokenResponse: { type: "string" },
+    displayResponse: { type: "string" },
     routedAgent: { type: "string" },
     specialistContributions: {
       type: "array",
@@ -428,6 +429,7 @@ export const VOICE_COMMAND_OUTPUT_SCHEMA = {
   },
   required: [
     "spokenResponse",
+    "displayResponse",
     "routedAgent",
     "specialistContributions",
     "recommendedNextActions",
@@ -520,7 +522,7 @@ export class AnthropicClient {
   async analyzeVoiceCommand(input) {
     return this.requestStructured({
       analysisType: "voice_command",
-      instruction: "Create a concise spoken response for Patrick's voice command. Alfred is the final voice. Route internally to Sarah, Olivia or Westbridge only as advisory context when useful. Use the deterministic fallback if the data is thin. Mention important risks and decisions, cite internal source references, and keep the response suitable to speak aloud in under one minute. Never imply that any email, calendar, file, finance, property, approval or external system action has been executed.",
+      instruction: "Create a concise response for Patrick's voice command. Alfred is the final voice. Return spokenResponse as a natural spoken script with complete punctuation, short sentences, light pauses, and calm executive phrasing suitable to speak aloud in under one minute. Return displayResponse as ChatGPT-style readable text with short paragraphs, bullets where useful, and clear labels. Route internally to Sarah, Olivia, Liam, James or Westbridge only as advisory context when useful. Use the deterministic fallback if the data is thin. Mention important risks and decisions, cite internal source references, and never imply that any email, calendar, file, finance, property, approval or external system action has been executed.",
       input,
       schema: VOICE_COMMAND_OUTPUT_SCHEMA,
       maxTokens: 1600,

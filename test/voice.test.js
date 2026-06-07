@@ -13,6 +13,7 @@ import {
 } from "../db.js";
 import {
   DeepgramSpeechClient,
+  ElevenLabsSpeechClient,
   VOICE_READ_ONLY_BOUNDARY,
   createVoiceCommandService,
   detectVoiceIntent,
@@ -234,13 +235,27 @@ test("voice routing reaches Sarah, Olivia, Liam, James and Westbridge advisory s
 test("Claude voice analysis receives structured read-only context when available", async () => {
   await withDatabase(async (db) => {
     let receivedInput;
+    let synthesizedText = "";
     const service = serviceFor(db, {
+      textToSpeech: {
+        status: () => ({ provider: "elevenlabs", configured: true, model: "test-tts" }),
+        synthesize: async ({ text }) => {
+          synthesizedText = text;
+          return {
+            audioBase64: Buffer.from("audio").toString("base64"),
+            mimeType: "audio/mpeg",
+            provider: "elevenlabs",
+            model: "test-tts",
+          };
+        },
+      },
       aiReasoning: {
         analyzeVoiceCommand: async (input) => {
           receivedInput = input;
           return {
             analysis: {
-              spokenResponse: "Patrick, the priority is Westminster. No action has been taken.",
+              spokenResponse: "Patrick, Westminster needs your attention today. No action has been taken.",
+              displayResponse: "### Today\n\n- Westminster needs your attention.\n- No action has been taken.",
               routedAgent: "alfred",
               specialistContributions: [],
               recommendedNextActions: [],
@@ -260,10 +275,38 @@ test("Claude voice analysis receives structured read-only context when available
 
     assert.equal(receivedInput.boundaries.voiceExecutionEnabled, false);
     assert.equal(receivedInput.boundaries.externalWritesEnabled, false);
-    assert.equal(result.response, "Patrick, the priority is Westminster. No action has been taken.");
+    assert.equal(result.spokenResponse, "Patrick, Westminster needs your attention today. No action has been taken.");
+    assert.match(result.response, /### Today/);
+    assert.match(result.response, /Westminster needs your attention/);
+    assert.equal(synthesizedText, result.spokenResponse);
     assert.equal(result.audit.model, "fake-claude");
     assert.equal(result.executedActions.length, 0);
   });
+});
+
+test("ElevenLabs synthesis uses natural voice settings and punctuated speech text", async () => {
+  let requestBody;
+  const client = new ElevenLabsSpeechClient({
+    apiKey: "eleven-test-key",
+    voiceId: "alfred-test-voice",
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      };
+    },
+  });
+
+  const result = await client.synthesize({ text: "hello patrick", speed: 1.8 });
+
+  assert.equal(result.provider, "elevenlabs");
+  assert.equal(requestBody.text, "hello patrick.");
+  assert.equal(requestBody.voice_settings.stability, 0.38);
+  assert.equal(requestBody.voice_settings.similarity_boost, 0.82);
+  assert.equal(requestBody.voice_settings.style, 0.28);
+  assert.equal(requestBody.voice_settings.use_speaker_boost, true);
+  assert.equal(requestBody.voice_settings.speed, 1.15);
 });
 
 test("voice cannot bypass approvals or execute external actions", async () => {
@@ -292,10 +335,16 @@ test("frontend voice playback exposes manual replay when autoplay is blocked", (
   const app = readFileSync(join(process.cwd(), "app.js"), "utf8");
   const css = readFileSync(join(process.cwd(), "styles.css"), "utf8");
 
+  assert.match(app, /function renderVoiceResponseText/);
+  assert.match(app, /voice-answer-text/);
+  assert.match(app, /voice-history-response/);
+  assert.match(app, /result\.spokenResponse \|\| result\.response/);
   assert.match(app, /function primeVoicePlayback/);
   assert.match(app, /function playAudioData/);
   assert.match(app, /function replayLastVoiceResponse/);
   assert.match(app, /id="voice-play-response"/);
   assert.match(app, /Safari blocked automatic audio/);
   assert.match(css, /voice-answer-actions/);
+  assert.match(css, /voice-answer-text/);
+  assert.match(css, /voice-history-response/);
 });

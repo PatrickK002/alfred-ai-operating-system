@@ -75,12 +75,47 @@ function compactText(value = "", limit = 280) {
   return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
 }
 
+function ensureFinalPunctuation(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function formatSpokenResponse(value = "", limit = 1200) {
+  const text = compactText(value, limit)
+    .replace(/[`*_#>]/g, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([.!?])(?=\S)/g, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return ensureFinalPunctuation(text);
+}
+
+function formatDisplayResponse(value = "", fallback = "") {
+  const raw = String(value || fallback || "").replace(/\r/g, "").trim();
+  if (!raw) return "";
+  if (/\n|^\s*[-*#]/m.test(raw)) return raw;
+
+  const sentences = formatSpokenResponse(raw, 1400).match(/[^.!?]+[.!?]+(?:["')\]]+)?/g) || [raw];
+  const intro = sentences.shift()?.trim() || "";
+  const bullets = sentences.map((sentence) => sentence.trim()).filter(Boolean);
+  return [
+    intro,
+    bullets.length ? bullets.map((sentence) => `- ${sentence}`).join("\n") : "",
+  ].filter(Boolean).join("\n\n");
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
 function sourceReference(reference, label, category) {
   return { reference: String(reference), label: String(label || reference), category: String(category) };
+}
+
+function labelledVoiceLine(label, value, limit = 160) {
+  return `${label}: ${ensureFinalPunctuation(compactText(value || "No current exception recorded", limit))}`;
 }
 
 function formatMoney(value = 0) {
@@ -261,6 +296,7 @@ export class ElevenLabsSpeechClient {
       error.statusCode = 503;
       throw error;
     }
+    const speechSpeed = Math.min(Math.max(Number(speed) || 1, 0.75), 1.15);
     const response = await this.fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
       method: "POST",
       headers: {
@@ -269,12 +305,14 @@ export class ElevenLabsSpeechClient {
       },
       signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
-        text: compactText(text, 4800),
+        text: formatSpokenResponse(text, 4800),
         model_id: this.model,
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          speed,
+          stability: 0.38,
+          similarity_boost: 0.82,
+          style: 0.28,
+          use_speaker_boost: true,
+          speed: speechSpeed,
         },
       }),
     });
@@ -411,7 +449,7 @@ function summarizeSarah(sarah = {}, projectName = "") {
   const opportunity = opportunities.find((item) => !projectName || String(item.projectName || "").toLowerCase().includes(projectName.toLowerCase())) || opportunities[0];
   const assessment = selected?.healthScore?.explanation || risk?.detail || "Sarah has no critical exception recorded for this project.";
   return {
-    spokenResponse: `Sarah's advisory view on ${projectLabel}: ${compactText(assessment, 180)} ${opportunity ? `Opportunity: ${opportunity.opportunity || opportunity.title}.` : ""} No file, email, calendar or SharePoint action has been taken.`,
+    spokenResponse: `Sarah's advisory view on ${projectLabel}: ${ensureFinalPunctuation(compactText(assessment, 180))} ${opportunity ? `Opportunity: ${opportunity.opportunity || opportunity.title}.` : ""} No file, email, calendar or SharePoint action has been taken.`,
     specialistContributions: [{
       agent: "Sarah",
       assessment: compactText(assessment, 240),
@@ -602,11 +640,11 @@ function summarizeExecutiveBrief(context = {}) {
   return {
     spokenResponse: [
       base.spokenResponse,
-      `Olivia: ${compactText(olivia.specialistContributions[0]?.assessment, 160)}`,
-      `Sarah: ${compactText(sarah.specialistContributions[0]?.assessment, 160)}`,
-      `Liam: ${compactText(liam.specialistContributions[0]?.assessment, 160)}`,
-      `Westbridge: ${compactText(westbridge.specialistContributions[0]?.assessment, 160)}`,
-      `James: ${compactText(james.specialistContributions[0]?.assessment, 160)}`,
+      labelledVoiceLine("Olivia", olivia.specialistContributions[0]?.assessment),
+      labelledVoiceLine("Sarah", sarah.specialistContributions[0]?.assessment),
+      labelledVoiceLine("Liam", liam.specialistContributions[0]?.assessment),
+      labelledVoiceLine("Westbridge", westbridge.specialistContributions[0]?.assessment),
+      labelledVoiceLine("James", james.specialistContributions[0]?.assessment),
       "This is advisory intelligence only.",
     ].filter(Boolean).join(" "),
     specialistContributions: [
@@ -701,8 +739,10 @@ function voiceAnalysisInput(intent, context, fallback) {
 
 function normalizeClaudeVoiceResult(result, fallback) {
   const analysis = result?.analysis || {};
+  const spokenResponse = formatSpokenResponse(analysis.spokenResponse || fallback.spokenResponse, 1200);
   return {
-    spokenResponse: compactText(analysis.spokenResponse || fallback.spokenResponse, 1200),
+    spokenResponse,
+    displayResponse: formatDisplayResponse(analysis.displayResponse || fallback.displayResponse, spokenResponse),
     specialistContributions: asArray(analysis.specialistContributions || fallback.specialistContributions).slice(0, 4),
     sourceReferences: asArray(analysis.sourceRecordReferences || analysis.sourceReferences || fallback.sourceReferences).slice(0, 12),
     confidenceLevel: analysis.confidenceLevel || "medium",
@@ -976,6 +1016,7 @@ export function createVoiceCommandService({
     const ai = await runClaude(intent, context, fallback, userAction);
     const aiFailed = ai?.fallbackErrorCode;
     const voiceAnalysis = aiFailed ? normalizeClaudeVoiceResult(null, fallback) : normalizeClaudeVoiceResult(ai, fallback);
+    const displayResponse = voiceAnalysis.displayResponse || voiceAnalysis.spokenResponse;
     const audio = await synthesize(settings, voiceAnalysis.spokenResponse);
     const dataCategories = [
       "voice_transcript",
@@ -1012,7 +1053,7 @@ export function createVoiceCommandService({
       speaker: "Patrick",
       transcript,
       detectedIntent: intent.intent,
-      response: voiceAnalysis.spokenResponse,
+      response: displayResponse,
       linkedProject: intent.linkedProject,
       linkedBusiness: intent.linkedBusiness,
       linkedAgent: intent.routedAgent,
@@ -1034,7 +1075,8 @@ export function createVoiceCommandService({
       transcript: settings.transcriptLoggingEnabled ? transcript : "",
       transcriptLogged: settings.transcriptLoggingEnabled,
       detectedIntent: intent,
-      response: voiceAnalysis.spokenResponse,
+      response: displayResponse,
+      spokenResponse: voiceAnalysis.spokenResponse,
       specialistContributions: voiceAnalysis.specialistContributions,
       sourceReferences: voiceAnalysis.sourceReferences,
       assumptions: [

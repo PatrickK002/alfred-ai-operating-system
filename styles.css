@@ -987,11 +987,36 @@ h3 {
   gap: 10px;
 }
 
-.voice-answer p {
-  margin: 8px 0;
+.voice-answer-text {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.voice-answer-text h4 {
+  margin: 4px 0 0;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.voice-answer-text p,
+.voice-answer-text li {
+  margin: 0;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.voice-answer-text ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.voice-answer-text li + li {
+  margin-top: 5px;
 }
 
 .voice-answer-actions {
@@ -1041,6 +1066,34 @@ h3 {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.voice-history-response {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+}
+
+.voice-history-response p,
+.voice-history-response li {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.voice-history-response ul {
+  margin: 0;
+  padding-left: 17px;
+}
+
+.voice-history-response h4 {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .voice-specialists small,
