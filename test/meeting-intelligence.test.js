@@ -92,7 +92,7 @@ test("transcript processing extracts follow-ups without storing raw transcript b
   withDatabase((db) => {
     const created = createMeetingRecord(db, westminsterMeeting({ sourceSystem: "alfred_manual" }));
     const processed = processMeetingTranscript(db, created.meeting.id, {
-      transcriptText: transcriptText(),
+      transcriptText: `${transcriptText()} Sales pipeline partnership opportunity.`,
       transcriptReference: "teams-transcript:westminster-1",
       userAction: "test:meeting:transcript-process",
     });
@@ -120,12 +120,12 @@ test("transcript processing extracts follow-ups without storing raw transcript b
   });
 });
 
-test("agent reviews route meeting context to Alfred, Sarah, Olivia, Westbridge and Sentinel", () => {
+test("agent reviews route meeting context to Alfred, Sarah, Olivia, Westbridge, Alex and Sentinel", () => {
   withDatabase((db) => {
     const detail = createMeetingRecord(db, {
       ...westminsterMeeting({
         id: "calendar-agent-routing-1",
-        bodyPreview: "BIM, invoice, property due diligence and confidential access review.",
+        bodyPreview: "BIM, invoice, property due diligence, sales pipeline and confidential access review.",
       }),
       transcriptText: transcriptText(),
       transcriptPermitted: true,
@@ -136,6 +136,7 @@ test("agent reviews route meeting context to Alfred, Sarah, Olivia, Westbridge a
     assert.ok(reviewers.has("sarah"));
     assert.ok(reviewers.has("olivia"));
     assert.ok(reviewers.has("westbridge-property-director"));
+    assert.ok(reviewers.has("alex"));
     assert.ok(reviewers.has("sentinel"));
   });
 });

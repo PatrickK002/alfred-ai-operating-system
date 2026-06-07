@@ -116,6 +116,20 @@ import {
   syncMeetingFollowupsToWorkItems,
   updateWorkItem,
 } from "./monday-operating-system.js";
+import {
+  ALEX_READ_ONLY_BOUNDARY,
+  alexBriefingForDaily,
+  alexExecutiveContext,
+  createGrowthLead,
+  createGrowthOpportunity,
+  generateAlexAnalysis,
+  getAlexDashboard,
+  listAlexAudit,
+  listGrowthLeads,
+  listGrowthOpportunities,
+  recordGrowthFeedback,
+  searchAlexKnowledge,
+} from "./alex.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -405,6 +419,62 @@ async function handleApi(request, response, url) {
       await tryIndexSemanticMemory();
       return sendJson(response, 200, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
     }
+  }
+  if (url.pathname === "/api/alex/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getAlexDashboard(db));
+  }
+  if (url.pathname === "/api/alex/search" && request.method === "GET") {
+    const result = searchAlexKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: ALEX_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/alex/audit" && request.method === "GET") {
+    return sendJson(response, 200, listAlexAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/alex/leads" && request.method === "GET") {
+    return sendJson(response, 200, listGrowthLeads(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/alex/leads" && request.method === "POST") {
+    const record = createGrowthLead(db, {
+      ...(await readJson(request)),
+      userAction: "api:alex:lead:create",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, { ...record, boundary: ALEX_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/alex/opportunities" && request.method === "GET") {
+    return sendJson(response, 200, listGrowthOpportunities(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/alex/opportunities" && request.method === "POST") {
+    const record = createGrowthOpportunity(db, {
+      ...(await readJson(request)),
+      userAction: "api:alex:opportunity:create",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, { ...record, boundary: ALEX_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/alex/feedback" && request.method === "POST") {
+    const record = recordGrowthFeedback(db, {
+      ...(await readJson(request)),
+      userAction: "api:alex:feedback:create",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, { ...record, boundary: ALEX_READ_ONLY_BOUNDARY });
+  }
+  if (url.pathname === "/api/ai/alex/analyse-growth" && request.method === "POST") {
+    const body = await readJson(request);
+    const result = generateAlexAnalysis(db, {
+      ...body,
+      userAction: body.userAction || "api:alex:analyse-growth",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, result);
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
     const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
@@ -726,6 +796,7 @@ async function handleApi(request, response, url) {
         context.propertyBrief?.items?.length ? "westbridge_property" : "",
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
+        context.alexGrowthBrief?.items?.length ? "alex_growth" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -985,6 +1056,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.property = westbridgeBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
   brief.mondayOperating = mondayOperatingBriefForDaily(db);
+  brief.alex = alexBriefingForDaily(db);
   brief.executivePriorities = [
     ...brief.mondayOperating.items.map((item, index) => ({
       ...item,
@@ -992,6 +1064,13 @@ async function generateExecutiveBrief({ save = true } = {}) {
       rank: index + 1,
       category: "monday-os",
       score: item.priority === "Critical" ? 90 : item.priority === "High" ? 86 : 60,
+    })),
+    ...brief.alex.items.map((item, index) => ({
+      ...item,
+      id: `alex-${index + 1}`,
+      rank: index + 1,
+      category: "alex",
+      score: item.priority === "high" ? 80 : 55,
     })),
     ...brief.meetingIntelligence.items.map((item, index) => ({
       ...item,
@@ -1046,6 +1125,10 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.mondayOverdueWork = brief.mondayOperating.metrics.overdueItems;
   brief.summary.mondayDecisionsAwaitingApproval = brief.mondayOperating.metrics.decisionsAwaitingApproval;
   brief.summary.mondayMeetingFollowups = brief.mondayOperating.metrics.meetingFollowups;
+  brief.summary.alexGrowthSignals = brief.alex.items.length;
+  brief.summary.alexActiveLeads = brief.alex.metrics.activeLeads;
+  brief.summary.alexActiveOpportunities = brief.alex.metrics.activeOpportunities;
+  brief.summary.alexWeightedPipeline = brief.alex.metrics.weightedPipeline;
   brief.summary.propertySignals = brief.property.items.length;
   brief.summary.propertyActiveOpportunities = brief.property.metrics.activeOpportunities;
   brief.summary.propertyMonthlyCashflow = brief.property.metrics.monthlyCashflow;
@@ -1120,6 +1203,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Monday Operating System signal",
       category: "monday_operating_system",
     })),
+    ...compactRecords(context.alexGrowthBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `alex:${record.title}`,
+      label: record.title || "Alex growth signal",
+      category: "alex_growth",
+    })),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
       reference: record.sourceReference || `sarah:${record.title}`,
@@ -1189,6 +1277,7 @@ function memoryQueryForBriefing(context) {
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
+    ...(context.alexGrowthBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -1284,6 +1373,14 @@ function buildAiBriefingContext(briefing, body = {}) {
       topWorkloads: compactRecords(briefing.mondayOperating?.topWorkloads || [], ["agentId", "agentName", "activeItems", "blockedItems", "overdueItems", "deliverablesDue", "workloadScore", "healthStatus", "workloadStatus"], 8),
       items: compactRecords(briefing.mondayOperating?.items || [], ["type", "title", "detail", "ownerAgentName", "priority", "status", "sourceReference"], 10),
       boundary: briefing.mondayOperating?.boundary || MONDAY_OPERATING_BOUNDARY,
+    },
+    alexGrowthBrief: {
+      title: briefing.alex?.title || "Alex Growth Brief",
+      summary: briefing.alex?.summary || "",
+      metrics: compactValue(briefing.alex?.metrics || {}),
+      items: compactRecords(briefing.alex?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      context: compactValue(alexExecutiveContext(db)),
+      boundary: briefing.alex?.boundary || ALEX_READ_ONLY_BOUNDARY,
     },
     sarahDigitalConstructionBrief: {
       title: briefing.sarah?.title || "Daily Digital Construction Brief",

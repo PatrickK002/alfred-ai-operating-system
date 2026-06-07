@@ -57,6 +57,19 @@ test("Sentinel CISO metadata exists as planned advisory governance only", () => 
   assert.match(sentinel.plannedCapabilitySummary, /MFA|GitHub|dependencies|incident/i);
 });
 
+test("Alex Growth Director metadata exists as active advisory only", () => {
+  const alex = buildAgentAvatarRenderModel({ id: "alex" });
+  assert.equal(alex.name, "Alex");
+  assert.equal(alex.title, "Growth Director");
+  assert.equal(alex.department, "Growth");
+  assert.equal(alex.statusCategory, "active");
+  assert.equal(alex.reportingLine, "Alfred");
+  assert.ok(alex.expertiseTags.includes("Pipeline"));
+  assert.ok(alex.expertiseTags.includes("Partnerships"));
+  assert.match(alex.currentCapabilitySummary, /pipeline|lead|partnership/i);
+  assert.match(alex.plannedCapabilitySummary, /CRM|outreach|safeguards/i);
+});
+
 test("fallback initials are generated and known long names can override safely", () => {
   assert.equal(agentFallbackInitials("Missing Avatar"), "MA");
   assert.equal(buildAgentAvatarRenderModel({ name: "Missing Image", avatarPath: "" }).fallbackInitials, "MI");
@@ -88,7 +101,9 @@ test("executive team roster renders current and planned agents safely", () => {
   const roster = buildExecutiveTeamRoster([]);
   assert.deepEqual(roster.map((agent) => agent.id), REQUIRED_AGENT_IDS);
   assert.deepEqual(roster.filter((agent) => agent.statusCategory === "active").map((agent) => agent.id), CURRENT_AGENT_IDS);
+  assert.deepEqual(CURRENT_AGENT_IDS, ["alfred", "olivia", "sarah", "westbridge-property-director", "alex"]);
   assert.deepEqual(roster.filter((agent) => agent.statusCategory === "planned").map((agent) => agent.id), PLANNED_AGENT_IDS);
+  assert.deepEqual(PLANNED_AGENT_IDS, ["sentinel", "maya", "ethan", "liam", "james"]);
   assert.equal(roster.every((agent) => agent.avatarPath || agent.fallbackInitials), true);
 });
 
@@ -117,6 +132,7 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="voice-agent-identity"/);
   assert.match(html, /id="finance-agent-identity"/);
   assert.match(html, /id="sarah-agent-identity"/);
+  assert.match(html, /id="alex-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);

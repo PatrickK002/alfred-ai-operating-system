@@ -4,7 +4,7 @@ import {
   buildExecutiveTeamRoster,
   getAgentAvatarProfile,
   isLocalAvatarPath,
-} from "./agent-avatars.js";
+} from "./agent-avatars.js?v=0.4.10";
 
 const STORAGE_KEY = "alfred-core-v1";
 
@@ -356,6 +356,42 @@ const seedData = {
     pipelineStages: ["Lead", "Reviewing", "Due Diligence", "Offer Made", "Negotiating", "Exchanged", "Completed", "Rejected"],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  alex: {
+    profile: {
+      name: "Alex",
+      role: "Growth Director",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      channels: 0,
+      activeLeads: 0,
+      activeOpportunities: 0,
+      partnerships: 0,
+      weightedPipeline: 0,
+      highScoreItems: 0,
+      feedbackForReview: 0,
+      relatedMeetings: 0,
+      openWorkItems: 0,
+    },
+    channels: [],
+    leads: [],
+    opportunities: [],
+    partnerships: [],
+    strategies: [],
+    feedback: [],
+    meetings: [],
+    monday: {
+      workItems: [],
+      deliverables: [],
+      opportunities: [],
+      risks: [],
+      decisions: [],
+      feedback: [],
+      workload: null,
+    },
+    boundary: { advisoryOnly: true, readOnly: true, outboundMessagesEnabled: false, crmWriteEnabled: false },
+  },
   voice: {
     status: {
       settings: {
@@ -507,6 +543,7 @@ async function loadDashboard() {
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
+    state.alex = await apiRequest("/api/alex/dashboard").catch(() => seedData.alex);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1967,6 +2004,70 @@ function sarahList(records, empty, formatter) {
     : `<div class="empty-state project-empty">${empty}</div>`;
 }
 
+function renderAlex() {
+  const alex = state.alex || seedData.alex;
+  const metrics = alex.metrics || {};
+  $("#alex-agent-identity").innerHTML = renderAgentIdentitySummary("alex");
+  $("#alex-metrics").innerHTML = [
+    ["ACTIVE LEADS", metrics.activeLeads],
+    ["OPPORTUNITIES", metrics.activeOpportunities],
+    ["PARTNERSHIPS", metrics.partnerships],
+    ["WEIGHTED PIPELINE", formatMoney(metrics.weightedPipeline || 0)],
+    ["HIGH SCORE", metrics.highScoreItems],
+    ["WORK ITEMS", metrics.openWorkItems],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${typeof value === "number" ? value : escapeHTML(value || "0")}</strong>
+    </article>
+  `).join("");
+
+  $("#alex-leads").innerHTML = sarahList(alex.leads || [], "No growth leads recorded yet.", (lead) => `
+    <strong>${escapeHTML(lead.title || "Growth lead")}</strong>
+    <span>${escapeHTML(lead.organisationName || lead.clientName || "Unknown organisation")} · ${escapeHTML(lead.status || "Research")} · score ${escapeHTML(lead.score || 0)}</span>
+    <small>${escapeHTML(lead.qualificationNotes || lead.recommendedNextStep || "Qualification required. No outbound action has occurred.")}</small>
+  `);
+  $("#alex-opportunities").innerHTML = sarahList(alex.opportunities || [], "No growth opportunities recorded yet.", (opportunity) => `
+    <strong>${escapeHTML(opportunity.title || "Growth opportunity")}</strong>
+    <span>${escapeHTML(opportunity.targetMarket || "Market")} · ${escapeHTML(opportunity.stage || "Identified")} · ${formatMoney(opportunity.estimatedValueGbp || 0)} · ${escapeHTML(opportunity.probability || 0)}%</span>
+    <small>${escapeHTML(opportunity.businessImpact || opportunity.recommendedAction || opportunity.detail || "Review before any external action.")}</small>
+  `);
+  $("#alex-partnerships").innerHTML = sarahList(alex.partnerships || [], "No partnership records yet.", (partnership) => `
+    <strong>${escapeHTML(partnership.partnerName || "Partner")}</strong>
+    <span>${escapeHTML(partnership.partnerType || "partner")} · ${escapeHTML(partnership.status || "Research")} · score ${escapeHTML(partnership.score || 0)}</span>
+    <small>${escapeHTML(partnership.strategicValue || partnership.recommendedNextStep || "Partner fit requires review.")}</small>
+  `);
+  $("#alex-strategies").innerHTML = sarahList(alex.strategies || [], "No growth strategies recorded yet.", (strategy) => `
+    <strong>${escapeHTML(strategy.title || "Growth strategy")}</strong>
+    <span>${escapeHTML(strategy.focusArea || "Growth Strategy")} · ${escapeHTML(strategy.status || "Planned")}</span>
+    <small>${escapeHTML(strategy.summary || strategy.targetOutcome || "Strategy requires review.")}</small>
+  `);
+  const mondayRows = [
+    ...(alex.monday?.workItems || []).map((item) => ({ ...item, label: "Work" })),
+    ...(alex.monday?.opportunities || []).map((item) => ({ ...item, label: "Opportunity" })),
+    ...(alex.monday?.deliverables || []).map((item) => ({ ...item, label: "Deliverable" })),
+    ...(alex.monday?.decisions || []).map((item) => ({ ...item, label: "Decision" })),
+  ].slice(0, 8);
+  $("#alex-workload").innerHTML = `
+    ${alex.monday?.workload ? `<div class="ai-boundary">Workload health: ${escapeHTML(alex.monday.workload.healthStatus)} · score ${escapeHTML(alex.monday.workload.workloadScore)}/100. Monday.com writes remain disabled.</div>` : '<div class="ai-boundary">Alex workload is calculated from internal Alfred records. No Monday.com write sync is enabled.</div>'}
+    ${sarahList(mondayRows, "No Alex workload records yet.", (item) => `
+      <strong>${escapeHTML(item.title || item.outputTitle || "Work item")}</strong>
+      <span>${escapeHTML(item.label)} · ${escapeHTML(item.status || item.recommendationStatus || "Review")} · ${escapeHTML(item.priority || "")}</span>
+      <small>${escapeHTML(item.sourceReference || item.detail || "")}</small>
+    `)}
+  `;
+  const signals = [
+    ...(alex.meetings || []).map((item) => ({ ...item, label: "Meeting", title: item.title, detail: item.summary?.summary || item.projectName || item.clientName })),
+    ...(alex.feedback || []).map((item) => ({ ...item, label: "Feedback", title: item.relatedType || "Growth feedback", detail: item.feedback || item.futureWorkSuggestion })),
+    ...(alex.monday?.feedback || []).map((item) => ({ ...item, label: "Output feedback", title: item.outputTitle, detail: item.lessonLearned || item.futureWorkSuggestion })),
+  ];
+  $("#alex-signals").innerHTML = sarahList(signals, "No growth meetings or feedback linked yet.", (signal) => `
+    <strong>${escapeHTML(signal.title || "Growth signal")}</strong>
+    <span>${escapeHTML(signal.detail || "")}</span>
+    <small>${escapeHTML(signal.label)}</small>
+  `);
+}
+
 function renderSarah() {
   const sarah = state.sarah || seedData.sarah;
   const metrics = sarah.metrics || {};
@@ -2026,6 +2127,7 @@ function renderAll() {
   renderProjectIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
+  renderAlex();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -2044,6 +2146,7 @@ function navigate(view) {
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
+    alex: "Alex",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -2115,9 +2218,10 @@ function renderBriefAgentStatus(agents = []) {
 }
 
 function buildBrief(brief) {
-  const section = (title, records, empty, className = "") => `
+  const section = (title, records, empty, className = "", note = "") => `
     <section class="brief-section ${className}">
       <h4>${title}</h4>
+      ${note ? `<p class="core-message">${escapeHTML(note)}</p>` : ""}
       ${
         records.length
           ? `<ol>${records.map((item) => `
@@ -2152,6 +2256,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.alex?.items?.length ? `${brief.alex.items.length} Alex growth signal(s) found. ` : ""}
       ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -2170,8 +2275,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
-    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. ALEX GROWTH BRIEF", brief.alex?.items || [], "No Alex growth exceptions detected from current records.", "", brief.alex?.summary || "")}
+    ${section("12. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("13. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2227,6 +2333,7 @@ function buildFallbackBrief() {
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
     mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
+    alex: { title: "Alex Growth Brief", items: [], summary: "Backend required for Alex growth briefing.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
     source: "localStorage",
@@ -2950,6 +3057,112 @@ async function askProjectAnalysis(projectId) {
   }
 }
 
+async function refreshAlexDashboard() {
+  if (!backendAvailable) {
+    showToast("Alex requires the backend");
+    return;
+  }
+  state.alex = await apiRequest("/api/alex/dashboard");
+  persist();
+  renderAlex();
+}
+
+function renderAlexAnalysis(result = {}) {
+  return `
+    <div class="ai-boundary">Alex analysed local Alfred growth records only. No outbound messages, emails, CRM updates, Monday writes or external growth actions were executed.</div>
+    <section class="ai-summary">
+      <h3>Growth summary</h3>
+      <p>${escapeHTML(result.executiveSummary || "No Alex analysis returned.")}</p>
+      <small>Confidence: ${escapeHTML(result.confidenceLevel || "unknown")} · ${escapeHTML(result.model || "alex-deterministic-v1")}</small>
+    </section>
+    ${renderList("Pipeline summary", [result.pipelineSummary || {}], (item) => `
+      <strong>${formatMoney(item.weightedPipeline || 0)} weighted pipeline</strong>
+      <span>${escapeHTML(item.activeLeads || 0)} active lead(s), ${escapeHTML(item.activeOpportunities || 0)} opportunity record(s), ${escapeHTML(item.partnerships || 0)} partnership(s).</span>
+    `)}
+    ${renderList("Top priorities", result.topPriorities || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Partnerships", result.partnerships || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Risks", result.risks || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Decisions required", result.decisionsRequired || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Recommended next actions", result.recommendedNextActions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Assumptions", result.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+  `;
+}
+
+async function askAlexAnalysis() {
+  if (!backendAvailable) {
+    showToast("Alex analysis requires the backend");
+    return;
+  }
+  $("#alex-analysis-output").innerHTML = '<div class="ai-loading">Alex is analysing growth context...</div>';
+  try {
+    const result = await apiRequest("/api/ai/alex/analyse-growth", {
+      method: "POST",
+      body: JSON.stringify({ topic: $("#alex-search-query").value.trim() || "group growth pipeline", userAction: "ui:alex:analyse-growth" }),
+    });
+    $("#alex-analysis-output").innerHTML = renderAlexAnalysis(result);
+    state.alex = await apiRequest("/api/alex/dashboard").catch(() => state.alex);
+    renderAlex();
+    showToast("Alex analysis generated");
+  } catch (error) {
+    $("#alex-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function searchAlex(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Alex search requires the backend");
+    return;
+  }
+  const query = $("#alex-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a growth search topic");
+    return;
+  }
+  $("#alex-search-results").innerHTML = '<div class="ai-loading">Searching Alex growth memory...</div>';
+  try {
+    const result = await apiRequest(`/api/alex/search?q=${encodeURIComponent(query)}`);
+    $("#alex-search-results").innerHTML = `
+      ${renderList("Leads", result.leads || [], (lead) => `
+        <strong>${escapeHTML(lead.title)}</strong>
+        <span>${escapeHTML(lead.organisationName || lead.clientName || "")} · ${escapeHTML(lead.status || "")} · score ${escapeHTML(lead.score || 0)}</span>
+        <small>${escapeHTML(lead.qualificationNotes || lead.recommendedNextStep || "")}</small>
+      `)}
+      ${renderList("Opportunities", result.opportunities || [], (opportunity) => `
+        <strong>${escapeHTML(opportunity.title)}</strong>
+        <span>${escapeHTML(opportunity.targetMarket || "")} · ${escapeHTML(opportunity.stage || "")} · score ${escapeHTML(opportunity.score || 0)}</span>
+        <small>${escapeHTML(opportunity.businessImpact || opportunity.recommendedAction || opportunity.detail || "")}</small>
+      `)}
+      ${renderList("Partnerships", result.partnerships || [], (partnership) => `
+        <strong>${escapeHTML(partnership.partnerName)}</strong>
+        <span>${escapeHTML(partnership.partnerType || "")} · ${escapeHTML(partnership.status || "")}</span>
+        <small>${escapeHTML(partnership.strategicValue || partnership.recommendedNextStep || "")}</small>
+      `)}
+      ${renderList("Strategies", result.strategies || [], (strategy) => `
+        <strong>${escapeHTML(strategy.title)}</strong>
+        <span>${escapeHTML(strategy.focusArea || "")} · ${escapeHTML(strategy.status || "")}</span>
+        <small>${escapeHTML(strategy.summary || strategy.targetOutcome || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#alex-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
 async function refreshSarahDashboard() {
   if (!backendAvailable) {
     showToast("Sarah requires the backend");
@@ -3554,6 +3767,9 @@ function runCommand(command) {
   if (normalized.includes("sarah")) {
     navigate("sarah");
     if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
+  } else if (normalized.includes("alex") || normalized.includes("growth") || normalized.includes("sales") || normalized.includes("pipeline") || normalized.includes("partnership") || normalized.includes("lead") || normalized.includes("crm")) {
+    navigate("alex");
+    if (backendAvailable && (normalized.includes("analyse") || normalized.includes("analyze") || normalized.includes("review"))) askAlexAnalysis();
   } else if (normalized.includes("brief")) {
     generateBrief();
   } else if (normalized.includes("risk")) {
@@ -3631,6 +3847,9 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-alex").addEventListener("click", refreshAlexDashboard);
+$("#ask-alex").addEventListener("click", askAlexAnalysis);
+$("#alex-search-form").addEventListener("submit", searchAlex);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });

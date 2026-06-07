@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan, Liam and James as planned future identities
+- Alfred, Olivia, Sarah, the Westbridge Property Director and Alex as active advisory executive identities, plus Sentinel, Maya, Ethan, Liam and James as planned future identities
 
 Database files are excluded from Git.
 
@@ -178,6 +178,15 @@ Health and aggregate workflows:
 | `GET` | `/api/monday-os/sync-status` | Planned Monday sync status; read and write remain disabled |
 | `GET` | `/api/monday-os/search?q=Westminster` | Search internal work records with source references |
 | `GET` | `/api/monday-os/audit` | Metadata-only Monday OS audit events |
+| `GET` | `/api/alex/dashboard` | Alex Growth Director dashboard with leads, opportunities, partnerships, strategies, feedback and Monday OS workload links |
+| `GET` | `/api/alex/search?q=pipeline` | Search Alex growth intelligence across leads, opportunities, partnerships, strategies, feedback and semantic memory |
+| `GET` | `/api/alex/audit` | Metadata-only Alex growth audit events |
+| `GET` | `/api/alex/leads` | List local growth lead records |
+| `POST` | `/api/alex/leads` | Create a local lead-intelligence record only; no outbound message or CRM write |
+| `GET` | `/api/alex/opportunities` | List local growth opportunity records |
+| `POST` | `/api/alex/opportunities` | Create a local opportunity-intelligence record only; no CRM write or external action |
+| `POST` | `/api/alex/feedback` | Capture growth feedback and lessons learned |
+| `POST` | `/api/ai/alex/analyse-growth` | Generate Alex's advisory growth analysis and recommendations without execution |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -406,6 +415,50 @@ The avatar layer is visual identity only. It does not add autonomous agents, wri
 
 Voice persona fields are placeholders for future multi-voice support across Alfred, Olivia, Sarah, Westbridge, Sentinel, Maya, Alex, Ethan, Liam and James. Alfred remains the only primary voice in the current voice phase.
 
+## Alex Growth Director
+
+Alex is Alfred's active advisory Growth Director.
+
+- Name: Alex
+- Title: Growth Director
+- Reports to: Alfred
+- Status: Active advisory
+- Scope: sales pipeline, partnerships, lead generation, opportunity scoring, CRM intelligence and growth strategy
+
+Alex turns local Alfred records into practical growth recommendations. The current implementation stores growth intelligence in SQLite, links Alex work into the internal Monday Operating System, contributes to the executive briefing and creates compact semantic memory source records for Voyage indexing when enabled.
+
+Local data entities:
+
+- `growth_channels`
+- `growth_leads`
+- `growth_opportunities`
+- `growth_partnerships`
+- `growth_strategies`
+- `growth_feedback`
+- `alex_audit_events`
+
+Alex integrates with:
+
+- Executive Briefing through the Alex Growth Brief
+- Monday Operating System through local work items, deliverables, opportunities and feedback
+- Meeting Intelligence through growth-related meeting signals
+- Voyage Memory through compact source records only
+- Agent Avatar metadata and workload health
+
+Security boundary:
+
+- No outbound messages
+- No prospect emails
+- No CRM writes
+- No lead enrichment calls
+- No calendar updates
+- No Microsoft writes
+- No Monday writes
+- No campaign launch
+- No autonomous execution
+
+All Alex analysis is advisory only. Alex may recommend growth priorities, qualification steps, partnership review criteria and internal follow-ups, but Alfred does not contact prospects, update a CRM, create external tasks or execute sales actions in this phase.
+
 ## Sentinel CISO Foundation
 
 Sentinel is a planned executive agent and future Chief Information Security Officer.
@@ -619,7 +672,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, Alex Growth Director, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -637,6 +690,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
+- `alex.js` - Alex Growth Director profile, lead/opportunity scoring, partnership intelligence, advisory growth analysis, feedback, Monday OS links and no-outbound audit boundary
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
