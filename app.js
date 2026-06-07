@@ -475,6 +475,22 @@ const seedData = {
       installReady: true,
     },
     warnings: [],
+    apiKeyReadiness: {
+      groups: [],
+      summary: "Provider key readiness unavailable until the backend is connected.",
+      valuesRedacted: true,
+    },
+    liveReadiness: {
+      goLiveReady: false,
+      summary: "Production preflight unavailable until the backend is connected.",
+      checks: [],
+      securityBoundary: {
+        externalWritesEnabled: false,
+        autonomousExecutionEnabled: false,
+        approvalSafeguardsRequired: true,
+        secretsExposed: false,
+      },
+    },
     security: {
       httpsRequired: false,
       secretsInFrontend: false,
@@ -1103,6 +1119,22 @@ function deploymentStatusLabel(value) {
   return value || "Planned";
 }
 
+function readinessClass(status) {
+  if (["pass", "ready", "Connected", "configured"].includes(status)) return "ok";
+  if (["warn", "partial", "Planned"].includes(status)) return "warning";
+  return "blocked";
+}
+
+function readinessStatusLabel(status) {
+  if (status === "pass") return "Pass";
+  if (status === "warn") return "Warning";
+  if (status === "block") return "Blocker";
+  if (status === "ready") return "Ready";
+  if (status === "partial") return "Partial";
+  if (status === "missing") return "Missing";
+  return status || "Unknown";
+}
+
 function factRows(rows) {
   return rows.map(([label, value]) => `
     <div>
@@ -1119,6 +1151,8 @@ function renderSettings() {
   const pwa = deployment.pwa || seedData.deployment.pwa;
   const integrations = deployment.integrations || {};
   const warnings = deployment.warnings || [];
+  const apiKeyReadiness = deployment.apiKeyReadiness || seedData.deployment.apiKeyReadiness || {};
+  const liveReadiness = deployment.liveReadiness || seedData.deployment.liveReadiness || {};
   const security = deployment.security || seedData.deployment.security;
   const property = state.property || seedData.property;
   const financial = state.financial || seedData.financial;
@@ -1161,6 +1195,17 @@ function renderSettings() {
     </article>
   `).join("");
 
+  const keyGroups = apiKeyReadiness.groups || [];
+  $("#api-key-readiness-list").innerHTML = keyGroups.length
+    ? keyGroups.map((group) => `
+        <article class="${readinessClass(group.status)}">
+          <strong>${escapeHTML(group.label)} · ${escapeHTML(readinessStatusLabel(group.status))}</strong>
+          <span>${escapeHTML(group.missingKeys?.length ? `Missing: ${group.missingKeys.join(", ")}` : "Required keys configured. Values redacted.")}</span>
+          <span>${escapeHTML(group.boundary || "Server-side only.")}</span>
+        </article>
+      `).join("")
+    : `<article class="blocked"><strong>Provider key readiness unavailable</strong><span>Connect the backend to view server-side key assignment status.</span></article>`;
+
   $("#pwa-readiness-facts").innerHTML = factRows([
     ["Manifest", pwa.manifest || "/manifest.json"],
     ["Service worker", pwa.serviceWorker || "/service-worker.js"],
@@ -1168,6 +1213,17 @@ function renderSettings() {
     ["Install targets", (pwa.installTargets || []).join(", ")],
     ["Standalone mode", pwa.displayMode || "standalone"],
   ]);
+
+  const readinessChecks = liveReadiness.checks || [];
+  $("#live-readiness-list").innerHTML = readinessChecks.length
+    ? readinessChecks.map((check) => `
+        <article class="${readinessClass(check.status)}">
+          <strong>${escapeHTML(check.label)} · ${escapeHTML(readinessStatusLabel(check.status))}</strong>
+          <span>${escapeHTML(check.message || "")}</span>
+          ${check.status !== "pass" ? `<span>${escapeHTML(check.action || "")}</span>` : ""}
+        </article>
+      `).join("")
+    : `<article class="blocked"><strong>Production preflight unavailable</strong><span>Connect the backend to view go-live blockers and warnings.</span></article>`;
 
   $("#security-boundary-list").innerHTML = [
     ["HTTPS required in production", security.httpsRequired],

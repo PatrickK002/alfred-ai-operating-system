@@ -34,7 +34,7 @@ import { AnthropicClient } from "./anthropic.js";
 import { createAiReasoningService } from "./ai.js";
 import { VoyageClient } from "./voyage.js";
 import { createSemanticMemoryService } from "./semantic-memory.js";
-import { buildHealthResponse, currentEnvironment, publicAppStatus } from "./app-metadata.js";
+import { buildHealthResponse, buildProductionPreflight, currentEnvironment, publicAppStatus } from "./app-metadata.js";
 import {
   FINANCIAL_READ_ONLY_BOUNDARY,
   generateBoardReport,
@@ -246,6 +246,9 @@ async function handleApi(request, response, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/app/status") {
     return sendJson(response, 200, publicAppStatus());
+  }
+  if (request.method === "GET" && url.pathname === "/api/deployment/preflight") {
+    return sendJson(response, 200, buildProductionPreflight());
   }
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
     syncAnthropicStatus();
