@@ -23,12 +23,14 @@ const SIGNALS = Object.freeze({
   financial: ["revenue", "invoice", "payment", "cashflow", "forecast", "order book", "commercial", "fee", "variation"],
   property: ["property", "portfolio", "acquisition", "due diligence", "tenant", "rent", "yield", "refinance"],
   digitalConstruction: ["bim", "iso 19650", "cobie", "eir", "air", "bep", "midp", "tidp", "gis", "digital twin", "information management"],
+  powerPlatform: ["power platform", "power apps", "dataverse", "power automate", "power bi", "sharepoint", "canvas app", "model-driven", "low-code"],
   security: ["confidential", "security", "permission", "access", "data protection", "gdpr", "sensitive", "identity", "mfa", "secret", "prompt injection"],
 });
 
 const REVIEWERS = Object.freeze([
   { id: "alfred", name: "Alfred", type: "executive", always: true },
   { id: "sarah", name: "Sarah", type: "digital_construction", signals: SIGNALS.digitalConstruction },
+  { id: "liam", name: "Liam", type: "power_platform", signals: SIGNALS.powerPlatform },
   { id: "olivia", name: "Olivia", type: "financial", signals: SIGNALS.financial },
   { id: "westbridge-property-director", name: "Westbridge Property Director", type: "property", signals: SIGNALS.property },
   { id: "sentinel", name: "Sentinel", type: "security", signals: SIGNALS.security },
@@ -217,6 +219,7 @@ function findAssociations(db, meeting) {
     [SIGNALS.security, "sentinel"],
     [SIGNALS.property, "westbridge-property-director"],
     [SIGNALS.financial, "olivia"],
+    [SIGNALS.powerPlatform, "liam"],
     [SIGNALS.digitalConstruction, "sarah"],
   ];
   const relatedAgent = agentSignals.find(([signals]) => hasAny(text, signals).length)?.[1] || (project ? "sarah" : "alfred");
@@ -303,6 +306,7 @@ function mapMeetingRow(row) {
     location: row.location,
     webUrl: row.web_url,
     onlineMeetingUrl: row.online_meeting_url,
+    bodyPreview: row.body_preview,
     clientId: row.client_id,
     clientName: row.client_name,
     projectProfileId: row.project_profile_id,
@@ -370,12 +374,12 @@ function upsertMeeting(db, normalized) {
   db.prepare(`
     INSERT INTO meeting_records (
       source_system, external_id, title, start_datetime, end_datetime, organizer_name, organizer_email,
-      location, web_url, online_meeting_url, client_id, client_name, project_profile_id, project_name,
+      location, web_url, online_meeting_url, body_preview, client_id, client_name, project_profile_id, project_name,
       business_entity_id, company_id, related_agent, transcript_available, transcript_source,
       transcript_reference, transcript_permission, transcript_status, source_reference, confidence_level,
       assumptions, metadata, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(source_system, external_id) DO UPDATE SET
       title = excluded.title,
       start_datetime = excluded.start_datetime,
@@ -385,6 +389,7 @@ function upsertMeeting(db, normalized) {
       location = excluded.location,
       web_url = excluded.web_url,
       online_meeting_url = excluded.online_meeting_url,
+      body_preview = excluded.body_preview,
       client_id = excluded.client_id,
       client_name = excluded.client_name,
       project_profile_id = excluded.project_profile_id,
@@ -413,6 +418,7 @@ function upsertMeeting(db, normalized) {
     normalized.location,
     normalized.webUrl,
     normalized.onlineMeetingUrl,
+    normalized.bodyPreview,
     normalized.clientId,
     normalized.clientName,
     normalized.projectProfileId,
@@ -670,7 +676,7 @@ function removeGeneratedTranscriptFeedback(db, meetingId) {
 
 function createAgentReviews(db, meetingId, text, { metadataOnly = false } = {}) {
   const meeting = getMeeting(db, meetingId);
-  const context = `${meeting.title} ${meeting.clientName} ${meeting.projectName} ${text}`.toLowerCase();
+  const context = `${meeting.title} ${meeting.clientName} ${meeting.projectName} ${meeting.bodyPreview || ""} ${text}`.toLowerCase();
   const insert = db.prepare(`
     INSERT INTO meeting_agent_reviews (
       meeting_id, agent_id, agent_name, review_type, summary, recommendations, concerns,

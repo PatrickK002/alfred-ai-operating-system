@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.7" />
+    <link rel="stylesheet" href="styles.css?v=0.4.8" />
   </head>
   <body>
     <div class="shell">
@@ -51,6 +51,9 @@
           </button>
           <button class="nav-item" data-view="monday">
             <span class="nav-icon">M</span> Monday
+          </button>
+          <button class="nav-item" data-view="liam">
+            <span class="nav-icon">L</span> Liam
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -685,6 +688,101 @@
           </div>
         </section>
 
+        <section class="view" id="liam-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">EXECUTIVE SPECIALIST</p>
+              <h2>Liam Power Platform Director</h2>
+              <p>Advisory-only Power Apps, Dataverse, Power Automate, Power BI, SharePoint and low-code governance intelligence.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="refresh-liam">Refresh Liam</button>
+              <button class="primary-button" id="ask-liam">Ask Liam to analyse</button>
+            </div>
+          </div>
+          <div class="approval-boundary sarah-boundary">
+            <strong>Liam is advisory only</strong>
+            <span>Liam reports to Alfred. He can analyse and recommend, but cannot create Power Apps, run or edit flows, write Dataverse records, publish Power BI reports, create SharePoint sites, change Microsoft tenant settings or execute external actions.</span>
+          </div>
+          <div id="liam-agent-identity" class="specialist-identity-shell"></div>
+          <div class="sarah-metrics" id="liam-metrics"></div>
+          <div class="sarah-grid">
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SOLUTIONS</p>
+                  <h3>Power Platform blueprints</h3>
+                </div>
+              </div>
+              <div id="liam-solutions"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RISKS</p>
+                  <h3>Governance risks</h3>
+                </div>
+              </div>
+              <div id="liam-risks"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DECISIONS</p>
+                  <h3>Patrick decisions</h3>
+                </div>
+              </div>
+              <div id="liam-decisions"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OPPORTUNITIES</p>
+                  <h3>Low-code opportunities</h3>
+                </div>
+              </div>
+              <div id="liam-opportunities"></div>
+            </section>
+          </div>
+          <div class="sarah-grid">
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">WORKLOAD</p>
+                  <h3>Internal Monday OS links</h3>
+                </div>
+              </div>
+              <div id="liam-workload"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">MEMORY</p>
+                  <h3>Search Liam knowledge</h3>
+                </div>
+              </div>
+              <form id="liam-search-form" class="project-search-form">
+                <input id="liam-search-query" placeholder='Try “Dataverse”, “Power BI” or “Council Assurance”' />
+                <button class="secondary-button" type="submit">Search Liam</button>
+              </form>
+              <div id="liam-search-results">
+                <div class="empty-state">Search local Power Platform solutions, risks, decisions, opportunities and memory references.</div>
+              </div>
+            </section>
+          </div>
+          <section class="panel sarah-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">LIAM OUTPUT</p>
+                <h3>Power Platform analysis</h3>
+              </div>
+            </div>
+            <div id="liam-analysis-output" class="sarah-analysis-output">
+              <div class="empty-state">Ask Liam for advisory-only Power Platform analysis. Outputs do not create apps, flows, reports, SharePoint sites or Dataverse records.</div>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="sarah-view">
           <div class="section-intro">
             <div>
@@ -1121,6 +1219,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.6"></script>
+    <script type="module" src="app.js?v=0.4.8"></script>
   </body>
 </html>

@@ -5,6 +5,7 @@ export const CURRENT_AGENT_IDS = Object.freeze([
   "olivia",
   "sarah",
   "westbridge-property-director",
+  "liam",
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
@@ -12,7 +13,6 @@ export const PLANNED_AGENT_IDS = Object.freeze([
   "maya",
   "alex",
   "ethan",
-  "liam",
   "james",
 ]);
 
@@ -196,13 +196,13 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "L",
     accentColor: "#9ee080",
     voicePersonaPlaceholder: "liam-power-platform-voice",
-    expertiseTags: ["Power Apps", "Dataverse", "Automation", "Power BI"],
-    status: "Planned",
-    statusCategory: "planned",
+    expertiseTags: ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint"],
+    status: "Active advisory",
+    statusCategory: "active",
     reportingLine: "Alfred",
-    mission: "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.",
-    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
-    plannedCapabilitySummary: "Future Power Apps, Dataverse, Power Automate, Power BI and low-code delivery intelligence.",
+    mission: "Provide advisory-only Power Platform strategy, governance, app, automation, reporting and low-code delivery intelligence for Digitize.",
+    currentCapabilitySummary: "Local Power Platform dashboard, solution blueprinting, governance risks, opportunities, decisions and Monday OS workload links.",
+    plannedCapabilitySummary: "Future live Microsoft and Power Platform integrations remain read-only first and require approval gates for any writes.",
   },
   {
     id: "james",

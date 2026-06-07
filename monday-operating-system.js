@@ -190,6 +190,10 @@ const SOURCE_DISPLAY_NAMES = Object.freeze({
   financial: "Olivia",
   property: "Westbridge",
   sarah: "Sarah",
+  power_platform_risk: "Liam",
+  power_platform_opportunity: "Liam",
+  power_platform_decision: "Liam",
+  power_platform_solution: "Liam",
   memory: "Memory",
 });
 

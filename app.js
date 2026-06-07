@@ -4,7 +4,7 @@ import {
   buildExecutiveTeamRoster,
   getAgentAvatarProfile,
   isLocalAvatarPath,
-} from "./agent-avatars.js";
+} from "./agent-avatars.js?v=0.4.8";
 
 const STORAGE_KEY = "alfred-core-v1";
 
@@ -311,6 +311,30 @@ const seedData = {
     futureTeamPlaceholders: [],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  liam: {
+    profile: {
+      name: "Liam",
+      role: "Power Platform Director",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      solutions: 0,
+      components: 0,
+      highRisks: 0,
+      openRisks: 0,
+      openOpportunities: 0,
+      decisionsRequired: 0,
+    },
+    solutions: [],
+    components: [],
+    risks: [],
+    opportunities: [],
+    decisions: [],
+    reviews: [],
+    monday: { workItems: [], deliverables: [], risks: [], decisions: [], workload: null },
+    boundary: { advisoryOnly: true, readOnly: true, powerAppsCreationEnabled: false },
+  },
   property: {
     business: {
       id: "westbridge",
@@ -507,6 +531,7 @@ async function loadDashboard() {
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
+    state.liam = await apiRequest("/api/liam/dashboard").catch(() => seedData.liam);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1967,6 +1992,59 @@ function sarahList(records, empty, formatter) {
     : `<div class="empty-state project-empty">${empty}</div>`;
 }
 
+function renderLiam() {
+  const liam = state.liam || seedData.liam;
+  const metrics = liam.metrics || {};
+  $("#liam-agent-identity").innerHTML = renderAgentIdentitySummary("liam");
+  $("#liam-metrics").innerHTML = [
+    ["SOLUTIONS", metrics.solutions],
+    ["COMPONENTS", metrics.components],
+    ["HIGH RISKS", metrics.highRisks],
+    ["OPEN RISKS", metrics.openRisks],
+    ["OPPORTUNITIES", metrics.openOpportunities],
+    ["DECISIONS REQUIRED", metrics.decisionsRequired],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+  $("#liam-solutions").innerHTML = sarahList(liam.solutions || [], "No Power Platform solution blueprints found.", (solution) => `
+    <strong>${escapeHTML(solution.name)}</strong>
+    <span>${escapeHTML(solution.platformArea || "Power Platform")} · ${escapeHTML(solution.status || "Proposed")}</span>
+    <small>${escapeHTML(solution.projectName || solution.clientName || "Digitize")} · ${escapeHTML(solution.confidence || "inferred")}</small>
+  `);
+  $("#liam-risks").innerHTML = sarahList(liam.risks || [], "No Power Platform risks found.", (risk) => `
+    <strong>${escapeHTML(risk.title)}</strong>
+    <span>${escapeHTML(risk.detail)}</span>
+    <small>${escapeHTML(risk.solutionName || "Power Platform")} · ${escapeHTML(risk.severity || "medium")} · ${escapeHTML(risk.recommendedAction || "Review")}</small>
+  `);
+  $("#liam-decisions").innerHTML = sarahList(liam.decisions || [], "No Liam decisions required.", (decision) => `
+    <strong>${escapeHTML(decision.title)}</strong>
+    <span>${escapeHTML(decision.detail)}</span>
+    <small>${decision.approvalRequired ? "Patrick approval required" : "No approval required"} · ${escapeHTML(decision.sourceType || "local")}:${escapeHTML(decision.sourceId || decision.id)}</small>
+  `);
+  $("#liam-opportunities").innerHTML = sarahList(liam.opportunities || [], "No Power Platform opportunities detected yet.", (opportunity) => `
+    <strong>${escapeHTML(opportunity.title)}</strong>
+    <span>${escapeHTML(opportunity.businessValue || opportunity.detail)}</span>
+    <small>${escapeHTML(opportunity.priority || "medium")} · ${escapeHTML(opportunity.recommendedAction || "Assess")}</small>
+  `);
+  const workloadRows = [
+    ...(liam.monday?.workItems || []).map((item) => ({ ...item, label: "Work" })),
+    ...(liam.monday?.risks || []).map((item) => ({ ...item, label: "Risk" })),
+    ...(liam.monday?.decisions || []).map((item) => ({ ...item, label: "Decision" })),
+    ...(liam.monday?.deliverables || []).map((item) => ({ ...item, label: "Deliverable" })),
+  ];
+  $("#liam-workload").innerHTML = `
+    ${liam.monday?.workload ? `<div class="ai-boundary">Workload health: ${escapeHTML(liam.monday.workload.healthStatus)} · score ${escapeHTML(liam.monday.workload.workloadScore)}/100. Monday.com writes remain disabled.</div>` : '<div class="ai-boundary">Liam workload is calculated from internal Alfred records. No Monday.com write sync is enabled.</div>'}
+    ${sarahList(workloadRows, "No Liam workload records yet.", (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail || item.businessImpact || "")}</span>
+      <small>${escapeHTML(item.label)} · ${escapeHTML(item.status || "New")} · ${escapeHTML(item.priority || "")}</small>
+    `)}
+  `;
+}
+
 function renderSarah() {
   const sarah = state.sarah || seedData.sarah;
   const metrics = sarah.metrics || {};
@@ -2026,6 +2104,7 @@ function renderAll() {
   renderProjectIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
+  renderLiam();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -2044,6 +2123,7 @@ function navigate(view) {
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
+    liam: "Liam",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -2097,7 +2177,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>13. AGENT STATUS</h4>
+      <h4>14. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -2152,6 +2232,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.liam?.items?.length ? `${brief.liam.items.length} Liam Power Platform signal(s) found. ` : ""}
       ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -2170,8 +2251,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
-    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. LIAM POWER PLATFORM BRIEF", brief.liam?.items || [], "No Liam Power Platform exceptions detected from current records.")}
+    ${section("12. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("13. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2226,6 +2308,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    liam: { title: "Liam Power Platform Brief", items: [], summary: "Backend required for Liam Power Platform briefing.", metrics: {} },
     mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
@@ -2950,6 +3033,108 @@ async function askProjectAnalysis(projectId) {
   }
 }
 
+async function refreshLiamDashboard() {
+  if (!backendAvailable) {
+    showToast("Liam requires the backend");
+    return;
+  }
+  state.liam = await apiRequest("/api/liam/dashboard");
+  persist();
+  renderLiam();
+}
+
+function renderLiamAnalysis(result = {}) {
+  return `
+    <div class="ai-boundary">Liam analysed local Alfred Power Platform records only. No Power Apps, Power Automate flows, Dataverse records, Power BI reports, SharePoint sites, Microsoft tenant settings or external actions were created or changed.</div>
+    <section class="ai-summary">
+      <h3>Power Platform summary</h3>
+      <p>${escapeHTML(result.executiveSummary || "No Liam analysis returned.")}</p>
+      <small>Confidence: ${escapeHTML(result.confidenceLevel || "medium")} · ${escapeHTML(result.model || "liam-deterministic-v1")}</small>
+    </section>
+    ${renderList("Recommendations", result.recommendations || [], (item) => `
+      <strong>${escapeHTML(item.recommendation)}</strong>
+      <span>${escapeHTML(item.rationale || "")}</span>
+      <small>${item.approvalRequiredBeforeAction ? "Patrick approval required before action" : "Recommendation only"} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Risks", result.risks || [], (item) => `
+      <strong>${escapeHTML(item.risk)}</strong>
+      <span>${escapeHTML(item.impact)}</span>
+      <small>${escapeHTML(item.severity)} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Opportunities", result.opportunities || [], (item) => `
+      <strong>${escapeHTML(item.opportunity)}</strong>
+      <span>${escapeHTML(item.businessValue || "")}</span>
+      <small>${escapeHTML(item.recommendedAction || "")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Decisions required", result.decisionsRequired || [], (item) => `
+      <strong>${escapeHTML(item.decision)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${item.approvalRequired ? "Patrick approval required" : "No approval required"} · ${escapeHTML(item.sourceReference)}</small>
+    `)}
+    ${renderList("Assumptions", result.assumptions || [], (item) => `
+      <strong>${escapeHTML(item)}</strong>
+    `)}
+    ${renderList("Source references", result.sourceRecordReferences || [], (item) => `
+      <strong>${escapeHTML(item.reference)}</strong>
+      <span>${escapeHTML(item.label || "")}</span>
+      <small>${escapeHTML(item.category || "")}</small>
+    `)}
+  `;
+}
+
+async function askLiamAnalysis() {
+  if (!backendAvailable) {
+    showToast("Liam analysis requires the backend");
+    return;
+  }
+  $("#liam-analysis-output").innerHTML = '<div class="ai-loading">Liam is analysing Power Platform context...</div>';
+  try {
+    const result = await apiRequest("/api/ai/liam/analyse-power-platform", {
+      method: "POST",
+      body: JSON.stringify({ userAction: "ui:liam:analyse-power-platform" }),
+    });
+    $("#liam-analysis-output").innerHTML = renderLiamAnalysis(result);
+    state.liam = await apiRequest("/api/liam/dashboard");
+    persist();
+    renderLiam();
+    showToast("Liam analysis generated");
+  } catch (error) {
+    $("#liam-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function searchLiam(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Liam search requires the backend");
+    return;
+  }
+  const query = $("#liam-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a Liam memory search topic");
+    return;
+  }
+  $("#liam-search-results").innerHTML = '<div class="ai-loading">Searching Liam Power Platform memory...</div>';
+  try {
+    const result = await apiRequest(`/api/liam/search?q=${encodeURIComponent(query)}`);
+    $("#liam-search-results").innerHTML = `
+      ${renderList("Liam results", result.results || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.summary)}</span>
+        <small>${escapeHTML(item.type)} · relevance ${escapeHTML(item.relevanceScore)} · ${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || memory.summary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#liam-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
 async function refreshSarahDashboard() {
   if (!backendAvailable) {
     showToast("Sarah requires the backend");
@@ -3554,6 +3739,9 @@ function runCommand(command) {
   if (normalized.includes("sarah")) {
     navigate("sarah");
     if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
+  } else if (normalized.includes("liam") || normalized.includes("power platform") || normalized.includes("power apps") || normalized.includes("dataverse") || normalized.includes("power automate") || normalized.includes("power bi") || normalized.includes("sharepoint")) {
+    navigate("liam");
+    if (backendAvailable && (normalized.includes("analyse") || normalized.includes("analyze") || normalized.includes("review") || normalized.includes("forecast") || normalized.includes("blueprint"))) askLiamAnalysis();
   } else if (normalized.includes("brief")) {
     generateBrief();
   } else if (normalized.includes("risk")) {
@@ -3631,6 +3819,9 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-liam").addEventListener("click", refreshLiamDashboard);
+$("#ask-liam").addEventListener("click", askLiamAnalysis);
+$("#liam-search-form").addEventListener("submit", searchLiam);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });
