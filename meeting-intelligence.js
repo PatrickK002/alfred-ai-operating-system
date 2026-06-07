@@ -22,6 +22,7 @@ const SIGNALS = Object.freeze({
   feedback: ["feedback", "useful", "not useful", "accepted", "rejected", "client said", "client confirmed", "positive", "negative"],
   financial: ["revenue", "invoice", "payment", "cashflow", "forecast", "order book", "commercial", "fee", "variation"],
   property: ["property", "portfolio", "acquisition", "due diligence", "tenant", "rent", "yield", "refinance"],
+  product: ["product", "saas", "mvp", "validation", "roadmap", "pricing", "customer discovery", "assurance platform", "council assurance"],
   digitalConstruction: ["bim", "iso 19650", "cobie", "eir", "air", "bep", "midp", "tidp", "gis", "digital twin", "information management"],
   security: ["confidential", "security", "permission", "access", "data protection", "gdpr", "sensitive", "identity", "mfa", "secret", "prompt injection"],
 });
@@ -31,6 +32,7 @@ const REVIEWERS = Object.freeze([
   { id: "sarah", name: "Sarah", type: "digital_construction", signals: SIGNALS.digitalConstruction },
   { id: "olivia", name: "Olivia", type: "financial", signals: SIGNALS.financial },
   { id: "westbridge-property-director", name: "Westbridge Property Director", type: "property", signals: SIGNALS.property },
+  { id: "james", name: "James", type: "product", signals: SIGNALS.product },
   { id: "sentinel", name: "Sentinel", type: "security", signals: SIGNALS.security },
 ]);
 
@@ -217,6 +219,7 @@ function findAssociations(db, meeting) {
     [SIGNALS.security, "sentinel"],
     [SIGNALS.property, "westbridge-property-director"],
     [SIGNALS.financial, "olivia"],
+    [SIGNALS.product, "james"],
     [SIGNALS.digitalConstruction, "sarah"],
   ];
   const relatedAgent = agentSignals.find(([signals]) => hasAny(text, signals).length)?.[1] || (project ? "sarah" : "alfred");
