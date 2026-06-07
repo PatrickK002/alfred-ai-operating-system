@@ -16,6 +16,7 @@ import { getProjectDashboard, searchProjectKnowledge } from "./project-intellige
 import { getSarahDashboard, SARAH_READ_ONLY_BOUNDARY } from "./sarah.js";
 import { getLiamDashboard, LIAM_READ_ONLY_BOUNDARY } from "./liam.js";
 import { getPropertyDashboardData, PROPERTY_READ_ONLY_BOUNDARY, searchPropertyKnowledge } from "./property.js";
+import { getJamesDashboard, JAMES_READ_ONLY_BOUNDARY } from "./james.js";
 import { AGENT_AVATAR_PROFILES } from "./agent-avatars.js";
 
 export const VOICE_READ_ONLY_BOUNDARY = {
@@ -57,6 +58,8 @@ export const SUPPORTED_VOICE_COMMANDS = [
   "Ask Liam for the Dataverse blueprint",
   "What property opportunities need attention?",
   "What is projected property cashflow?",
+  "Ask James for product validation",
+  "Ask James about the Council Assurance Platform MVP",
 ];
 
 const PROJECT_ALIASES = [
@@ -121,11 +124,20 @@ export function detectVoiceIntent(transcript = "") {
       confidence: "high",
     };
   }
-  if (/westbridge|property|garage|cashflow|pipeline/.test(text) && !/project/.test(text)) {
+  if ((/westbridge|property|garage|cashflow/.test(text) || (/pipeline/.test(text) && /westbridge|property/.test(text))) && !/project/.test(text)) {
     return {
       intent: /cashflow/.test(text) ? "westbridge_cashflow" : "westbridge_property_pipeline",
       routedAgent: "westbridge-property-director",
       linkedBusiness: "westbridge",
+      confidence: "high",
+    };
+  }
+  if (/james|product|saas|mvp|validation|roadmap|pricing|council assurance platform/.test(text)) {
+    return {
+      intent: "james_product_review",
+      routedAgent: "james",
+      linkedBusiness: "product",
+      linkedProject: /council|assurance/.test(text) ? "Council Construction Assurance Platform" : projectName,
       confidence: "high",
     };
   }
@@ -481,6 +493,34 @@ function summarizeLiam(liam = {}) {
   };
 }
 
+function summarizeJames(james = {}) {
+  const metrics = james.metrics || {};
+  const ventures = asArray(james.ventures);
+  const risks = asArray(james.risks);
+  const opportunities = asArray(james.opportunities);
+  const decisions = asArray(james.decisions);
+  const product = ventures[0];
+  const spokenResponse = [
+    `James's advisory Product CEO view: ${metrics.products || ventures.length || 0} product record${(metrics.products || ventures.length || 0) === 1 ? "" : "s"}, ${metrics.openRisks || risks.length || 0} open product risks, and ${metrics.decisionsRequired || decisions.length || 0} decisions requiring review.`,
+    product ? `Current product focus: ${product.name} at ${product.stage || "Discovery"} stage.` : "No product venture is above the line yet.",
+    risks[0] ? `Priority product risk: ${risks[0].title}.` : "",
+    opportunities[0] ? `Opportunity: ${opportunities[0].title}.` : "",
+    "No code, deployment, publication, customer outreach, pricing, payment, contract or external product action was taken.",
+  ].filter(Boolean).join(" ");
+  return {
+    spokenResponse,
+    specialistContributions: [{
+      agent: "James",
+      assessment: `Products ${metrics.products || ventures.length || 0}, open risks ${metrics.openRisks || risks.length || 0}, decisions ${metrics.decisionsRequired || decisions.length || 0}.`,
+      sourceReference: "james:dashboard",
+    }],
+    sourceReferences: [
+      sourceReference("james:dashboard", "James Product CEO dashboard", "james"),
+      ...(risks[0] ? [sourceReference(`product_risk:${risks[0].id}`, risks[0].title, "james")] : []),
+    ],
+  };
+}
+
 function summarizeProject(projectDashboard = {}, projectSearch = {}, projectName = "") {
   const projects = asArray(projectDashboard.projects);
   const match = projects.find((project) => {
@@ -558,6 +598,7 @@ function summarizeExecutiveBrief(context = {}) {
   const sarah = summarizeSarah(context.sarah);
   const liam = summarizeLiam(context.liam);
   const westbridge = summarizeWestbridge(context.property);
+  const james = summarizeJames(context.james);
   return {
     spokenResponse: [
       base.spokenResponse,
@@ -565,6 +606,7 @@ function summarizeExecutiveBrief(context = {}) {
       `Sarah: ${compactText(sarah.specialistContributions[0]?.assessment, 160)}`,
       `Liam: ${compactText(liam.specialistContributions[0]?.assessment, 160)}`,
       `Westbridge: ${compactText(westbridge.specialistContributions[0]?.assessment, 160)}`,
+      `James: ${compactText(james.specialistContributions[0]?.assessment, 160)}`,
       "This is advisory intelligence only.",
     ].filter(Boolean).join(" "),
     specialistContributions: [
@@ -572,6 +614,7 @@ function summarizeExecutiveBrief(context = {}) {
       ...asArray(sarah.specialistContributions),
       ...asArray(liam.specialistContributions),
       ...asArray(westbridge.specialistContributions),
+      ...asArray(james.specialistContributions),
     ],
     sourceReferences: [
       ...asArray(base.sourceReferences),
@@ -579,6 +622,7 @@ function summarizeExecutiveBrief(context = {}) {
       ...asArray(sarah.sourceReferences),
       ...asArray(liam.sourceReferences),
       ...asArray(westbridge.sourceReferences),
+      ...asArray(james.sourceReferences),
     ],
   };
 }
@@ -588,6 +632,7 @@ function deterministicVoiceAnalysis(intent, context) {
   if (intent.intent === "olivia_revenue_forecast") return summarizeOlivia(context.financial);
   if (intent.intent === "liam_power_platform_review") return summarizeLiam(context.liam);
   if (intent.intent === "westbridge_property_pipeline" || intent.intent === "westbridge_cashflow") return summarizeWestbridge(context.property);
+  if (intent.intent === "james_product_review") return summarizeJames(context.james);
   if (intent.intent === "project_status") return summarizeProject(context.projectDashboard, context.projectSearch, intent.linkedProject);
   if (intent.intent === "attention_today") return summarizeAttention(context.brief, context.approvals);
   if (intent.intent === "risk_overview") return summarizeRisks(context.brief);
@@ -595,7 +640,7 @@ function deterministicVoiceAnalysis(intent, context) {
   if (intent.intent === "approval_decisions") return summarizeApprovals(context.approvals);
   if (intent.intent === "executive_briefing") return summarizeExecutiveBrief(context);
   return {
-    spokenResponse: `I heard: ${compactText(context.transcript, 120)}. I can brief you, review projects, ask Sarah, ask Olivia, ask Liam, or review Westbridge property. No action has been taken.`,
+    spokenResponse: `I heard: ${compactText(context.transcript, 120)}. I can brief you, review projects, ask Sarah, ask Olivia, ask Liam, ask James, or review Westbridge property. No action has been taken.`,
     sourceReferences: [],
   };
 }
@@ -633,6 +678,14 @@ function voiceAnalysisInput(intent, context, fallback) {
       opportunities: asArray(context.property?.opportunities).slice(0, 5),
       dueDiligence: asArray(context.property?.dueDiligence).slice(0, 6),
       boundary: PROPERTY_READ_ONLY_BOUNDARY,
+    },
+    james: {
+      metrics: context.james?.metrics || {},
+      ventures: asArray(context.james?.ventures).slice(0, 5),
+      risks: asArray(context.james?.risks).slice(0, 5),
+      opportunities: asArray(context.james?.opportunities).slice(0, 5),
+      decisions: asArray(context.james?.decisions).slice(0, 5),
+      boundary: JAMES_READ_ONLY_BOUNDARY,
     },
     projects: {
       metrics: context.projectDashboard?.metrics || {},
@@ -791,6 +844,7 @@ export function createVoiceCommandService({
       sarah,
       liam,
       property,
+      james,
       projectDashboard,
     ] = await Promise.all([
       getExecutiveBrief(),
@@ -798,6 +852,7 @@ export function createVoiceCommandService({
       Promise.resolve().then(() => getSarahDashboard(db)),
       Promise.resolve().then(() => getLiamDashboard(db)),
       Promise.resolve().then(() => getPropertyDashboardData(db)),
+      Promise.resolve().then(() => getJamesDashboard(db)),
       Promise.resolve().then(() => getProjectDashboard(db)),
     ]);
     const projectSearch = intent.intent === "project_status" || intent.intent === "sarah_project_review"
@@ -814,6 +869,7 @@ export function createVoiceCommandService({
       sarah,
       liam,
       property,
+      james,
       projectDashboard,
       projectSearch,
       propertySearch,
@@ -835,6 +891,7 @@ export function createVoiceCommandService({
           "olivia_financial_context",
           "sarah_project_context",
           "westbridge_property_context",
+          "james_product_context",
           "project_intelligence",
           "approval_queue",
           context.memoryContext?.records?.length ? "semantic_memory" : "",
@@ -928,6 +985,7 @@ export function createVoiceCommandService({
       intent.routedAgent === "olivia" ? "olivia_financial_context" : "",
       intent.routedAgent === "liam" ? "liam_power_platform_context" : "",
       intent.routedAgent === "westbridge-property-director" ? "westbridge_property_context" : "",
+      intent.routedAgent === "james" ? "james_product_context" : "",
       context.memoryContext?.records?.length ? "semantic_memory" : "",
     ].filter(Boolean);
     const audit = recordVoiceAudit(db, {

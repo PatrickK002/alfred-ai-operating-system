@@ -72,6 +72,7 @@ test("voice command intent detection routes supported commands", () => {
   assert.equal(detectVoiceIntent("Ask Olivia for revenue forecast").routedAgent, "olivia");
   assert.equal(detectVoiceIntent("Ask Liam for Power Platform risks").routedAgent, "liam");
   assert.equal(detectVoiceIntent("Ask Westbridge for property pipeline").routedAgent, "westbridge-property-director");
+  assert.equal(detectVoiceIntent("Ask James about the Council Assurance Platform MVP").routedAgent, "james");
   assert.equal(detectVoiceIntent("Show Westminster status").linkedProject, "Westminster");
 });
 
@@ -158,6 +159,7 @@ test("missing ElevenLabs key falls back to text while storing transcript", async
     assert.match(result.response, /Sarah/i);
     assert.match(result.response, /Liam/i);
     assert.match(result.response, /Westbridge/i);
+    assert.match(result.response, /James/i);
     assert.equal(turns[0].transcript, "Alfred, brief me");
     assert.equal(turns[0].transcriptLogged, true);
     assert.equal(turns[0].linkedAgent, "alfred");
@@ -200,26 +202,31 @@ test("voice retention purge deletes only old local conversation turns", async ()
   });
 });
 
-test("voice routing reaches Sarah, Olivia, Liam and Westbridge advisory specialists", async () => {
+test("voice routing reaches Sarah, Olivia, Liam, James and Westbridge advisory specialists", async () => {
   await withDatabase(async (db) => {
     const service = serviceFor(db);
 
     const sarah = await service.handleCommand({ transcript: "Ask Sarah to review Westminster" });
     const olivia = await service.handleCommand({ transcript: "Ask Olivia for revenue forecast" });
     const liam = await service.handleCommand({ transcript: "Ask Liam for Dataverse blueprint" });
+    const james = await service.handleCommand({ transcript: "Ask James about the Council Assurance Platform MVP" });
     const westbridge = await service.handleCommand({ transcript: "Ask Westbridge for property pipeline" });
 
     assert.equal(sarah.detectedIntent.routedAgent, "sarah");
     assert.equal(olivia.detectedIntent.routedAgent, "olivia");
     assert.equal(liam.detectedIntent.routedAgent, "liam");
+    assert.equal(liam.detectedIntent.routedAgent, "liam");
+    assert.equal(james.detectedIntent.routedAgent, "james");
     assert.equal(westbridge.detectedIntent.routedAgent, "westbridge-property-director");
     assert.ok(sarah.specialistContributions.some((item) => item.agent === "Sarah"));
     assert.ok(olivia.specialistContributions.some((item) => item.agent === "Olivia"));
     assert.ok(liam.specialistContributions.some((item) => item.agent === "Liam"));
+    assert.ok(james.specialistContributions.some((item) => item.agent === "James"));
     assert.ok(westbridge.specialistContributions.some((item) => /Westbridge/.test(item.agent)));
     assert.equal(sarah.executionAttempted, false);
     assert.equal(olivia.executionAttempted, false);
     assert.equal(liam.executionAttempted, false);
+    assert.equal(james.executionAttempted, false);
     assert.equal(westbridge.executionAttempted, false);
   });
 });

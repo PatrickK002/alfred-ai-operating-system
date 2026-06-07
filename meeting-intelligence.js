@@ -22,6 +22,7 @@ const SIGNALS = Object.freeze({
   feedback: ["feedback", "useful", "not useful", "accepted", "rejected", "client said", "client confirmed", "positive", "negative"],
   financial: ["revenue", "invoice", "payment", "cashflow", "forecast", "order book", "commercial", "fee", "variation"],
   property: ["property", "portfolio", "acquisition", "due diligence", "tenant", "rent", "yield", "refinance"],
+  product: ["product", "saas", "mvp", "validation", "roadmap", "pricing", "customer discovery", "assurance platform", "council assurance"],
   digitalConstruction: ["bim", "iso 19650", "cobie", "eir", "air", "bep", "midp", "tidp", "gis", "digital twin", "information management"],
   powerPlatform: ["power platform", "power apps", "dataverse", "power automate", "power bi", "sharepoint", "canvas app", "model-driven", "low-code"],
   security: ["confidential", "security", "permission", "access", "data protection", "gdpr", "sensitive", "identity", "mfa", "secret", "prompt injection"],
@@ -33,6 +34,7 @@ const REVIEWERS = Object.freeze([
   { id: "liam", name: "Liam", type: "power_platform", signals: SIGNALS.powerPlatform },
   { id: "olivia", name: "Olivia", type: "financial", signals: SIGNALS.financial },
   { id: "westbridge-property-director", name: "Westbridge Property Director", type: "property", signals: SIGNALS.property },
+  { id: "james", name: "James", type: "product", signals: SIGNALS.product },
   { id: "sentinel", name: "Sentinel", type: "security", signals: SIGNALS.security },
 ]);
 
@@ -220,6 +222,7 @@ function findAssociations(db, meeting) {
     [SIGNALS.property, "westbridge-property-director"],
     [SIGNALS.financial, "olivia"],
     [SIGNALS.powerPlatform, "liam"],
+    [SIGNALS.product, "james"],
     [SIGNALS.digitalConstruction, "sarah"],
   ];
   const relatedAgent = agentSignals.find(([signals]) => hasAny(text, signals).length)?.[1] || (project ? "sarah" : "alfred");

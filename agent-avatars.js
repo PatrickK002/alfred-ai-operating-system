@@ -6,6 +6,7 @@ export const CURRENT_AGENT_IDS = Object.freeze([
   "sarah",
   "westbridge-property-director",
   "liam",
+  "james",
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
@@ -13,7 +14,6 @@ export const PLANNED_AGENT_IDS = Object.freeze([
   "maya",
   "alex",
   "ethan",
-  "james",
 ]);
 
 export const AGENT_AVATAR_PROFILES = Object.freeze([
@@ -215,13 +215,13 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "J",
     accentColor: "#ff9fb2",
     voicePersonaPlaceholder: "james-product-voice",
-    expertiseTags: ["SaaS", "MVP validation", "Product strategy", "Customer discovery"],
-    status: "Planned",
-    statusCategory: "planned",
+    expertiseTags: ["SaaS", "MVP validation", "Product strategy", "Customer discovery", "Roadmap", "Pricing hypotheses"],
+    status: "Active advisory",
+    statusCategory: "active",
     reportingLine: "Alfred",
-    mission: "Future placeholder for SaaS product validation, product strategy and operating discipline.",
-    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
-    plannedCapabilitySummary: "Future SaaS product validation, customer discovery, MVP strategy and product operating reviews.",
+    mission: "Provide advisory-only SaaS product strategy, MVP validation, roadmap, experiment and product risk intelligence for Product Studio.",
+    currentCapabilitySummary: "Local Product Studio dashboard, SaaS validation records, roadmap, product risks, opportunities, decisions and Monday OS workload links.",
+    plannedCapabilitySummary: "Future live product, analytics, CRM or billing integrations must start read-only and remain approval-gated before any execution.",
   },
 ]);
 

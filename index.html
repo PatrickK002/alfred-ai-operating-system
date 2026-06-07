@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.8" />
+    <link rel="stylesheet" href="styles.css?v=0.4.10" />
   </head>
   <body>
     <div class="shell">
@@ -54,6 +54,9 @@
           </button>
           <button class="nav-item" data-view="liam">
             <span class="nav-icon">L</span> Liam
+          </button>
+          <button class="nav-item" data-view="james">
+            <span class="nav-icon">J</span> James
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -783,6 +786,108 @@
           </section>
         </section>
 
+        <section class="view" id="james-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">PRODUCT CEO</p>
+              <h2>James Product Studio</h2>
+              <p>Advisory only SaaS product strategy, MVP validation, roadmap, experiment and product risk intelligence. No product build or launch actions are executed.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="refresh-james">Refresh James</button>
+              <button class="primary-button" id="ask-james">Ask James to analyse</button>
+            </div>
+          </div>
+          <div class="approval-boundary sarah-boundary">
+            <strong>James is advisory only</strong>
+            <span>James reports to Alfred. He can analyse and recommend, but cannot deploy code, publish product assets, contact customers, change pricing, process payments, alter contracts or execute external product actions.</span>
+          </div>
+          <div id="james-agent-identity" class="specialist-identity-shell"></div>
+          <div class="sarah-metrics" id="james-metrics"></div>
+          <div class="sarah-grid">
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PRODUCTS</p>
+                  <h3>SaaS portfolio</h3>
+                </div>
+              </div>
+              <div id="james-products"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ROADMAP</p>
+                  <h3>Validation roadmap</h3>
+                </div>
+              </div>
+              <div id="james-roadmap"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">EXPERIMENTS</p>
+                  <h3>Evidence and validation</h3>
+                </div>
+              </div>
+              <div id="james-experiments"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RISKS</p>
+                  <h3>Product risks</h3>
+                </div>
+              </div>
+              <div id="james-risks"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DECISIONS</p>
+                  <h3>Patrick approval required</h3>
+                </div>
+              </div>
+              <div id="james-decisions"></div>
+            </section>
+            <section class="panel sarah-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OPPORTUNITIES</p>
+                  <h3>Product growth paths</h3>
+                </div>
+              </div>
+              <div id="james-opportunities"></div>
+            </section>
+          </div>
+          <section class="panel sarah-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">PRODUCT MEMORY</p>
+                <h3>Search James product context</h3>
+              </div>
+            </div>
+            <form id="james-search-form" class="project-search-form">
+              <input id="james-search-query" placeholder='Try “Council Assurance Platform”, “MVP”, “pricing” or “validation risk”' />
+              <button class="secondary-button" type="submit">Search James</button>
+            </form>
+            <div id="james-search-results" class="sarah-analysis-output">
+              <div class="empty-state">Search local Product Studio records and Alfred semantic memory. No customer outreach or product action is triggered.</div>
+            </div>
+          </section>
+          <section class="panel sarah-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">JAMES OUTPUT</p>
+                <h3>Product CEO analysis</h3>
+              </div>
+            </div>
+            <div id="james-analysis-output" class="sarah-analysis-output">
+              <div class="empty-state">Ask James to analyse Product Studio. Outputs are recommendations only.</div>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="sarah-view">
           <div class="section-intro">
             <div>
@@ -1219,6 +1324,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.8"></script>
+    <script type="module" src="app.js?v=0.4.10"></script>
   </body>
 </html>

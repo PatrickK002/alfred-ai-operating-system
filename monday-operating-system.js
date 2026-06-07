@@ -194,6 +194,11 @@ const SOURCE_DISPLAY_NAMES = Object.freeze({
   power_platform_opportunity: "Liam",
   power_platform_decision: "Liam",
   power_platform_solution: "Liam",
+  product_risk: "James",
+  product_opportunity: "James",
+  product_decision: "James",
+  product_roadmap_item: "James",
+  product_venture: "James",
   memory: "Memory",
 });
 

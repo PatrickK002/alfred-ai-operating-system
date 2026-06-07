@@ -72,6 +72,20 @@ test("Liam Power Platform metadata exists as active advisory only", () => {
   assert.match(liam.plannedCapabilitySummary, /read-only|approval/i);
 });
 
+test("James Product CEO metadata exists as active advisory only", () => {
+  const james = buildAgentAvatarRenderModel({ id: "james" });
+  assert.equal(james.name, "James");
+  assert.equal(james.title, "Product CEO");
+  assert.equal(james.department, "Product");
+  assert.equal(james.statusCategory, "active");
+  assert.equal(james.reportingLine, "Alfred");
+  assert.equal(james.fallbackInitials, "J");
+  assert.ok(james.expertiseTags.includes("MVP validation"));
+  assert.ok(james.expertiseTags.includes("Roadmap"));
+  assert.match(james.currentCapabilitySummary, /Product Studio dashboard/i);
+  assert.match(james.plannedCapabilitySummary, /approval-gated/i);
+});
+
 test("fallback initials are generated and known long names can override safely", () => {
   assert.equal(agentFallbackInitials("Missing Avatar"), "MA");
   assert.equal(buildAgentAvatarRenderModel({ name: "Missing Image", avatarPath: "" }).fallbackInitials, "MI");
@@ -133,6 +147,7 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="finance-agent-identity"/);
   assert.match(html, /id="sarah-agent-identity"/);
   assert.match(html, /id="liam-agent-identity"/);
+  assert.match(html, /id="james-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);

@@ -49,9 +49,10 @@ test("seeds the Phase 1 operating registry", () => {
     assert.equal(dashboard.agents.find((agent) => agent.id === "westbridge-property-director").role, "AI Investment Director");
     assert.equal(dashboard.agents.find((agent) => agent.id === "ethan").status, "Planned");
     assert.equal(dashboard.agents.find((agent) => agent.id === "liam").status, "Active");
+    assert.equal(dashboard.agents.find((agent) => agent.id === "james").status, "Active");
     assert.equal(dashboard.agents.find((agent) => agent.id === "sentinel").role, "Chief Information Security Officer");
     assert.equal(dashboard.integrations.length, 9);
-    assert.equal(dashboard.operatingItems.length, 11);
+    assert.equal(dashboard.operatingItems.length, 14);
     assert.equal(dashboard.integrations.find((item) => item.id === "anthropic").status, "Planned");
   });
 });
@@ -97,9 +98,9 @@ test("stores memories and generates the brief from database state", () => {
 
     const brief = getMorningBrief(db);
 
-    assert.equal(listResource(db, "memories").length, 5);
-    assert.equal(brief.summary.risks, 4);
-    assert.equal(brief.summary.agentsPlanned, 5);
+    assert.equal(listResource(db, "memories").length, 6);
+    assert.equal(brief.summary.risks, 5);
+    assert.equal(brief.summary.agentsPlanned, 4);
     assert.equal(brief.meetings.available, false);
     assert.match(brief.meetings.message, /not connected/i);
     assert.equal(brief.source, "backend");

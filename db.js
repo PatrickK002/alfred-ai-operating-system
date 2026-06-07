@@ -1431,6 +1431,153 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS product_ventures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'council-assurance-platform' REFERENCES financial_business_entities(id),
+    company_id TEXT NOT NULL DEFAULT 'product' REFERENCES companies(id),
+    name TEXT NOT NULL,
+    product_type TEXT NOT NULL DEFAULT 'SaaS',
+    stage TEXT NOT NULL DEFAULT 'Discovery',
+    status TEXT NOT NULL DEFAULT 'active',
+    target_customer TEXT NOT NULL DEFAULT '',
+    problem_statement TEXT NOT NULL DEFAULT '',
+    value_proposition TEXT NOT NULL DEFAULT '',
+    revenue_model TEXT NOT NULL DEFAULT '',
+    owner_agent_id TEXT NOT NULL DEFAULT 'james',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS product_features (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER NOT NULL REFERENCES product_ventures(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    user_value TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL DEFAULT 'Idea',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    evidence_level TEXT NOT NULL DEFAULT 'assumption',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_experiments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER NOT NULL REFERENCES product_ventures(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    hypothesis TEXT NOT NULL DEFAULT '',
+    method TEXT NOT NULL DEFAULT '',
+    success_metric TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'planned',
+    result_summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_roadmap_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER NOT NULL REFERENCES product_ventures(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    theme TEXT NOT NULL DEFAULT '',
+    quarter TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'planned',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER REFERENCES product_ventures(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low', 'medium', 'high')),
+    status TEXT NOT NULL DEFAULT 'open',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER REFERENCES product_ventures(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    business_value TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER REFERENCES product_ventures(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    approval_required INTEGER NOT NULL DEFAULT 1 CHECK(approval_required IN (0, 1)),
+    decision_required_by TEXT NOT NULL DEFAULT 'Patrick King',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'assumption' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_venture_id INTEGER REFERENCES product_ventures(id) ON DELETE SET NULL,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_action TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT 'james-deterministic-v1',
+    executive_summary TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '[]',
+    risks TEXT NOT NULL DEFAULT '[]',
+    opportunities TEXT NOT NULL DEFAULT '[]',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    confidence_level TEXT NOT NULL DEFAULT 'low',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS james_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    product_venture_id INTEGER REFERENCES product_ventures(id) ON DELETE SET NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS power_platform_solutions_status
   ON power_platform_solutions(status, platform_area);
 
@@ -1448,6 +1595,24 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS liam_audit_events_created
   ON liam_audit_events(created_at);
+
+  CREATE INDEX IF NOT EXISTS product_ventures_stage
+  ON product_ventures(stage, status);
+
+  CREATE INDEX IF NOT EXISTS product_features_venture
+  ON product_features(product_venture_id, status, priority);
+
+  CREATE INDEX IF NOT EXISTS product_risks_status
+  ON product_risks(status, severity);
+
+  CREATE INDEX IF NOT EXISTS product_opportunities_status
+  ON product_opportunities(status, priority);
+
+  CREATE INDEX IF NOT EXISTS product_decisions_status
+  ON product_decisions(status, approval_required, priority);
+
+  CREATE INDEX IF NOT EXISTS james_audit_events_created
+  ON james_audit_events(created_at);
 
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
@@ -2068,6 +2233,76 @@ const PROJECT_TAG_SEEDS = [
   ["Council Construction Assurance Platform", "InformationManagement", "Information Management", "confirmed"],
 ];
 
+const PRODUCT_VENTURE_SEEDS = [
+  {
+    name: "Council Construction Assurance Platform",
+    businessEntityId: "council-assurance-platform",
+    companyId: "product",
+    productType: "B2B SaaS",
+    stage: "Discovery",
+    status: "active",
+    targetCustomer: "Local authorities and public-sector construction assurance teams",
+    problemStatement: "Councils need a clearer way to evidence construction assurance, project information quality and delivery risk across capital programmes.",
+    valueProposition: "A council-focused assurance platform that turns project records, risks, evidence and board-level reporting into a repeatable operating system.",
+    revenueModel: "Service-led validation first, then subscription SaaS when the problem and workflow are proven.",
+    confidence: "inferred",
+    sourceId: "seed:james-product-council-assurance",
+  },
+  {
+    name: "Future SaaS Products Portfolio",
+    businessEntityId: "future-saas-products",
+    companyId: "product",
+    productType: "Portfolio",
+    stage: "Ideation",
+    status: "planned",
+    targetCustomer: "Niche B2B operators with repeatable compliance, reporting or assurance workflows",
+    problemStatement: "Alfred needs a disciplined way to compare future SaaS ideas without chasing every interesting product concept.",
+    valueProposition: "A scored product portfolio pipeline for prioritising validation effort, founder attention and capital allocation.",
+    revenueModel: "Validated SaaS and productised-service experiments.",
+    confidence: "assumption",
+    sourceId: "seed:james-product-future-saas",
+  },
+];
+
+const PRODUCT_FEATURE_SEEDS = [
+  ["Council Construction Assurance Platform", "Assurance evidence register", "Structured record of assurance evidence, risks, owners and confidence labels.", "Helps council teams see what evidence exists, what is missing and what requires escalation.", "Discovery", "high", "open", "inferred", "seed:james-feature-evidence-register"],
+  ["Council Construction Assurance Platform", "Project risk and decision board", "Board-level product view of open construction assurance risks and decisions.", "Makes project exceptions easier to prioritise and review.", "Discovery", "high", "open", "inferred", "seed:james-feature-risk-decision-board"],
+  ["Council Construction Assurance Platform", "Client reporting pack", "Export-ready management reporting concept for council assurance updates.", "Supports repeatable executive reporting without pretending reports have been published.", "Idea", "medium", "open", "assumption", "seed:james-feature-reporting-pack"],
+  ["Future SaaS Products Portfolio", "Product scoring matrix", "Score ideas by pain, reachable buyer, workflow frequency, willingness to pay and delivery effort.", "Protects Patrick's attention from weak SaaS concepts.", "Idea", "medium", "planned", "assumption", "seed:james-feature-scoring-matrix"],
+];
+
+const PRODUCT_EXPERIMENT_SEEDS = [
+  ["Council Construction Assurance Platform", "Council problem interview pack", "If three council or public-sector assurance stakeholders confirm the same painful workflow, the product thesis is worth deeper validation.", "Interview script and evidence log only. No outreach is sent by Alfred.", "Three qualified interviews with repeated problem language.", "planned", "seed:james-experiment-council-interviews"],
+  ["Council Construction Assurance Platform", "Clickable assurance dashboard prototype", "If Patrick can explain the product workflow from a simple prototype, the MVP scope can be narrowed before any build decision.", "Prototype brief and validation checklist only. No product is published.", "Clear MVP user journey and top three screens agreed.", "planned", "seed:james-experiment-prototype"],
+  ["Future SaaS Products Portfolio", "Idea kill criteria review", "If a product concept lacks a specific buyer, urgent pain and repeatable workflow, it should be parked quickly.", "Portfolio scoring review only.", "Each idea has proceed / park / reject recommendation.", "planned", "seed:james-experiment-kill-criteria"],
+];
+
+const PRODUCT_ROADMAP_SEEDS = [
+  ["Council Construction Assurance Platform", "Define ICP and painful workflow", "Clarify the first ideal customer profile, triggering workflow and economic buyer.", "Validation", "Q3", "high", "planned", "seed:james-roadmap-icp"],
+  ["Council Construction Assurance Platform", "Draft MVP scope and non-goals", "Define first release scope, excluded features and evidence required before build.", "MVP", "Q3", "high", "planned", "seed:james-roadmap-mvp-scope"],
+  ["Council Construction Assurance Platform", "Pricing hypothesis", "Create pricing assumptions for service-led validation and eventual SaaS packaging.", "Commercial", "Q4", "medium", "planned", "seed:james-roadmap-pricing"],
+  ["Future SaaS Products Portfolio", "Create repeatable product validation scorecard", "Standardise how Alfred compares SaaS concepts before resources are committed.", "Portfolio", "Q3", "medium", "planned", "seed:james-roadmap-scorecard"],
+];
+
+const PRODUCT_RISK_SEEDS = [
+  ["Council Construction Assurance Platform", "Problem not validated with buyers", "The Council Construction Assurance Platform concept must not move into build mode until buyer pain, budget owner and workflow frequency are validated.", "high", "open", "Run problem interviews and capture evidence before approving build.", "inferred", "seed:james-risk-validation"],
+  ["Council Construction Assurance Platform", "MVP scope creep", "The product could become too broad if assurance, BIM, reporting, workflow and analytics are all treated as first-release requirements.", "high", "open", "Define MVP non-goals and a single first workflow.", "assumption", "seed:james-risk-scope-creep"],
+  ["Council Construction Assurance Platform", "Product build before commercial proof", "Engineering effort should not begin before pricing hypothesis, buyer urgency and route-to-market assumptions are tested.", "medium", "open", "Produce a validation memo before build approval.", "assumption", "seed:james-risk-commercial-proof"],
+  ["Future SaaS Products Portfolio", "Founder attention dilution", "Too many product ideas could dilute Patrick's focus and reduce execution quality.", "medium", "open", "Use scorecard and kill criteria before adding new product concepts.", "assumption", "seed:james-risk-attention"],
+];
+
+const PRODUCT_OPPORTUNITY_SEEDS = [
+  ["Council Construction Assurance Platform", "Turn Digitize delivery knowledge into SaaS", "Digitize has specialist assurance knowledge that may become a repeatable council product if the workflow is validated.", "Potential to create recurring product revenue from a domain Patrick already understands.", "high", "open", "Create validation pack and first buyer conversation questions.", "inferred", "seed:james-opportunity-digitize-knowledge"],
+  ["Council Construction Assurance Platform", "Service-led product validation", "Use consultancy-style discovery to validate product workflow before committing to software build.", "Reduces wasted build risk while creating commercial learning.", "high", "open", "Define a paid discovery or pilot offer for the assurance workflow.", "assumption", "seed:james-opportunity-service-led"],
+  ["Future SaaS Products Portfolio", "Reusable Alfred product operating system", "James can standardise idea scoring, roadmap discipline and validation reporting for future SaaS products.", "Creates a repeatable product company playbook.", "medium", "open", "Build the scorecard and board report first.", "assumption", "seed:james-opportunity-product-os"],
+];
+
+const PRODUCT_DECISION_SEEDS = [
+  ["Council Construction Assurance Platform", "Approve Product Studio validation plan", "Patrick should approve the first James validation plan before any product build, outreach, publication or spend.", "high", "open", 1, "Patrick King", "inferred", "seed:james-decision-validation-plan"],
+  ["Council Construction Assurance Platform", "Choose MVP first workflow", "Decide whether the first product workflow is evidence register, risk/decision board or council reporting pack.", "high", "open", 1, "Patrick King", "assumption", "seed:james-decision-mvp-workflow"],
+  ["Council Construction Assurance Platform", "Confirm no-build boundary for James", "James may analyse and recommend only. Any future code, deployment, publication, customer communication or commercial action requires explicit approval.", "high", "open", 1, "Patrick King", "confirmed", "seed:james-decision-no-build-boundary"],
+];
+
 const AGENT_SEEDS = [
   ["alfred", "Alfred", "AI Chief of Staff / Operating Partner", null, "Executive Operations", "Protect Patrick's time, coordinate the executive team and keep recommendations factual, sourced and approval-led. Advisory only; no autonomous execution.", ["Executive Briefings", "Prioritisation", "Risk Review", "Decision Support"], "Active"],
   ["olivia", "Olivia", "Chief Financial Officer", null, "Finance", "Act as Group CFO across Alfred-managed businesses, producing read-only revenue, forecast, debtor, cashflow, KPI and board-reporting intelligence.", ["Forecasting", "Order Book", "Debtors", "Board Reporting"], "Active"],
@@ -2078,7 +2313,7 @@ const AGENT_SEEDS = [
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
   ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Executive Specialist reporting to Alfred. Provides advisory-only Power Apps, Dataverse, Power Automate, Power BI, SharePoint and low-code delivery intelligence for Digitize. No app creation, flow creation, tenant changes, SharePoint writes, Dataverse writes, report publishing or external execution.", ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint", "Low-code Governance"], "Active"],
-  ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
+  ["james", "James", "Product CEO", "product", "Product", "Executive Specialist reporting to Alfred. Provides advisory-only SaaS product strategy, MVP validation, roadmap, experiment, risk and product-portfolio intelligence for Product Studio. No code deployment, product publication, customer outreach, pricing changes, payments, contract changes or external execution.", ["SaaS Strategy", "MVP Validation", "Product Roadmap", "Customer Discovery", "Pricing Hypotheses", "Product Risk"], "Active"],
 ];
 
 const SARAH_TEAM_PLACEHOLDER_SEEDS = [
@@ -2462,6 +2697,7 @@ export function seedDatabase(db) {
     updateIntegrationDefinitions(db);
     updateLiamPowerPlatformSeeds(db);
     updateWestbridgePropertySeeds(db);
+    updateJamesProductSeeds(db);
     return;
   }
 
@@ -2525,6 +2761,7 @@ export function seedDatabase(db) {
     updateIntegrationDefinitions(db);
     updateLiamPowerPlatformSeeds(db);
     updateWestbridgePropertySeeds(db);
+    updateJamesProductSeeds(db);
 
     db.exec("COMMIT");
   } catch (error) {
@@ -2941,6 +3178,188 @@ function updateProjectProfiles(db) {
       seed.clientName,
       seed.projectName,
     );
+  }
+}
+
+function updateJamesProductSeeds(db) {
+  insertOperatingRecordIfMissing(
+    db,
+    "opportunities",
+    "product",
+    "Validate Council Assurance Platform MVP",
+    "James should turn the Council Construction Assurance Platform concept into a validation plan before any product build, publication, customer outreach or commercial commitment.",
+    "high",
+    "This quarter",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "risks",
+    "product",
+    "Product execution boundary",
+    "James may analyse product strategy and recommend next steps only. Alfred cannot deploy code, publish product assets, contact customers, change pricing, process payments or execute product actions.",
+    "high",
+    "Always",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "decisions",
+    "product",
+    "Approve Product Studio validation plan",
+    "Approve the first written validation plan for Council Construction Assurance Platform before any build or market action.",
+    "high",
+    "Before build",
+  );
+
+  db.prepare(`
+    INSERT INTO memories (type, title, detail, company_id, recorded_at)
+    SELECT 'strategy', 'James Product CEO operating principle',
+      'James is Alfred''s Product CEO for Product Studio. James may analyse SaaS ideas, validation plans, roadmaps, risks and opportunities. James cannot deploy code, publish product assets, contact customers, alter pricing, process payments, sign contracts or execute external product actions.',
+      'product', '2026-06-07'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM memories
+      WHERE company_id = 'product' AND title = 'James Product CEO operating principle'
+    )
+  `).run();
+
+  const insertVenture = db.prepare(`
+    INSERT OR IGNORE INTO product_ventures (
+      business_entity_id, company_id, name, product_type, stage, status,
+      target_customer, problem_statement, value_proposition, revenue_model,
+      owner_agent_id, confidence, source_type, source_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'james', ?, 'seed', ?)
+  `);
+  const updateVenture = db.prepare(`
+    UPDATE product_ventures
+    SET business_entity_id = ?, product_type = ?, stage = ?, status = ?,
+        target_customer = ?, problem_statement = ?, value_proposition = ?,
+        revenue_model = ?, owner_agent_id = 'james', confidence = ?,
+        source_type = 'seed', source_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE company_id = ? AND name = ?
+  `);
+  for (const venture of PRODUCT_VENTURE_SEEDS) {
+    insertVenture.run(
+      venture.businessEntityId,
+      venture.companyId,
+      venture.name,
+      venture.productType,
+      venture.stage,
+      venture.status,
+      venture.targetCustomer,
+      venture.problemStatement,
+      venture.valueProposition,
+      venture.revenueModel,
+      venture.confidence,
+      venture.sourceId,
+    );
+    updateVenture.run(
+      venture.businessEntityId,
+      venture.productType,
+      venture.stage,
+      venture.status,
+      venture.targetCustomer,
+      venture.problemStatement,
+      venture.valueProposition,
+      venture.revenueModel,
+      venture.confidence,
+      venture.sourceId,
+      venture.companyId,
+      venture.name,
+    );
+  }
+
+  const ventureId = (name) => db.prepare(`
+    SELECT id FROM product_ventures WHERE name = ? LIMIT 1
+  `).get(name)?.id;
+
+  const insertFeature = db.prepare(`
+    INSERT INTO product_features (
+      product_venture_id, title, detail, user_value, stage, priority,
+      status, evidence_level, source_type, source_id
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_features WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_FEATURE_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertFeature.run(id, ...seed.slice(1), id, seed[8]);
+  }
+
+  const insertExperiment = db.prepare(`
+    INSERT INTO product_experiments (
+      product_venture_id, title, hypothesis, method, success_metric,
+      status, source_type, source_id
+    )
+    SELECT ?, ?, ?, ?, ?, ?, 'seed', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_experiments WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_EXPERIMENT_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertExperiment.run(id, ...seed.slice(1), id, seed[6]);
+  }
+
+  const insertRoadmap = db.prepare(`
+    INSERT INTO product_roadmap_items (
+      product_venture_id, title, detail, theme, quarter, priority,
+      status, source_type, source_id
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, 'seed', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_roadmap_items WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_ROADMAP_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertRoadmap.run(id, ...seed.slice(1), id, seed[7]);
+  }
+
+  const insertRisk = db.prepare(`
+    INSERT INTO product_risks (
+      product_venture_id, title, detail, severity, status, recommended_action,
+      source_type, source_id, confidence
+    )
+    SELECT ?, ?, ?, ?, ?, ?, 'seed', ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_risks WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_RISK_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertRisk.run(id, seed[1], seed[2], seed[3], seed[4], seed[5], seed[7], seed[6], id, seed[7]);
+  }
+
+  const insertOpportunity = db.prepare(`
+    INSERT INTO product_opportunities (
+      product_venture_id, title, detail, business_value, priority, status,
+      recommended_action, source_type, source_id, confidence
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_opportunities WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_OPPORTUNITY_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertOpportunity.run(id, seed[1], seed[2], seed[3], seed[4], seed[5], seed[6], seed[8], seed[7], id, seed[8]);
+  }
+
+  const insertDecision = db.prepare(`
+    INSERT INTO product_decisions (
+      product_venture_id, title, detail, priority, status, approval_required,
+      decision_required_by, source_type, source_id, confidence
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM product_decisions WHERE product_venture_id = ? AND source_id = ?
+    )
+  `);
+  for (const seed of PRODUCT_DECISION_SEEDS) {
+    const id = ventureId(seed[0]);
+    if (id) insertDecision.run(id, seed[1], seed[2], seed[3], seed[4], seed[5], seed[6], seed[8], seed[7], id, seed[8]);
   }
 }
 
@@ -4513,6 +4932,97 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
       title: `${row.source_type}:${row.source_id}`,
       summary: row.summary,
       sensitivityCategory: row.sensitivity_category || "local_sensitive_business_data",
+    }));
+  }
+
+  const productVentures = db.prepare(`
+    SELECT v.*, c.short_name AS company_short_name, c.name AS company_name
+    FROM product_ventures v
+    LEFT JOIN companies c ON c.id = v.company_id
+    ORDER BY v.updated_at DESC, v.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of productVentures) {
+    records.push(semanticRecord({
+      sourceType: "product_venture",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.name,
+      summary: [
+        `Product venture: ${row.name}.`,
+        `Company: ${companyLabel(row)}.`,
+        `Business entity: ${row.business_entity_id}.`,
+        `Type: ${row.product_type}. Stage: ${row.stage}. Status: ${row.status}.`,
+        row.target_customer ? `Target customer: ${row.target_customer}.` : "",
+        row.problem_statement ? `Problem: ${row.problem_statement}.` : "",
+        row.value_proposition ? `Value proposition: ${row.value_proposition}.` : "",
+        row.revenue_model ? `Revenue model: ${row.revenue_model}.` : "",
+        `Confidence: ${row.confidence}.`,
+        "James Product CEO record is advisory only; no code, launch, outreach or external product action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const productRecords = [
+    ["product_feature", "product_features", "Product feature", "title", "detail", "user_value"],
+    ["product_experiment", "product_experiments", "Product experiment", "title", "hypothesis", "success_metric"],
+    ["product_roadmap_item", "product_roadmap_items", "Product roadmap item", "title", "detail", "theme"],
+    ["product_risk", "product_risks", "Product risk", "title", "detail", "recommended_action"],
+    ["product_opportunity", "product_opportunities", "Product opportunity", "title", "detail", "business_value"],
+    ["product_decision", "product_decisions", "Product decision", "title", "detail", "decision_required_by"],
+  ];
+  for (const [sourceType, table, label, titleField, detailField, supportingField] of productRecords) {
+    const rows = db.prepare(`
+      SELECT r.*, v.name AS venture_name, v.stage AS venture_stage, v.business_entity_id
+      FROM ${table} r
+      LEFT JOIN product_ventures v ON v.id = r.product_venture_id
+      ORDER BY r.updated_at DESC, r.id DESC
+      LIMIT 300
+    `).all();
+    for (const row of rows) {
+      records.push(semanticRecord({
+        sourceType,
+        sourceId: row.id,
+        sourceCreatedAt: row.updated_at || row.created_at,
+        title: row[titleField],
+        summary: [
+          `${label}: ${row[titleField]}.`,
+          row.venture_name ? `Product: ${row.venture_name}.` : "",
+          row.business_entity_id ? `Business entity: ${row.business_entity_id}.` : "",
+          row.venture_stage ? `Product stage: ${row.venture_stage}.` : "",
+          row.stage ? `Stage: ${row.stage}.` : "",
+          row.status ? `Status: ${row.status}.` : "",
+          row.priority ? `Priority: ${row.priority}.` : "",
+          row.severity ? `Severity: ${row.severity}.` : "",
+          row.approval_required ? "Patrick approval required." : "",
+          row[detailField],
+          row[supportingField],
+          row.source_id ? `Source: ${row.source_type}:${row.source_id}.` : "",
+          "Recommendation only; James did not deploy, publish, contact customers, change pricing, process payments or execute external product actions.",
+        ].filter(Boolean).join(" "),
+      }));
+    }
+  }
+
+  const productReviews = db.prepare(`
+    SELECT r.*, v.name AS venture_name
+    FROM product_reviews r
+    LEFT JOIN product_ventures v ON v.id = r.product_venture_id
+    ORDER BY r.requested_at DESC, r.id DESC
+    LIMIT 100
+  `).all();
+  for (const row of productReviews) {
+    records.push(semanticRecord({
+      sourceType: "product_review",
+      sourceId: row.id,
+      sourceCreatedAt: row.requested_at || row.created_at,
+      title: `${row.venture_name || "Product"} review`,
+      summary: [
+        `James product review: ${row.venture_name || "Product portfolio"}.`,
+        row.executive_summary,
+        `Confidence: ${row.confidence_level}.`,
+        "Review output was saved locally only; no product action was executed.",
+      ].filter(Boolean).join(" "),
     }));
   }
 
