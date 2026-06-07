@@ -69,6 +69,12 @@ ENFORCE_HTTPS=true
 
 Set real API keys and publish profiles only in Azure/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
 
+Live setup handoff:
+
+- [docs/live/environment-setup.md](docs/live/environment-setup.md)
+- [deploy/azure-app-settings.testing.example.json](deploy/azure-app-settings.testing.example.json)
+- [deploy/azure-app-settings.production.example.json](deploy/azure-app-settings.production.example.json)
+
 Production preflight:
 
 ```bash
