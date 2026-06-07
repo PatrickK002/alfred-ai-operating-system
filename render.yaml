@@ -2,6 +2,7 @@ services:
   - type: web
     runtime: node
     name: alfred-ai-operating-system
+    repo: https://github.com/PatrickK002/alfred-ai-operating-system
     region: frankfurt
     plan: starter
     branch: develop

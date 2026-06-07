@@ -12,6 +12,7 @@ test("Render Blueprint exists with Node service and persistent SQLite disk", () 
 
   assert.match(blueprint, /runtime:\s*node/);
   assert.match(blueprint, /name:\s*alfred-ai-operating-system/);
+  assert.match(blueprint, /repo:\s*https:\/\/github\.com\/PatrickK002\/alfred-ai-operating-system/);
   assert.match(blueprint, /region:\s*frankfurt/);
   assert.match(blueprint, /plan:\s*starter/);
   assert.match(blueprint, /healthCheckPath:\s*\/api\/healthz/);
