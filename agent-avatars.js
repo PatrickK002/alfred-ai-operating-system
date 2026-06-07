@@ -5,13 +5,13 @@ export const CURRENT_AGENT_IDS = Object.freeze([
   "olivia",
   "sarah",
   "westbridge-property-director",
+  "ethan",
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
   "sentinel",
   "maya",
   "alex",
-  "ethan",
   "liam",
   "james",
 ]);
@@ -178,12 +178,12 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     accentColor: "#72d6ff",
     voicePersonaPlaceholder: "ethan-cto-voice",
     expertiseTags: ["Architecture", "Security", "Cloud", "Engineering"],
-    status: "Planned",
-    statusCategory: "planned",
+    status: "Active advisory",
+    statusCategory: "active",
     reportingLine: "Alfred",
-    mission: "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.",
-    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
-    plannedCapabilitySummary: "Future CTO review of architecture, security, cloud posture and engineering delivery risk.",
+    mission: "Provide advisory-only platform architecture, engineering quality, cloud operations, release governance, technical debt and technology risk recommendations without executing technical changes.",
+    currentCapabilitySummary: "Local CTO dashboard, technology risk review, roadmap intelligence, technical debt monitoring, Monday OS workload links and executive briefing signals.",
+    plannedCapabilitySummary: "Future repo, cloud, deployment or observability integrations require explicit read-only-first setup and separate approval-gated write safeguards.",
   },
   {
     id: "liam",

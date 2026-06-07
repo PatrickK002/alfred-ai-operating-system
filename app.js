@@ -4,7 +4,7 @@ import {
   buildExecutiveTeamRoster,
   getAgentAvatarProfile,
   isLocalAvatarPath,
-} from "./agent-avatars.js";
+} from "./agent-avatars.js?v=0.4.8";
 
 const STORAGE_KEY = "alfred-core-v1";
 
@@ -288,6 +288,49 @@ const seedData = {
       autonomousExecutionEnabled: false,
     },
   },
+  ethan: {
+    profile: {
+      name: "Ethan",
+      role: "Chief Technology Officer",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      systems: 0,
+      highCriticalSystems: 0,
+      openRisks: 0,
+      highRisks: 0,
+      decisionsRequired: 0,
+      roadmapItems: 0,
+      technologyDebt: 0,
+      highDebt: 0,
+      relatedMeetings: 0,
+      openWorkItems: 0,
+    },
+    domains: [],
+    systems: [],
+    risks: [],
+    decisions: [],
+    roadmap: [],
+    debt: [],
+    reviews: [],
+    meetings: [],
+    monday: {
+      workItems: [],
+      deliverables: [],
+      risks: [],
+      decisions: [],
+      workload: null,
+    },
+    boundary: {
+      advisoryOnly: true,
+      readOnly: true,
+      repoWriteEnabled: false,
+      deploymentEnabled: false,
+      cloudChangeEnabled: false,
+      externalWritesEnabled: false,
+    },
+  },
   sarah: {
     profile: {
       name: "Sarah",
@@ -507,6 +550,7 @@ async function loadDashboard() {
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
+    state.ethan = await apiRequest("/api/ethan/dashboard").catch(() => seedData.ethan);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1967,6 +2011,65 @@ function sarahList(records, empty, formatter) {
     : `<div class="empty-state project-empty">${empty}</div>`;
 }
 
+function renderEthan() {
+  const ethan = state.ethan || seedData.ethan;
+  const metrics = ethan.metrics || {};
+  $("#ethan-agent-identity").innerHTML = renderAgentIdentitySummary("ethan");
+  $("#ethan-metrics").innerHTML = [
+    ["SYSTEMS", metrics.systems],
+    ["HIGH RISKS", metrics.highRisks],
+    ["DECISIONS", metrics.decisionsRequired],
+    ["ROADMAP", metrics.roadmapItems],
+    ["TECH DEBT", metrics.technologyDebt],
+    ["WORK ITEMS", metrics.openWorkItems],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${escapeHTML(value ?? 0)}</strong>
+    </article>
+  `).join("");
+
+  $("#ethan-systems").innerHTML = sarahList(ethan.systems || [], "No technology systems recorded yet.", (system) => `
+    <strong>${escapeHTML(system.name || "Technology system")}</strong>
+    <span>${escapeHTML(system.systemType || "system")} · ${escapeHTML(system.hostingModel || "hosting unknown")} · ${escapeHTML(system.criticality || "Medium")}</span>
+    <small>${escapeHTML(system.reviewStatus || system.description || "Review status required.")}</small>
+  `);
+  $("#ethan-risks").innerHTML = sarahList(ethan.risks || [], "No technology risks recorded yet.", (risk) => `
+    <strong>${escapeHTML(risk.title || "Technology risk")}</strong>
+    <span>${escapeHTML(risk.systemName || "Platform")} · ${escapeHTML(risk.severity || "Medium")} · ${escapeHTML(risk.status || "Open")}</span>
+    <small>${escapeHTML(risk.recommendedAction || risk.businessImpact || risk.detail || "Mitigation review required.")}</small>
+  `);
+  $("#ethan-decisions").innerHTML = sarahList(ethan.decisions || [], "No CTO decisions recorded yet.", (decision) => `
+    <strong>${escapeHTML(decision.title || "Technology decision")}</strong>
+    <span>${escapeHTML(decision.decisionArea || "Architecture")} · ${escapeHTML(decision.priority || "Medium")} · ${decision.approvalRequired ? "Patrick approval required" : "No approval flag"}</span>
+    <small>${escapeHTML(decision.detail || "Decision context required.")}</small>
+  `);
+  $("#ethan-roadmap").innerHTML = sarahList(ethan.roadmap || [], "No technology roadmap items recorded yet.", (item) => `
+    <strong>${escapeHTML(item.title || "Roadmap item")}</strong>
+    <span>${escapeHTML(item.roadmapArea || "Platform")} · ${escapeHTML(item.priority || "Medium")} · ${escapeHTML(item.status || "Planned")}</span>
+    <small>${escapeHTML(item.detail || item.targetQuarter || "Roadmap context required.")}</small>
+  `);
+  $("#ethan-debt").innerHTML = sarahList(ethan.debt || [], "No technology debt recorded yet.", (item) => `
+    <strong>${escapeHTML(item.title || "Technical debt")}</strong>
+    <span>${escapeHTML(item.impactArea || "Maintainability")} · ${escapeHTML(item.severity || "Medium")} · ${escapeHTML(item.status || "Open")}</span>
+    <small>${escapeHTML(item.recommendedAction || item.detail || "Recommended action required.")}</small>
+  `);
+  const mondayRows = [
+    ...(ethan.monday?.workItems || []).map((item) => ({ ...item, label: "Work" })),
+    ...(ethan.monday?.risks || []).map((item) => ({ ...item, label: "Risk" })),
+    ...(ethan.monday?.decisions || []).map((item) => ({ ...item, label: "Decision" })),
+    ...(ethan.monday?.deliverables || []).map((item) => ({ ...item, label: "Deliverable" })),
+  ].slice(0, 8);
+  $("#ethan-workload").innerHTML = `
+    ${ethan.monday?.workload ? `<div class="ai-boundary">Workload health: ${escapeHTML(ethan.monday.workload.healthStatus)} · score ${escapeHTML(ethan.monday.workload.workloadScore)}/100. Monday.com writes remain disabled.</div>` : '<div class="ai-boundary">Ethan workload is calculated from internal Alfred records. No Monday.com write sync is enabled.</div>'}
+    ${sarahList(mondayRows, "No Ethan workload records yet.", (item) => `
+      <strong>${escapeHTML(item.title || "Work item")}</strong>
+      <span>${escapeHTML(item.label)} · ${escapeHTML(item.status || "Review")} · ${escapeHTML(item.priority || "")}</span>
+      <small>${escapeHTML(item.sourceReference || item.detail || "")}</small>
+    `)}
+  `;
+}
+
 function renderSarah() {
   const sarah = state.sarah || seedData.sarah;
   const metrics = sarah.metrics || {};
@@ -2026,6 +2129,7 @@ function renderAll() {
   renderProjectIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
+  renderEthan();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -2044,6 +2148,7 @@ function navigate(view) {
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
+    ethan: "Ethan",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -2097,7 +2202,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>13. AGENT STATUS</h4>
+      <h4>14. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -2115,9 +2220,10 @@ function renderBriefAgentStatus(agents = []) {
 }
 
 function buildBrief(brief) {
-  const section = (title, records, empty, className = "") => `
+  const section = (title, records, empty, className = "", note = "") => `
     <section class="brief-section ${className}">
       <h4>${title}</h4>
+      ${note ? `<p class="core-message">${escapeHTML(note)}</p>` : ""}
       ${
         records.length
           ? `<ol>${records.map((item) => `
@@ -2152,6 +2258,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.ethan?.items?.length ? `${brief.ethan.items.length} Ethan technology signal(s) found. ` : ""}
       ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -2170,8 +2277,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
-    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. ETHAN CTO BRIEF", brief.ethan?.items || [], "No Ethan CTO exceptions detected from current records.", "", brief.ethan?.summary || "")}
+    ${section("12. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("13. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2226,6 +2334,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    ethan: { title: "Ethan CTO Brief", items: [], summary: "Backend required for Ethan technology briefing.", metrics: {} },
     mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
@@ -2950,6 +3059,122 @@ async function askProjectAnalysis(projectId) {
   }
 }
 
+async function refreshEthanDashboard() {
+  if (!backendAvailable) {
+    showToast("Ethan requires the backend");
+    return;
+  }
+  state.ethan = await apiRequest("/api/ethan/dashboard");
+  persist();
+  renderEthan();
+}
+
+function renderEthanAnalysis(result = {}) {
+  return `
+    <div class="ai-boundary">Ethan analysed local Alfred technology records only. No repository writes, deployments, cloud changes, configuration edits, Microsoft writes, Monday writes or external technical actions were executed.</div>
+    <section class="ai-summary">
+      <h3>CTO summary</h3>
+      <p>${escapeHTML(result.executiveSummary || "No Ethan analysis returned.")}</p>
+      <small>Confidence: ${escapeHTML(result.confidenceLevel || "unknown")} · ${escapeHTML(result.model || "ethan-deterministic-v1")}</small>
+    </section>
+    ${renderList("Platform summary", [result.platformSummary || {}], (item) => `
+      <strong>${escapeHTML(item.systems || 0)} system(s), ${escapeHTML(item.highRisks || 0)} high risk(s)</strong>
+      <span>${escapeHTML(item.decisionsRequired || 0)} decision(s), ${escapeHTML(item.roadmapItems || 0)} roadmap item(s), ${escapeHTML(item.technologyDebt || 0)} debt item(s).</span>
+    `)}
+    ${renderList("Top priorities", result.topPriorities || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Decisions required", result.decisionsRequired || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${item.approvalRequired ? "Patrick approval required" : "Recommendation only"} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Risks", result.risks || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Technical debt", result.technicalDebt || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail)}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Recommended next actions", result.recommendedNextActions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Assumptions", result.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+  `;
+}
+
+async function askEthanAnalysis() {
+  if (!backendAvailable) {
+    showToast("Ethan analysis requires the backend");
+    return;
+  }
+  $("#ethan-analysis-output").innerHTML = '<div class="ai-loading">Ethan is analysing technology context...</div>';
+  try {
+    const result = await apiRequest("/api/ai/ethan/analyse-technology", {
+      method: "POST",
+      body: JSON.stringify({ topic: $("#ethan-search-query").value.trim() || "Alfred technology platform", userAction: "ui:ethan:analyse-technology" }),
+    });
+    $("#ethan-analysis-output").innerHTML = renderEthanAnalysis(result);
+    state.ethan = await apiRequest("/api/ethan/dashboard").catch(() => state.ethan);
+    renderEthan();
+    showToast("Ethan analysis generated");
+  } catch (error) {
+    $("#ethan-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function searchEthan(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Ethan search requires the backend");
+    return;
+  }
+  const query = $("#ethan-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a technology search topic");
+    return;
+  }
+  $("#ethan-search-results").innerHTML = '<div class="ai-loading">Searching Ethan technology memory...</div>';
+  try {
+    const result = await apiRequest(`/api/ethan/search?q=${encodeURIComponent(query)}`);
+    $("#ethan-search-results").innerHTML = `
+      ${renderList("Systems", result.systems || [], (system) => `
+        <strong>${escapeHTML(system.name)}</strong>
+        <span>${escapeHTML(system.systemType || "")} · ${escapeHTML(system.criticality || "")}</span>
+        <small>${escapeHTML(system.description || system.reviewStatus || "")}</small>
+      `)}
+      ${renderList("Risks", result.risks || [], (risk) => `
+        <strong>${escapeHTML(risk.title)}</strong>
+        <span>${escapeHTML(risk.systemName || "Platform")} · ${escapeHTML(risk.severity || "")}</span>
+        <small>${escapeHTML(risk.recommendedAction || risk.detail || "")}</small>
+      `)}
+      ${renderList("Decisions", result.decisions || [], (decision) => `
+        <strong>${escapeHTML(decision.title)}</strong>
+        <span>${escapeHTML(decision.decisionArea || "")} · ${escapeHTML(decision.priority || "")}</span>
+        <small>${escapeHTML(decision.detail || "")}</small>
+      `)}
+      ${renderList("Roadmap", result.roadmap || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.roadmapArea || "")} · ${escapeHTML(item.status || "")}</span>
+        <small>${escapeHTML(item.detail || "")}</small>
+      `)}
+      ${renderList("Technical debt", result.debt || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.impactArea || "")} · ${escapeHTML(item.severity || "")}</span>
+        <small>${escapeHTML(item.recommendedAction || item.detail || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || memory.summary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || memory.sensitivityCategory || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#ethan-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
 async function refreshSarahDashboard() {
   if (!backendAvailable) {
     showToast("Sarah requires the backend");
@@ -3554,6 +3779,9 @@ function runCommand(command) {
   if (normalized.includes("sarah")) {
     navigate("sarah");
     if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
+  } else if (normalized.includes("ethan") || normalized.includes("cto") || normalized.includes("architecture") || normalized.includes("platform") || normalized.includes("technical debt") || normalized.includes("deployment") || normalized.includes("devops")) {
+    navigate("ethan");
+    if (backendAvailable && (normalized.includes("analyse") || normalized.includes("analyze") || normalized.includes("review"))) askEthanAnalysis();
   } else if (normalized.includes("brief")) {
     generateBrief();
   } else if (normalized.includes("risk")) {
@@ -3631,6 +3859,9 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-ethan").addEventListener("click", refreshEthanDashboard);
+$("#ask-ethan").addEventListener("click", askEthanAnalysis);
+$("#ethan-search-form").addEventListener("submit", searchEthan);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });

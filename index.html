@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.7" />
+    <link rel="stylesheet" href="styles.css?v=0.4.8" />
   </head>
   <body>
     <div class="shell">
@@ -51,6 +51,9 @@
           </button>
           <button class="nav-item" data-view="monday">
             <span class="nav-icon">M</span> Monday
+          </button>
+          <button class="nav-item" data-view="ethan">
+            <span class="nav-icon">E</span> Ethan
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -685,6 +688,112 @@
           </div>
         </section>
 
+        <section class="view" id="ethan-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">EXECUTIVE SPECIALIST</p>
+              <h2>Ethan Chief Technology Officer</h2>
+              <p>Advisory-only platform architecture, engineering quality, cloud operations, release governance, technical debt and technology risk intelligence.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="refresh-ethan">Refresh Ethan</button>
+              <button class="primary-button" id="ask-ethan">Ask Ethan to analyse</button>
+            </div>
+          </div>
+          <div class="approval-boundary monday-boundary">
+            <strong>Ethan is advisory only</strong>
+            <span>Ethan can analyse and recommend. He cannot deploy code, write to repositories, change cloud infrastructure, edit configuration, write to Microsoft 365, write to Monday.com or execute technical actions.</span>
+          </div>
+          <div id="ethan-agent-identity" class="specialist-identity-shell"></div>
+          <div class="monday-metrics" id="ethan-metrics"></div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SYSTEMS</p>
+                  <h3>Technology systems</h3>
+                </div>
+              </div>
+              <div id="ethan-systems"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">RISKS</p>
+                  <h3>Technology risks</h3>
+                </div>
+              </div>
+              <div id="ethan-risks"></div>
+            </section>
+          </div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">DECISIONS</p>
+                  <h3>CTO decisions</h3>
+                </div>
+              </div>
+              <div id="ethan-decisions"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ROADMAP</p>
+                  <h3>Technology roadmap</h3>
+                </div>
+              </div>
+              <div id="ethan-roadmap"></div>
+            </section>
+          </div>
+          <div class="monday-layout">
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">TECHNICAL DEBT</p>
+                  <h3>Engineering quality</h3>
+                </div>
+              </div>
+              <div id="ethan-debt"></div>
+            </section>
+            <section class="panel monday-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">MONDAY OS</p>
+                  <h3>Ethan workload</h3>
+                </div>
+              </div>
+              <div id="ethan-workload"></div>
+            </section>
+          </div>
+          <section class="panel monday-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SEARCH</p>
+                <h3>Search technology memory</h3>
+              </div>
+            </div>
+            <form id="ethan-search-form" class="project-search-form">
+              <input id="ethan-search-query" placeholder='Try “architecture”, “backup” or “release”' />
+              <button class="secondary-button" type="submit">Search Ethan</button>
+            </form>
+            <div id="ethan-search-results" class="project-search-results">
+              <div class="empty-state">Search local technology systems, risks, decisions, roadmap, technical debt and memory references.</div>
+            </div>
+          </section>
+          <section class="panel monday-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">ETHAN OUTPUT</p>
+                <h3>CTO analysis</h3>
+              </div>
+            </div>
+            <div id="ethan-analysis-output" class="sarah-analysis-output">
+              <div class="empty-state">Ask Ethan for technology analysis. Outputs are recommendations only and no technical action occurs.</div>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="sarah-view">
           <div class="section-intro">
             <div>
@@ -1121,6 +1230,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.6"></script>
+    <script type="module" src="app.js?v=0.4.8"></script>
   </body>
 </html>

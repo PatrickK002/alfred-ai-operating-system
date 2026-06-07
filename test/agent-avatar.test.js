@@ -57,6 +57,19 @@ test("Sentinel CISO metadata exists as planned advisory governance only", () => 
   assert.match(sentinel.plannedCapabilitySummary, /MFA|GitHub|dependencies|incident/i);
 });
 
+test("Ethan CTO metadata exists as active advisory only", () => {
+  const ethan = buildAgentAvatarRenderModel({ id: "ethan" });
+  assert.equal(ethan.name, "Ethan");
+  assert.equal(ethan.title, "Chief Technology Officer");
+  assert.equal(ethan.department, "Technology");
+  assert.equal(ethan.statusCategory, "active");
+  assert.equal(ethan.reportingLine, "Alfred");
+  assert.ok(ethan.expertiseTags.includes("Architecture"));
+  assert.ok(ethan.expertiseTags.includes("Cloud"));
+  assert.match(ethan.currentCapabilitySummary, /CTO|technology|roadmap|debt/i);
+  assert.match(ethan.plannedCapabilitySummary, /repo|cloud|deployment|approval/i);
+});
+
 test("fallback initials are generated and known long names can override safely", () => {
   assert.equal(agentFallbackInitials("Missing Avatar"), "MA");
   assert.equal(buildAgentAvatarRenderModel({ name: "Missing Image", avatarPath: "" }).fallbackInitials, "MI");
@@ -117,6 +130,7 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="voice-agent-identity"/);
   assert.match(html, /id="finance-agent-identity"/);
   assert.match(html, /id="sarah-agent-identity"/);
+  assert.match(html, /id="ethan-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);
   assert.match(app, /renderBriefAgentStatus/);
