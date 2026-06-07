@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.7" />
+    <link rel="stylesheet" href="styles.css?v=0.4.8" />
   </head>
   <body>
     <div class="shell">
@@ -51,6 +51,9 @@
           </button>
           <button class="nav-item" data-view="monday">
             <span class="nav-icon">M</span> Monday
+          </button>
+          <button class="nav-item" data-view="maya">
+            <span class="nav-icon">Y</span> Maya
           </button>
           <button class="nav-item" data-view="sarah">
             <span class="nav-icon">S</span> Sarah
@@ -685,6 +688,117 @@
           </div>
         </section>
 
+        <section class="view" id="maya-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">EXECUTIVE SPECIALIST</p>
+              <h2>Maya Marketing Director</h2>
+              <p>Advisory-only LinkedIn, YouTube, TikTok, content calendar, campaign planning, thought leadership and marketing feedback intelligence.</p>
+            </div>
+            <div class="project-actions">
+              <button class="secondary-button" id="refresh-maya">Refresh Maya</button>
+              <button class="primary-button" id="ask-maya">Ask Maya to analyse</button>
+            </div>
+          </div>
+          <div class="approval-boundary maya-boundary">
+            <strong>Maya is advisory only</strong>
+            <span>Maya can analyse and recommend. She cannot post, schedule, message, email, update calendars, modify Microsoft 365, write to Monday.com or launch paid campaigns.</span>
+          </div>
+          <div id="maya-agent-identity" class="specialist-identity-shell"></div>
+          <div class="sarah-metrics maya-metrics" id="maya-metrics"></div>
+          <div class="sarah-grid maya-grid">
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CHANNELS</p>
+                  <h3>Marketing channels</h3>
+                </div>
+              </div>
+              <div id="maya-channels"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CONTENT CALENDAR</p>
+                  <h3>Planned content</h3>
+                </div>
+              </div>
+              <div id="maya-content-calendar"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">CAMPAIGNS</p>
+                  <h3>Campaign planning</h3>
+                </div>
+              </div>
+              <div id="maya-campaigns"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">OPPORTUNITIES</p>
+                  <h3>Marketing opportunities</h3>
+                </div>
+              </div>
+              <div id="maya-opportunities"></div>
+            </section>
+          </div>
+          <div class="sarah-grid maya-grid">
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">MONDAY OS</p>
+                  <h3>Maya workload</h3>
+                </div>
+              </div>
+              <div id="maya-workload"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">MEETING INTELLIGENCE</p>
+                  <h3>Marketing meetings</h3>
+                </div>
+              </div>
+              <div id="maya-meetings"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">FEEDBACK LOOP</p>
+                  <h3>Marketing feedback</h3>
+                </div>
+              </div>
+              <div id="maya-feedback"></div>
+            </section>
+            <section class="panel sarah-panel maya-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SEARCH</p>
+                  <h3>Marketing memory</h3>
+                </div>
+              </div>
+              <form id="maya-search-form" class="project-search-form">
+                <input id="maya-search-query" placeholder='Try “LinkedIn”, “YouTube” or “Alfred”' />
+                <button class="secondary-button" type="submit">Search</button>
+              </form>
+              <div id="maya-search-results"></div>
+            </section>
+          </div>
+          <section class="panel sarah-panel maya-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">MAYA OUTPUT</p>
+                <h3>Marketing analysis</h3>
+              </div>
+            </div>
+            <div id="maya-analysis-output" class="sarah-analysis-output">
+              <div class="empty-state">Ask Maya for a marketing analysis. Outputs are recommendations only and no external publishing occurs.</div>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="sarah-view">
           <div class="section-intro">
             <div>
@@ -1121,6 +1235,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.6"></script>
+    <script type="module" src="app.js?v=0.4.8"></script>
   </body>
 </html>

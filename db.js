@@ -1314,6 +1314,113 @@ const SCHEMA = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS marketing_channels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Planned',
+    strategy TEXT NOT NULL DEFAULT '',
+    target_audience TEXT NOT NULL DEFAULT '',
+    content_pillars TEXT NOT NULL DEFAULT '[]',
+    publishing_enabled INTEGER NOT NULL DEFAULT 0 CHECK(publishing_enabled IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    objective TEXT NOT NULL DEFAULT '',
+    business_entity_id TEXT NOT NULL DEFAULT 'media-businesses',
+    company_id TEXT REFERENCES companies(id),
+    status TEXT NOT NULL DEFAULT 'Planned',
+    start_date TEXT NOT NULL DEFAULT '',
+    end_date TEXT NOT NULL DEFAULT '',
+    channels TEXT NOT NULL DEFAULT '[]',
+    target_audience TEXT NOT NULL DEFAULT '',
+    budget_placeholder TEXT NOT NULL DEFAULT '',
+    success_metrics TEXT NOT NULL DEFAULT '[]',
+    external_publishing_enabled INTEGER NOT NULL DEFAULT 0 CHECK(external_publishing_enabled IN (0, 1)),
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_content_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT REFERENCES marketing_channels(id) ON DELETE SET NULL,
+    campaign_id INTEGER REFERENCES marketing_campaigns(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    content_type TEXT NOT NULL DEFAULT 'post',
+    theme TEXT NOT NULL DEFAULT '',
+    target_audience TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    planned_date TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    call_to_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'maya',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    channel_id TEXT REFERENCES marketing_channels(id) ON DELETE SET NULL,
+    business_entity_id TEXT NOT NULL DEFAULT 'media-businesses',
+    company_id TEXT REFERENCES companies(id),
+    opportunity_type TEXT NOT NULL DEFAULT 'content',
+    potential_impact TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Review',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_item_id INTEGER REFERENCES marketing_content_items(id) ON DELETE SET NULL,
+    campaign_id INTEGER REFERENCES marketing_campaigns(id) ON DELETE SET NULL,
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    feedback TEXT NOT NULL DEFAULT '',
+    rating TEXT NOT NULL DEFAULT 'unrated',
+    recommendation_status TEXT NOT NULL DEFAULT 'unreviewed',
+    lesson_learned TEXT NOT NULL DEFAULT '',
+    future_work_suggestion TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS maya_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    record_type TEXT NOT NULL DEFAULT '',
+    record_id TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT 'maya-deterministic-v1',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -1939,7 +2046,7 @@ const AGENT_SEEDS = [
   ["sarah", "Sarah", "Digital Construction Director", "digitize", "Delivery", "Executive Specialist reporting to Alfred. Provides advisory-only BIM, GIS, ISO 19650, COBie, Asset Information, Digital Twin, Building Safety, Information Management and Power Platform intelligence for Digitize. No autonomous execution.", ["BIM", "GIS", "ISO 19650", "COBie", "Asset Information", "Digital Twin", "Building Safety", "Information Management", "Power Platform"], "Active"],
   ["westbridge-property-director", "Westbridge Property Director", "AI Investment Director", "westbridge", "Property Investment", "Board-level investment director for Westbridge Property Group. Analyses acquisition pipeline, portfolio cashflow, due diligence, refinance potential and investment risks. Advisory only; no purchases, offers, legal instructions, communications or external execution.", ["Portfolio Metrics", "Deal Analysis", "Westbridge Rules", "Due Diligence", "Refinance Scenarios", "Property Memory"], "Active"],
   ["sentinel", "Sentinel", "Chief Information Security Officer", null, "Security", "Planned CISO foundation for cyber, data, identity, integration and AI-governance risk across Alfred, Digitize, Westbridge and connected systems. Advisory only; no monitoring, tenant administration or enforcement automation in this phase.", ["Cyber Security", "Microsoft 365 Security", "Azure Security", "Identity Management", "Access Control", "Threat Detection", "Data Protection", "AI Governance", "Prompt Injection Defence", "Secrets Management", "GitHub Security", "Dependency Risk", "Audit Integrity", "Compliance", "Incident Response"], "Planned"],
-  ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
+  ["maya", "Maya", "Media Director", "media", "Media", "Executive Specialist reporting to Alfred. Provides advisory-only LinkedIn, YouTube, TikTok, thought leadership, campaign planning, content calendar and marketing opportunity intelligence. No posting, outbound messages or external publishing.", ["LinkedIn Strategy", "YouTube Strategy", "TikTok Strategy", "Content Planning", "Campaign Planning", "Thought Leadership", "Marketing Opportunities", "Content Calendar", "Marketing Feedback"], "Active"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
   ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.", [], "Planned"],
@@ -1954,6 +2061,124 @@ const SARAH_TEAM_PLACEHOLDER_SEEDS = [
   ["digital-twin-consultant", "Digital Twin Consultant", "Digital Twin Consultant", ["Digital Twin Strategy", "Operational Data", "Asset Performance", "Smart Asset Management"], "Future placeholder only. No runtime or autonomous behaviour."],
   ["building-safety-consultant", "Building Safety Consultant", "Building Safety Consultant", ["Golden Thread", "Building Safety Act", "Information Assurance", "Compliance Information"], "Future placeholder only. No runtime or autonomous behaviour."],
   ["power-platform-consultant", "Power Platform Consultant", "Power Platform Consultant", ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint"], "Future placeholder only. No runtime or autonomous behaviour."],
+];
+
+const MARKETING_CHANNEL_SEEDS = [
+  [
+    "linkedin",
+    "LinkedIn",
+    "LinkedIn",
+    "Planned",
+    "Board-level thought leadership, Digitize authority, Alfred build narrative and property/investment credibility. Advisory planning only; no posting.",
+    "Council leaders, construction clients, founders, partners and senior operators.",
+    ["Digital construction authority", "AI operating systems", "Founder lessons", "Public-sector assurance", "Property investment discipline"],
+  ],
+  [
+    "youtube",
+    "YouTube",
+    "YouTube",
+    "Planned",
+    "Evergreen authority and monetisable education channel strategy. Advisory planning only; no publishing.",
+    "Operators, founders, construction/property audiences and AI-business builders.",
+    ["Executive operating systems", "Digital construction", "Property portfolio building", "AI business experiments"],
+  ],
+  [
+    "tiktok",
+    "TikTok",
+    "TikTok",
+    "Planned",
+    "Short-form testing ground for hooks, lessons and audience discovery. Advisory planning only; no posting.",
+    "Early-stage audience discovery across property, AI and operator content.",
+    ["Founder clips", "Property lessons", "AI workflows", "Behind-the-build content"],
+  ],
+];
+
+const MARKETING_CAMPAIGN_SEEDS = [
+  [
+    "Alfred Build in Public",
+    "Turn the Alfred operating system build into credible thought leadership without overstating automation.",
+    "media-businesses",
+    "media",
+    "Planned",
+    "2026-06-10",
+    "2026-07-10",
+    ["linkedin", "youtube"],
+    "Founders, operators and senior business owners interested in practical AI operating systems.",
+    "No paid spend approved.",
+    ["Weekly content cadence", "Qualified conversations", "Reusable executive narrative"],
+    "seed:marketing_campaign:alfred-build-in-public",
+  ],
+];
+
+const MARKETING_CONTENT_SEEDS = [
+  [
+    "linkedin",
+    "What Alfred is becoming",
+    "thought_leadership_post",
+    "AI Executive Operating System",
+    "Founders and operators",
+    "Planned",
+    "High",
+    "2026-06-12",
+    "Explain Alfred as a read-only executive operating system with specialist advisors, approval safeguards and no fake automation.",
+    "Ask for one practical executive workflow Patrick should systemise next.",
+    "seed:marketing_content:alfred-vision",
+  ],
+  [
+    "youtube",
+    "Building an AI Chief of Staff from scratch",
+    "video_outline",
+    "Founder build narrative",
+    "AI business builders",
+    "Planned",
+    "Medium",
+    "2026-06-18",
+    "Outline the Alfred journey from dashboard to backend, memory, voice, CFO, project intelligence and executive agents.",
+    "Invite viewers to follow the build and suggest operating-system use cases.",
+    "seed:marketing_content:alfred-youtube-build",
+  ],
+  [
+    "tiktok",
+    "No fake agents rule",
+    "short_form_script",
+    "AI governance",
+    "Operators testing AI tools",
+    "Review",
+    "Medium",
+    "2026-06-14",
+    "A short script explaining why Alfred clearly separates advisory intelligence from real execution.",
+    "Ask viewers where AI tools overclaim today.",
+    "seed:marketing_content:no-fake-agents",
+  ],
+];
+
+const MARKETING_OPPORTUNITY_SEEDS = [
+  [
+    "AI Executive OS thought leadership lane",
+    "Alfred can become a visible proof-of-work narrative for executive operators, founders and senior construction/property leaders.",
+    "linkedin",
+    "media-businesses",
+    "media",
+    "thought_leadership",
+    "Build Patrick's authority around practical AI operating systems and create future inbound opportunities.",
+    "High",
+    "Review",
+    "Approve a first four-week LinkedIn narrative arc before creating any external posts.",
+    "seed:marketing_opportunity:executive-os-lane",
+  ],
+  [
+    "Digitize digital construction authority content",
+    "Sarah and Project Intelligence create a credible content lane around ISO 19650, COBie and council assurance.",
+    "youtube",
+    "media-businesses",
+    "media",
+    "content_series",
+    "Support Digitize credibility while feeding future Council Assurance Platform demand.",
+    "Medium",
+    "Review",
+    "Map three client-safe educational topics. Do not reference confidential project details.",
+    "seed:marketing_opportunity:digitize-authority",
+  ],
 ];
 
 const INTEGRATION_SEEDS = [
@@ -2013,6 +2238,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateProjectIntelligenceSchema(db);
   migrateMeetingIntelligenceSchema(db);
   migrateMondayOperatingSchema(db);
+  migrateMayaMarketingSchema(db);
   migratePropertySchema(db);
   seedDatabase(db);
   return db;
@@ -2216,6 +2442,25 @@ function migrateMondayOperatingSchema(db) {
   `);
 }
 
+function migrateMayaMarketingSchema(db) {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS marketing_content_items_status_date
+    ON marketing_content_items(status, planned_date);
+
+    CREATE INDEX IF NOT EXISTS marketing_content_items_channel
+    ON marketing_content_items(channel_id, campaign_id);
+
+    CREATE INDEX IF NOT EXISTS marketing_campaigns_status
+    ON marketing_campaigns(status, start_date, end_date);
+
+    CREATE INDEX IF NOT EXISTS marketing_opportunities_status_priority
+    ON marketing_opportunities(status, priority);
+
+    CREATE INDEX IF NOT EXISTS maya_audit_events_requested
+    ON maya_audit_events(requested_at, event_type);
+  `);
+}
+
 function migratePropertySchema(db) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS property_opportunities_stage
@@ -2236,6 +2481,7 @@ export function seedDatabase(db) {
     updateProjectTags(db);
     updateAgentDefinitions(db);
     updateSarahTeamPlaceholders(db);
+    updateMayaMarketingSeeds(db);
     updateIntegrationDefinitions(db);
     updateWestbridgePropertySeeds(db);
     return;
@@ -2289,6 +2535,7 @@ export function seedDatabase(db) {
       insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     }
     updateSarahTeamPlaceholders(db);
+    updateMayaMarketingSeeds(db);
 
     const insertMemory = db.prepare(`
       INSERT INTO memories (type, title, detail, company_id, recorded_at)
@@ -2355,6 +2602,174 @@ function updateSarahTeamPlaceholders(db) {
   for (const placeholder of SARAH_TEAM_PLACEHOLDER_SEEDS) {
     insertPlaceholder.run(placeholder[0], placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4]);
     updatePlaceholder.run(placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4], placeholder[0]);
+  }
+}
+
+function updateMayaMarketingSeeds(db) {
+  const insertChannel = db.prepare(`
+    INSERT OR IGNORE INTO marketing_channels (
+      id, name, platform, status, strategy, target_audience, content_pillars, publishing_enabled
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+  `);
+  const updateChannel = db.prepare(`
+    UPDATE marketing_channels
+    SET name = ?, platform = ?, status = ?, strategy = ?, target_audience = ?,
+        content_pillars = ?, publishing_enabled = 0, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const channel of MARKETING_CHANNEL_SEEDS) {
+    insertChannel.run(channel[0], channel[1], channel[2], channel[3], channel[4], channel[5], JSON.stringify(channel[6]));
+    updateChannel.run(channel[1], channel[2], channel[3], channel[4], channel[5], JSON.stringify(channel[6]), channel[0]);
+  }
+
+  const insertCampaign = db.prepare(`
+    INSERT INTO marketing_campaigns (
+      name, objective, business_entity_id, company_id, status, start_date, end_date,
+      channels, target_audience, budget_placeholder, success_metrics,
+      external_publishing_enabled, source_reference, metadata
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM marketing_campaigns WHERE source_reference = ?
+    )
+  `);
+  const updateCampaign = db.prepare(`
+    UPDATE marketing_campaigns
+    SET name = ?, objective = ?, business_entity_id = ?, company_id = ?, status = ?,
+        start_date = ?, end_date = ?, channels = ?, target_audience = ?,
+        budget_placeholder = ?, success_metrics = ?, external_publishing_enabled = 0,
+        metadata = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_reference = ?
+  `);
+  for (const campaign of MARKETING_CAMPAIGN_SEEDS) {
+    const channels = JSON.stringify(campaign[7]);
+    const metrics = JSON.stringify(campaign[10]);
+    const metadata = JSON.stringify({ seed: true, advisoryOnly: true, externalPublishingEnabled: false });
+    insertCampaign.run(
+      campaign[0],
+      campaign[1],
+      campaign[2],
+      campaign[3],
+      campaign[4],
+      campaign[5],
+      campaign[6],
+      channels,
+      campaign[8],
+      campaign[9],
+      metrics,
+      campaign[11],
+      metadata,
+      campaign[11],
+    );
+    updateCampaign.run(
+      campaign[0],
+      campaign[1],
+      campaign[2],
+      campaign[3],
+      campaign[4],
+      campaign[5],
+      campaign[6],
+      channels,
+      campaign[8],
+      campaign[9],
+      metrics,
+      metadata,
+      campaign[11],
+    );
+  }
+
+  const campaignId = db.prepare(`
+    SELECT id FROM marketing_campaigns WHERE source_reference = 'seed:marketing_campaign:alfred-build-in-public'
+  `).get()?.id || null;
+  const insertContent = db.prepare(`
+    INSERT INTO marketing_content_items (
+      channel_id, campaign_id, title, content_type, theme, target_audience, status,
+      priority, planned_date, summary, call_to_action, source_type, source_id,
+      source_reference, metadata
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM marketing_content_items WHERE source_reference = ?
+    )
+  `);
+  const updateContent = db.prepare(`
+    UPDATE marketing_content_items
+    SET channel_id = ?, campaign_id = ?, title = ?, content_type = ?, theme = ?,
+        target_audience = ?, status = ?, priority = ?, planned_date = ?, summary = ?,
+        call_to_action = ?, metadata = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_reference = ?
+  `);
+  for (const content of MARKETING_CONTENT_SEEDS) {
+    const metadata = JSON.stringify({ seed: true, advisoryOnly: true, externalPublishingEnabled: false });
+    insertContent.run(
+      content[0],
+      campaignId,
+      content[1],
+      content[2],
+      content[3],
+      content[4],
+      content[5],
+      content[6],
+      content[7],
+      content[8],
+      content[9],
+      content[10],
+      content[10],
+      metadata,
+      content[10],
+    );
+    updateContent.run(
+      content[0],
+      campaignId,
+      content[1],
+      content[2],
+      content[3],
+      content[4],
+      content[5],
+      content[6],
+      content[7],
+      content[8],
+      content[9],
+      metadata,
+      content[10],
+    );
+  }
+
+  const insertOpportunity = db.prepare(`
+    INSERT INTO marketing_opportunities (
+      title, detail, channel_id, business_entity_id, company_id, opportunity_type,
+      potential_impact, priority, status, recommended_action, source_reference, metadata
+    )
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM marketing_opportunities WHERE source_reference = ?
+    )
+  `);
+  const updateOpportunity = db.prepare(`
+    UPDATE marketing_opportunities
+    SET title = ?, detail = ?, channel_id = ?, business_entity_id = ?, company_id = ?,
+        opportunity_type = ?, potential_impact = ?, priority = ?, status = ?,
+        recommended_action = ?, metadata = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_reference = ?
+  `);
+  for (const opportunity of MARKETING_OPPORTUNITY_SEEDS) {
+    const metadata = JSON.stringify({ seed: true, advisoryOnly: true, externalPublishingEnabled: false });
+    insertOpportunity.run(...opportunity, metadata, opportunity[10]);
+    updateOpportunity.run(
+      opportunity[0],
+      opportunity[1],
+      opportunity[2],
+      opportunity[3],
+      opportunity[4],
+      opportunity[5],
+      opportunity[6],
+      opportunity[7],
+      opportunity[8],
+      opportunity[9],
+      metadata,
+      opportunity[10],
+    );
   }
 }
 
@@ -4025,6 +4440,113 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
       title: `${row.source_type}:${row.source_id}`,
       summary: row.summary,
       sensitivityCategory: row.sensitivity_category || "local_sensitive_business_data",
+    }));
+  }
+
+  const marketingCampaigns = db.prepare(`
+    SELECT c.*
+    FROM marketing_campaigns c
+    ORDER BY c.updated_at DESC, c.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of marketingCampaigns) {
+    const channels = safeJsonParse(row.channels, []);
+    const metrics = safeJsonParse(row.success_metrics, []);
+    records.push(semanticRecord({
+      sourceType: "marketing_campaign",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.name,
+      summary: [
+        `Maya marketing campaign: ${row.name}.`,
+        `Objective: ${row.objective}.`,
+        `Status: ${row.status}.`,
+        row.target_audience ? `Target audience: ${row.target_audience}.` : "",
+        channels.length ? `Channels: ${channels.join(", ")}.` : "",
+        metrics.length ? `Success metrics: ${metrics.join("; ")}.` : "",
+        row.start_date || row.end_date ? `Window: ${row.start_date || "unscheduled"} to ${row.end_date || "unscheduled"}.` : "",
+        "Advisory planning only. No social post, campaign launch or external publishing action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const marketingContent = db.prepare(`
+    SELECT i.*, ch.name AS channel_name, ca.name AS campaign_name
+    FROM marketing_content_items i
+    LEFT JOIN marketing_channels ch ON ch.id = i.channel_id
+    LEFT JOIN marketing_campaigns ca ON ca.id = i.campaign_id
+    ORDER BY i.updated_at DESC, i.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of marketingContent) {
+    records.push(semanticRecord({
+      sourceType: "marketing_content",
+      sourceId: row.id,
+      sourceCreatedAt: row.planned_date || row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Maya content calendar item: ${row.title}.`,
+        row.channel_name ? `Channel: ${row.channel_name}.` : "",
+        row.campaign_name ? `Campaign: ${row.campaign_name}.` : "",
+        `Content type: ${row.content_type}.`,
+        row.theme ? `Theme: ${row.theme}.` : "",
+        row.target_audience ? `Audience: ${row.target_audience}.` : "",
+        `Status: ${row.status}. Priority: ${row.priority}.`,
+        row.planned_date ? `Planned date: ${row.planned_date}.` : "",
+        row.summary,
+        row.call_to_action ? `Call to action: ${row.call_to_action}.` : "",
+        "No content was posted or published externally.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const marketingOpportunities = db.prepare(`
+    SELECT o.*, ch.name AS channel_name
+    FROM marketing_opportunities o
+    LEFT JOIN marketing_channels ch ON ch.id = o.channel_id
+    ORDER BY o.updated_at DESC, o.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of marketingOpportunities) {
+    records.push(semanticRecord({
+      sourceType: "marketing_opportunity",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Maya marketing opportunity: ${row.title}.`,
+        row.channel_name ? `Channel: ${row.channel_name}.` : "",
+        `Type: ${row.opportunity_type}.`,
+        `Status: ${row.status}. Priority: ${row.priority}.`,
+        row.detail,
+        row.potential_impact ? `Potential impact: ${row.potential_impact}.` : "",
+        row.recommended_action ? `Recommended action: ${row.recommended_action}.` : "",
+        "Recommendation only; no external marketing action was executed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const marketingFeedback = db.prepare(`
+    SELECT f.*, i.title AS content_title, c.name AS campaign_name
+    FROM marketing_feedback f
+    LEFT JOIN marketing_content_items i ON i.id = f.content_item_id
+    LEFT JOIN marketing_campaigns c ON c.id = f.campaign_id
+    ORDER BY f.updated_at DESC, f.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of marketingFeedback) {
+    records.push(semanticRecord({
+      sourceType: "marketing_feedback",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.content_title || row.campaign_name || "Maya marketing feedback",
+      summary: [
+        `Maya marketing feedback for ${row.content_title || row.campaign_name || "marketing output"}.`,
+        `Rating: ${row.rating}. Recommendation status: ${row.recommendation_status}.`,
+        row.feedback,
+        row.lesson_learned ? `Lesson learned: ${row.lesson_learned}.` : "",
+        row.future_work_suggestion ? `Future work suggestion: ${row.future_work_suggestion}.` : "",
+      ].filter(Boolean).join(" "),
     }));
   }
 

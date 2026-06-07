@@ -88,7 +88,9 @@ test("executive team roster renders current and planned agents safely", () => {
   const roster = buildExecutiveTeamRoster([]);
   assert.deepEqual(roster.map((agent) => agent.id), REQUIRED_AGENT_IDS);
   assert.deepEqual(roster.filter((agent) => agent.statusCategory === "active").map((agent) => agent.id), CURRENT_AGENT_IDS);
+  assert.deepEqual(CURRENT_AGENT_IDS, ["alfred", "olivia", "sarah", "westbridge-property-director", "maya"]);
   assert.deepEqual(roster.filter((agent) => agent.statusCategory === "planned").map((agent) => agent.id), PLANNED_AGENT_IDS);
+  assert.deepEqual(PLANNED_AGENT_IDS, ["sentinel", "alex", "ethan", "liam", "james"]);
   assert.equal(roster.every((agent) => agent.avatarPath || agent.fallbackInitials), true);
 });
 

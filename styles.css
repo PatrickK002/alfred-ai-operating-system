@@ -3387,7 +3387,7 @@ dialog::backdrop {
     padding: 16px;
   }
   .nav {
-    grid-template-columns: repeat(13, 1fr);
+    grid-template-columns: repeat(14, 1fr);
     margin-top: 18px;
     overflow-x: auto;
   }

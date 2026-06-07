@@ -77,6 +77,17 @@ import {
   sarahBriefingForDaily,
 } from "./sarah.js";
 import {
+  MAYA_READ_ONLY_BOUNDARY,
+  createMarketingCampaign,
+  createMarketingContentItem,
+  generateMayaAnalysis,
+  getMayaDashboard,
+  listMayaAudit,
+  mayaBriefingForDaily,
+  recordMarketingFeedback,
+  searchMayaKnowledge,
+} from "./maya.js";
+import {
   PROPERTY_READ_ONLY_BOUNDARY,
   createPropertyOpportunity,
   getPropertyDashboardData,
@@ -539,6 +550,61 @@ async function handleApi(request, response, url) {
   if (url.pathname === "/api/sarah/audit" && request.method === "GET") {
     return sendJson(response, 200, listSarahAudit(db, url.searchParams.get("limit") || 50));
   }
+  if (url.pathname === "/api/maya/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getMayaDashboard(db));
+  }
+  if (url.pathname === "/api/maya/search" && request.method === "GET") {
+    const result = searchMayaKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: MAYA_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/maya/audit" && request.method === "GET") {
+    return sendJson(response, 200, listMayaAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/maya/content") {
+    if (request.method === "GET") return sendJson(response, 200, getMayaDashboard(db).contentItems);
+    if (request.method === "POST") {
+      const item = createMarketingContentItem(db, {
+        ...(await readJson(request)),
+        userAction: "api:maya:content:create",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, item);
+    }
+  }
+  if (url.pathname === "/api/maya/campaigns") {
+    if (request.method === "GET") return sendJson(response, 200, getMayaDashboard(db).campaigns);
+    if (request.method === "POST") {
+      const campaign = createMarketingCampaign(db, {
+        ...(await readJson(request)),
+        userAction: "api:maya:campaign:create",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, campaign);
+    }
+  }
+  if (url.pathname === "/api/maya/feedback" && request.method === "POST") {
+    const feedback = recordMarketingFeedback(db, {
+      ...(await readJson(request)),
+      userAction: "api:maya:feedback:create",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, feedback);
+  }
+  if (url.pathname === "/api/ai/maya/analyse-marketing" && request.method === "POST") {
+    const result = generateMayaAnalysis(db, {
+      ...(await readJson(request)),
+      userAction: "api:maya:analyse-marketing",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, result);
+  }
   if (url.pathname === "/api/ai/sarah/project-health-review" && request.method === "POST") {
     const body = await readJson(request);
     if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
@@ -726,6 +792,7 @@ async function handleApi(request, response, url) {
         context.propertyBrief?.items?.length ? "westbridge_property" : "",
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
+        context.mayaMarketingBrief?.items?.length ? "maya_marketing" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -982,6 +1049,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.executivePriorities = analysis.executivePriorities;
   brief.projectIntelligence = projectAttentionForBriefing(db);
   brief.sarah = sarahBriefingForDaily(db);
+  brief.maya = mayaBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
   brief.mondayOperating = mondayOperatingBriefForDaily(db);
@@ -1014,6 +1082,13 @@ async function generateExecutiveBrief({ save = true } = {}) {
       category: "sarah",
       score: item.priority === "high" ? 78 : 52,
     })),
+    ...brief.maya.items.map((item, index) => ({
+      ...item,
+      id: `maya-${index + 1}`,
+      rank: index + 1,
+      category: "maya",
+      score: item.priority === "high" ? 76 : 51,
+    })),
     ...brief.projectIntelligence.projectsNeedingAttention.map((project, index) => ({
       ...project,
       rank: index + 1,
@@ -1036,6 +1111,10 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
+  brief.summary.mayaMarketingSignals = brief.maya.items.length;
+  brief.summary.mayaPlannedContent = brief.maya.metrics.plannedContent;
+  brief.summary.mayaCampaigns = brief.maya.metrics.activeCampaigns;
+  brief.summary.mayaFeedbackForReview = brief.maya.metrics.feedbackForReview;
   brief.summary.meetingIntelligenceSignals = brief.meetingIntelligence.items.length;
   brief.summary.meetingActions = brief.meetingIntelligence.metrics.openActions;
   brief.summary.meetingRisks = brief.meetingIntelligence.metrics.risks;
@@ -1126,6 +1205,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Sarah digital construction signal",
       category: "sarah",
     })),
+    ...compactRecords(context.mayaMarketingBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `maya:${record.title}`,
+      label: record.title || "Maya marketing signal",
+      category: "maya",
+    })),
     ...compactRecords(context.outlookSignals, ["id", "title", "subject"]).map((record) => sourceReference("outlook", record)),
     ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
     ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
@@ -1187,6 +1271,7 @@ function memoryQueryForBriefing(context) {
     ...(context.propertyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.mayaMarketingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
@@ -1290,6 +1375,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       summary: briefing.sarah?.summary || "",
       items: compactRecords(briefing.sarah?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
       boundary: briefing.sarah?.boundary || SARAH_READ_ONLY_BOUNDARY,
+    },
+    mayaMarketingBrief: {
+      title: briefing.maya?.title || "Maya Marketing Brief",
+      summary: briefing.maya?.summary || "",
+      metrics: compactValue(briefing.maya?.metrics || {}),
+      items: compactRecords(briefing.maya?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      boundary: briefing.maya?.boundary || MAYA_READ_ONLY_BOUNDARY,
     },
     approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
     briefingHistory: history,

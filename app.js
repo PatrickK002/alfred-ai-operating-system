@@ -4,7 +4,7 @@ import {
   buildExecutiveTeamRoster,
   getAgentAvatarProfile,
   isLocalAvatarPath,
-} from "./agent-avatars.js";
+} from "./agent-avatars.js?v=0.4.8";
 
 const STORAGE_KEY = "alfred-core-v1";
 
@@ -311,6 +311,46 @@ const seedData = {
     futureTeamPlaceholders: [],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  maya: {
+    profile: {
+      name: "Maya",
+      role: "Media Director",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      channels: 3,
+      activeChannels: 3,
+      activeCampaigns: 0,
+      plannedContent: 0,
+      overdueContent: 0,
+      marketingOpportunities: 0,
+      feedbackForReview: 0,
+      openWorkItems: 0,
+      deliverablesDue: 0,
+      risks: 0,
+      decisions: 0,
+      relatedMeetings: 0,
+    },
+    channels: [],
+    campaigns: [],
+    contentItems: [],
+    contentCalendar: [],
+    overdueContent: [],
+    opportunities: [],
+    feedback: [],
+    meetings: [],
+    monday: {
+      workItems: [],
+      deliverables: [],
+      risks: [],
+      opportunities: [],
+      decisions: [],
+      feedback: [],
+      workload: null,
+    },
+    boundary: { advisoryOnly: true, readOnly: true, socialPostingEnabled: false },
+  },
   property: {
     business: {
       id: "westbridge",
@@ -507,6 +547,7 @@ async function loadDashboard() {
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
+    state.maya = await apiRequest("/api/maya/dashboard").catch(() => seedData.maya);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -2018,6 +2059,75 @@ function renderSarah() {
   `);
 }
 
+function renderMaya() {
+  const maya = state.maya || seedData.maya;
+  const metrics = maya.metrics || {};
+  $("#maya-agent-identity").innerHTML = renderAgentIdentitySummary("maya");
+  $("#maya-metrics").innerHTML = [
+    ["CHANNELS", metrics.activeChannels || metrics.channels],
+    ["CAMPAIGNS", metrics.activeCampaigns],
+    ["CONTENT", metrics.plannedContent],
+    ["OVERDUE", metrics.overdueContent],
+    ["OPPORTUNITIES", metrics.marketingOpportunities],
+    ["FEEDBACK", metrics.feedbackForReview],
+    ["WORK ITEMS", metrics.openWorkItems],
+    ["MEETINGS", metrics.relatedMeetings],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  $("#maya-channels").innerHTML = sarahList(maya.channels || [], "No marketing channels configured yet.", (channel) => `
+    <strong>${escapeHTML(channel.name)}</strong>
+    <span>${escapeHTML(channel.strategy || "")}</span>
+    <small>${escapeHTML(channel.status || "Planned")} · publishing ${channel.publishingEnabled ? "enabled" : "disabled"}</small>
+  `);
+  $("#maya-content-calendar").innerHTML = sarahList([...(maya.overdueContent || []), ...(maya.contentCalendar || [])], "No content calendar items yet.", (item) => `
+    <strong>${escapeHTML(item.title)}</strong>
+    <span>${escapeHTML(item.channelName || item.channelId || "Channel")} · ${escapeHTML(item.contentType || "content")} · ${escapeHTML(item.status || "Planned")}</span>
+    <small>${escapeHTML(item.plannedDate || "No date")} · ${escapeHTML(item.priority || "Medium")} · ${escapeHTML(item.summary || "")}</small>
+  `);
+  $("#maya-campaigns").innerHTML = sarahList(maya.campaigns || [], "No campaigns planned yet.", (campaign) => `
+    <strong>${escapeHTML(campaign.name)}</strong>
+    <span>${escapeHTML(campaign.objective || "")}</span>
+    <small>${escapeHTML(campaign.status || "Planned")} · ${(campaign.channels || []).map(escapeHTML).join(", ") || "No channels"} · publishing ${campaign.externalPublishingEnabled ? "enabled" : "disabled"}</small>
+  `);
+  $("#maya-opportunities").innerHTML = sarahList(maya.opportunities || [], "No marketing opportunities detected yet.", (opportunity) => `
+    <strong>${escapeHTML(opportunity.title)}</strong>
+    <span>${escapeHTML(opportunity.potentialImpact || opportunity.detail || "")}</span>
+    <small>${escapeHTML(opportunity.channelName || opportunity.channelId || "Channel")} · ${escapeHTML(opportunity.priority || "Medium")} · ${escapeHTML(opportunity.recommendedAction || "")}</small>
+  `);
+
+  const mondayRows = [
+    ...(maya.monday?.workItems || []).map((item) => ({ ...item, label: "Work" })),
+    ...(maya.monday?.deliverables || []).map((item) => ({ ...item, label: "Deliverable" })),
+    ...(maya.monday?.risks || []).map((item) => ({ ...item, label: "Risk" })),
+    ...(maya.monday?.decisions || []).map((item) => ({ ...item, label: "Decision" })),
+  ].slice(0, 8);
+  $("#maya-workload").innerHTML = `
+    ${maya.monday?.workload ? `
+      <div class="ai-boundary">Workload health: ${escapeHTML(maya.monday.workload.healthStatus || maya.monday.workload.workloadStatus || "Green")} · score ${maya.monday.workload.workloadScore || 0}/100. Monday.com writes remain disabled.</div>
+    ` : '<div class="ai-boundary">Maya workload is calculated from internal Alfred records. No Monday.com write sync is enabled.</div>'}
+    ${sarahList(mondayRows, "No Maya workload records yet.", (item) => `
+      <strong>${escapeHTML(item.title || item.outputTitle || "Record")}</strong>
+      <span>${escapeHTML(item.label)} · ${escapeHTML(item.status || item.recommendationStatus || "Review")} · ${escapeHTML(item.priority || "Medium")}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+  `;
+  $("#maya-meetings").innerHTML = sarahList(maya.meetings || [], "No marketing-related meetings linked yet.", (meeting) => `
+    <strong>${escapeHTML(meeting.title)}</strong>
+    <span>${escapeHTML(meeting.clientName || "No client")} · ${escapeHTML(meeting.projectName || "No project")}</span>
+    <small>${escapeHTML(meeting.startDatetime || meeting.startDateTime || "")} · ${escapeHTML(meeting.sourceReference || "")}</small>
+  `);
+  $("#maya-feedback").innerHTML = sarahList([...(maya.feedback || []), ...(maya.monday?.feedback || [])], "No Maya feedback yet.", (feedback) => `
+    <strong>${escapeHTML(feedback.contentTitle || feedback.campaignName || feedback.outputTitle || "Feedback")}</strong>
+    <span>${escapeHTML(feedback.feedback || feedback.lessonLearned || "Feedback review")}</span>
+    <small>${escapeHTML(feedback.rating || "unrated")} · ${escapeHTML(feedback.recommendationStatus || "unreviewed")}</small>
+  `);
+}
+
 function renderAll() {
   renderCommand();
   renderVoiceCommandCentre();
@@ -2026,6 +2136,7 @@ function renderAll() {
   renderProjectIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
+  renderMaya();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -2044,6 +2155,7 @@ function navigate(view) {
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
+    maya: "Maya",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -2097,7 +2209,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>13. AGENT STATUS</h4>
+      <h4>14. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -2142,6 +2254,10 @@ function buildBrief(brief) {
   });
   currentBriefingId = brief.briefingId || null;
   currentBrief = brief;
+  const mayaBriefRecords = [
+    ...(brief.maya?.summary ? [{ title: "Maya advisory boundary", detail: brief.maya.summary }] : []),
+    ...(brief.maya?.items || []),
+  ];
   $("#brief-feedback").classList.remove("submitted");
   $("#brief-feedback-note").value = "";
   $("#brief-content").innerHTML = `
@@ -2152,6 +2268,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.maya?.items?.length ? `${brief.maya.items.length} Maya marketing signal(s) found. ` : ""}
       ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -2170,8 +2287,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
-    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. MAYA MARKETING BRIEF", mayaBriefRecords, "No Maya marketing exceptions detected from current records.")}
+    ${section("12. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("13. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2226,6 +2344,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    maya: { title: "Maya Marketing Brief", items: [], summary: "Backend required for Maya marketing briefing.", metrics: {} },
     mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
@@ -3026,6 +3145,114 @@ function renderSarahProjectAnalysis(analysis = {}, relatedMemory = []) {
   `;
 }
 
+async function refreshMayaDashboard() {
+  if (!backendAvailable) {
+    showToast("Maya dashboard requires the backend");
+    return;
+  }
+  try {
+    state.maya = await apiRequest("/api/maya/dashboard");
+    state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => state.mondayOperating || seedData.mondayOperating);
+    persist();
+    renderMaya();
+    showToast("Maya dashboard refreshed");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function renderMayaAnalysis(result = {}) {
+  return `
+    <div class="ai-boundary">Maya analysed local Alfred marketing records only. No posts, messages, emails, calendar updates, Monday writes or paid campaigns were executed.</div>
+    <section class="ai-summary">
+      <h3>Executive summary</h3>
+      <p>${escapeHTML(result.executiveSummary || "No Maya analysis returned.")}</p>
+      <small>Confidence: ${escapeHTML(result.confidenceLevel || "unknown")} · ${escapeHTML(result.model || "maya-deterministic-v1")}</small>
+    </section>
+    ${renderList("Top priorities", result.topPriorities || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail || "")}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Content plan", result.contentPlan || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.channel || "Channel")} · ${escapeHTML(item.status || "Planned")}</span>
+      <small>${escapeHTML(item.priority || "Medium")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Risks", result.risks || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Opportunities", result.opportunities || [], (item) => `
+      <strong>${escapeHTML(item.title)}</strong>
+      <span>${escapeHTML(item.detail || "")}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Decisions required", result.decisionsRequired || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Recommended next actions", result.recommendedNextActions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    ${renderList("Assumptions", result.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+  `;
+}
+
+async function askMayaAnalysis() {
+  if (!backendAvailable) {
+    showToast("Maya analysis requires the backend");
+    return;
+  }
+  $("#maya-analysis-output").innerHTML = '<div class="ai-loading">Maya is analysing marketing context...</div>';
+  try {
+    const result = await apiRequest("/api/ai/maya/analyse-marketing", {
+      method: "POST",
+      body: JSON.stringify({ topic: $("#maya-search-query").value.trim() || "Alfred executive operating system", userAction: "ui:maya:analyse-marketing" }),
+    });
+    $("#maya-analysis-output").innerHTML = renderMayaAnalysis(result);
+    state.maya = await apiRequest("/api/maya/dashboard").catch(() => state.maya || seedData.maya);
+    renderMaya();
+    showToast("Maya analysis generated");
+  } catch (error) {
+    $("#maya-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function searchMaya(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Maya search requires the backend");
+    return;
+  }
+  const query = $("#maya-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a marketing search topic");
+    return;
+  }
+  $("#maya-search-results").innerHTML = '<div class="ai-loading">Searching Maya marketing memory...</div>';
+  try {
+    const result = await apiRequest(`/api/maya/search?q=${encodeURIComponent(query)}`);
+    $("#maya-search-results").innerHTML = `
+      ${renderList("Content", result.contentItems || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.channelName || item.channelId || "Channel")} · ${escapeHTML(item.status || "")}</span>
+        <small>${escapeHTML(item.summary || "")}</small>
+      `)}
+      ${renderList("Campaigns", result.campaigns || [], (item) => `
+        <strong>${escapeHTML(item.name)}</strong>
+        <span>${escapeHTML(item.objective || "")}</span>
+        <small>${(item.channels || []).map(escapeHTML).join(", ")}</small>
+      `)}
+      ${renderList("Opportunities", result.opportunities || [], (item) => `
+        <strong>${escapeHTML(item.title)}</strong>
+        <span>${escapeHTML(item.potentialImpact || item.detail || "")}</span>
+        <small>${escapeHTML(item.recommendedAction || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#maya-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
 async function askSarahProjectReview() {
   if (!backendAvailable) {
     showToast("Sarah project review requires the backend");
@@ -3554,6 +3781,9 @@ function runCommand(command) {
   if (normalized.includes("sarah")) {
     navigate("sarah");
     if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
+  } else if (normalized.includes("maya") || normalized.includes("marketing") || normalized.includes("linkedin") || normalized.includes("youtube") || normalized.includes("tiktok") || normalized.includes("campaign") || normalized.includes("content")) {
+    navigate("maya");
+    if (backendAvailable && (normalized.includes("analyse") || normalized.includes("analyze") || normalized.includes("review"))) askMayaAnalysis();
   } else if (normalized.includes("brief")) {
     generateBrief();
   } else if (normalized.includes("risk")) {
@@ -3631,6 +3861,9 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-maya").addEventListener("click", refreshMayaDashboard);
+$("#ask-maya").addEventListener("click", askMayaAnalysis);
+$("#maya-search-form").addEventListener("submit", searchMaya);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });
