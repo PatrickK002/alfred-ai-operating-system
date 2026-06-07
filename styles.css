@@ -1452,6 +1452,29 @@ h3 {
   margin-bottom: 14px;
 }
 
+.live-beta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.live-beta-grid section {
+  min-width: 0;
+}
+
+.live-beta-grid h4 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font: 600 10px/1.2 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-beta-wide {
+  grid-column: 1 / -1;
+}
+
 .deployment-warning {
   margin-bottom: 18px;
 }

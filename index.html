@@ -1228,6 +1228,38 @@
             <article class="panel settings-panel settings-panel-wide">
               <div class="panel-heading compact">
                 <div>
+                  <p class="eyebrow">LIVE BETA</p>
+                  <h3>Operations hardening</h3>
+                </div>
+                <button class="secondary-button" id="create-live-backup">Create SQLite backup</button>
+              </div>
+              <p class="core-message">Local backup, Microsoft token, monitoring and private beta checklist status. Values are redacted and external writes remain disabled.</p>
+              <div class="live-beta-grid">
+                <section>
+                  <h4>Beta summary</h4>
+                  <div class="settings-facts compact" id="live-beta-summary-facts"></div>
+                </section>
+                <section>
+                  <h4>Microsoft token</h4>
+                  <div class="settings-facts compact" id="microsoft-token-facts"></div>
+                </section>
+                <section>
+                  <h4>Monitoring checks</h4>
+                  <div class="security-list readiness-list" id="live-beta-monitoring-list"></div>
+                </section>
+                <section>
+                  <h4>Private beta checklist</h4>
+                  <div class="security-list readiness-list" id="live-beta-checklist"></div>
+                </section>
+                <section class="live-beta-wide">
+                  <h4>Recent SQLite backups</h4>
+                  <div class="security-list" id="live-beta-backup-list"></div>
+                </section>
+              </div>
+            </article>
+            <article class="panel settings-panel settings-panel-wide">
+              <div class="panel-heading compact">
+                <div>
                   <p class="eyebrow">SECURITY</p>
                   <h3>Production boundary</h3>
                 </div>

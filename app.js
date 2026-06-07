@@ -502,6 +502,31 @@ const seedData = {
     },
     uptimeSeconds: 0,
   },
+  liveBeta: {
+    summary: { status: "unavailable", blockers: 0, warnings: 0, passing: 0 },
+    backups: {
+      strategy: "not-configured",
+      count: 0,
+      latest: null,
+      retentionDays: 14,
+      valuesRedacted: true,
+    },
+    microsoft: {
+      token: {
+        connected: false,
+        expiryStatus: "unknown",
+        refreshTokenPresent: false,
+        valuesRedacted: true,
+      },
+    },
+    monitoring: { checks: [] },
+    checklist: { items: [] },
+    securityBoundary: {
+      externalWritesEnabled: false,
+      autonomousExecutionEnabled: false,
+      localBackupsOnly: true,
+    },
+  },
 };
 
 let state = loadState();
@@ -586,6 +611,7 @@ async function loadDashboard() {
       lastResult: state.voice?.lastResult || null,
     };
     state.deployment = await apiRequest("/api/health").catch(() => seedData.deployment);
+    state.liveBeta = await apiRequest("/api/live-beta/status").catch(() => seedData.liveBeta);
     persist();
     setBackendStatus(true);
   } catch (error) {
@@ -1132,6 +1158,8 @@ function readinessStatusLabel(status) {
   if (status === "ready") return "Ready";
   if (status === "partial") return "Partial";
   if (status === "missing") return "Missing";
+  if (status === "watch") return "Watch";
+  if (status === "attention-required") return "Attention required";
   return status || "Unknown";
 }
 
@@ -1156,6 +1184,10 @@ function renderSettings() {
   const security = deployment.security || seedData.deployment.security;
   const property = state.property || seedData.property;
   const financial = state.financial || seedData.financial;
+  const liveBeta = state.liveBeta || seedData.liveBeta;
+  const liveBetaSummary = liveBeta.summary || seedData.liveBeta.summary;
+  const liveBetaBackups = liveBeta.backups || seedData.liveBeta.backups;
+  const microsoftToken = liveBeta.microsoft?.token || seedData.liveBeta.microsoft.token;
   const roster = executiveTeamRoster();
 
   $("#deployment-warning").innerHTML = warnings.length
@@ -1224,6 +1256,55 @@ function renderSettings() {
         </article>
       `).join("")
     : `<article class="blocked"><strong>Production preflight unavailable</strong><span>Connect the backend to view go-live blockers and warnings.</span></article>`;
+
+  $("#live-beta-summary-facts").innerHTML = factRows([
+    ["Beta status", readinessStatusLabel(liveBetaSummary.status)],
+    ["Passing checks", liveBetaSummary.passing ?? 0],
+    ["Warnings", liveBetaSummary.warnings ?? 0],
+    ["Blockers", liveBetaSummary.blockers ?? 0],
+    ["Backups", liveBetaBackups.count ?? 0],
+    ["Latest backup", liveBetaBackups.latest ? `${liveBetaBackups.latest.ageHours}h ago` : "None recorded"],
+  ]);
+
+  $("#microsoft-token-facts").innerHTML = factRows([
+    ["Connected", microsoftToken.connected ? "Yes" : "No"],
+    ["Expiry status", microsoftToken.expiryStatus || "unknown"],
+    ["Expires in", microsoftToken.expiresInMinutes !== undefined ? `${microsoftToken.expiresInMinutes} min` : "unknown"],
+    ["Refresh token", microsoftToken.refreshTokenPresent ? "Present" : "Missing"],
+    ["Storage", microsoftToken.tokenStorage || "unknown"],
+    ["Values", microsoftToken.valuesRedacted ? "Redacted" : "Review"],
+  ]);
+
+  const monitoringChecks = liveBeta.monitoring?.checks || [];
+  $("#live-beta-monitoring-list").innerHTML = monitoringChecks.length
+    ? monitoringChecks.map((check) => `
+        <article class="${readinessClass(check.status)}">
+          <strong>${escapeHTML(check.label)} · ${escapeHTML(readinessStatusLabel(check.status))}</strong>
+          <span>${escapeHTML(check.message || "")}</span>
+          ${check.status !== "pass" ? `<span>${escapeHTML(check.action || "")}</span>` : ""}
+        </article>
+      `).join("")
+    : `<article class="blocked"><strong>Monitoring unavailable</strong><span>Connect the backend to view live beta monitoring checks.</span></article>`;
+
+  const checklistItems = liveBeta.checklist?.items || [];
+  $("#live-beta-checklist").innerHTML = checklistItems.length
+    ? checklistItems.map((item) => `
+        <article class="${readinessClass(item.status)}">
+          <strong>${escapeHTML(item.label)} · ${escapeHTML(readinessStatusLabel(item.status))}</strong>
+          <span>${escapeHTML(item.message || "")}</span>
+          ${item.status !== "pass" ? `<span>${escapeHTML(item.action || "")}</span>` : ""}
+        </article>
+      `).join("")
+    : `<article class="blocked"><strong>Checklist unavailable</strong><span>Connect the backend to view private beta checklist items.</span></article>`;
+
+  $("#live-beta-backup-list").innerHTML = (liveBetaBackups.items || []).length
+    ? liveBetaBackups.items.map((backup) => `
+        <article class="ok">
+          <strong>${escapeHTML(backup.fileName)}</strong>
+          <span>${escapeHTML(`${Math.round((backup.sizeBytes || 0) / 1024)} KB · ${backup.ageHours}h old · ${backup.pathCategory}`)}</span>
+        </article>
+      `).join("")
+    : `<article class="warning"><strong>No local SQLite snapshots yet</strong><span>Create a backup before relying on private beta operating records.</span></article>`;
 
   $("#security-boundary-list").innerHTML = [
     ["HTTPS required in production", security.httpsRequired],
@@ -2325,8 +2406,24 @@ async function refreshAppStatus() {
   }
   try {
     state.deployment = await apiRequest("/api/health");
+    state.liveBeta = await apiRequest("/api/live-beta/status").catch(() => state.liveBeta || seedData.liveBeta);
     renderSettings();
     showToast("Deployment status refreshed");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function createLiveBetaBackup() {
+  if (!backendAvailable) {
+    showToast("SQLite backup requires the backend API");
+    return;
+  }
+  try {
+    const result = await apiRequest("/api/live-beta/backups", { method: "POST", body: "{}" });
+    state.liveBeta = result.status || await apiRequest("/api/live-beta/status");
+    renderSettings();
+    showToast(`SQLite backup created: ${result.backup?.fileName || "snapshot ready"}`);
   } catch (error) {
     showToast(error.message);
   }
@@ -4100,6 +4197,7 @@ $("#refresh-monday-finance").addEventListener("click", refreshMondayFinance);
 $("#generate-board-report").addEventListener("click", generateBoardReportView);
 $("#ask-olivia").addEventListener("click", askOlivia);
 $("#refresh-app-status").addEventListener("click", refreshAppStatus);
+$("#create-live-backup").addEventListener("click", createLiveBetaBackup);
 $("#copy-board-report").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(currentBoardReportMarkdown || $("#board-report-output").textContent);

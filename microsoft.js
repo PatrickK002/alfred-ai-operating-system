@@ -14,6 +14,14 @@ const DEFAULT_SCOPES = [
   "Files.Read",
 ];
 
+function storageCategory(path = "") {
+  const value = String(path);
+  if (value.startsWith("/var/data")) return "render-persistent-disk";
+  if (value.includes("/home/data")) return "azure-persistent-storage";
+  if (value.includes("/data/")) return "local-data-directory";
+  return "custom";
+}
+
 function formBody(values) {
   return new URLSearchParams(values).toString();
 }
@@ -84,6 +92,39 @@ export class MicrosoftGraphClient {
   disconnect() {
     if (existsSync(this.tokenPath)) writeFileSync(this.tokenPath, "", { mode: 0o600 });
     this.pendingDeviceCode = null;
+  }
+
+  tokenMetadata(now = Date.now()) {
+    const token = this.loadToken();
+    if (!token) {
+      return {
+        configured: this.configured,
+        connected: false,
+        tokenFilePresent: existsSync(this.tokenPath),
+        tokenStorage: storageCategory(this.tokenPath),
+        valuesRedacted: true,
+      };
+    }
+    const expiresAt = Number(token.expires_at || 0);
+    const expiresInSeconds = Math.round((expiresAt - now) / 1000);
+    const expiryStatus = expiresInSeconds <= 0
+      ? "expired"
+      : expiresInSeconds <= 15 * 60 ? "expiring" : "healthy";
+    return {
+      configured: this.configured,
+      connected: true,
+      savedAt: token.saved_at || null,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      expiresInSeconds,
+      expiresInMinutes: Math.round((expiresInSeconds / 60) * 10) / 10,
+      expiryStatus,
+      refreshTokenPresent: Boolean(token.refresh_token),
+      tokenFilePresent: true,
+      tokenStorage: storageCategory(this.tokenPath),
+      scopeCount: String(token.scope || DEFAULT_SCOPES.join(" ")).split(/\s+/).filter(Boolean).length,
+      scopes: String(token.scope || DEFAULT_SCOPES.join(" ")).split(/\s+/).filter(Boolean),
+      valuesRedacted: true,
+    };
   }
 
   async requestToken(values) {

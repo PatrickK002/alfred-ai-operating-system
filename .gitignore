@@ -1,6 +1,7 @@
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/backups/
 data/microsoft-token.json
 data/microsoft-config.json
 .DS_Store

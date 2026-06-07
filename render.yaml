@@ -40,10 +40,16 @@ services:
         value: "true"
       - key: ALFRED_DB_PATH
         value: /var/data/alfred.db
+      - key: ALFRED_BACKUP_DIR
+        value: /var/data/backups
       - key: MICROSOFT_TOKEN_PATH
         value: /var/data/microsoft-token.json
       - key: ALFRED_BACKUP_STRATEGY
         value: render-persistent-disk-daily-snapshots
+      - key: ALFRED_BACKUP_RETENTION_DAYS
+        value: "14"
+      - key: ALFRED_TEMPORARY_RENDER_KEY_REVOKED
+        value: "true"
       - key: ENFORCE_HTTPS
         value: "true"
       - key: ANTHROPIC_MODEL

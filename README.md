@@ -69,8 +69,11 @@ ALFRED_BASIC_AUTH_PASSWORD=<strong generated password>
 ALFRED_ALLOWED_USERS=<same approved username/email>
 ALFRED_REQUIRE_USER_ALLOWLIST=true
 ALFRED_DB_PATH=/var/data/alfred.db
+ALFRED_BACKUP_DIR=/var/data/backups
 MICROSOFT_TOKEN_PATH=/var/data/microsoft-token.json
 ALFRED_BACKUP_STRATEGY=render-persistent-disk-daily-snapshots
+ALFRED_BACKUP_RETENTION_DAYS=14
+ALFRED_TEMPORARY_RENDER_KEY_REVOKED=true
 ENFORCE_HTTPS=true
 ```
 
@@ -81,6 +84,8 @@ Render deployment notes:
 - Keep `numInstances=1` while Alfred uses SQLite on a single attached disk.
 - Render uses `/api/healthz` for unauthenticated platform health checks; Alfred's full `/api/health` remains behind the authentication gate.
 - Set Basic Auth and provider API keys as Render environment secrets. Do not commit them.
+- Use `/var/data/backups` for local SQLite snapshots during private beta. Backups are created from the Settings page or `POST /api/live-beta/backups`; they stay on the persistent Render disk and are not sent to Microsoft, Monday, GitHub or any other external system.
+- Set `ALFRED_TEMPORARY_RENDER_KEY_REVOKED=true` only after temporary setup/deployment keys have been revoked.
 
 Recommended Azure App Service settings:
 
@@ -96,11 +101,23 @@ AUTHENTICATED_USER_HEADER=x-ms-client-principal
 ALFRED_ALLOWED_USERS=patrick@example.com
 ALFRED_REQUIRE_USER_ALLOWLIST=true
 ALFRED_DB_PATH=/home/data/alfred.db
+ALFRED_BACKUP_DIR=/home/data/backups
 ALFRED_BACKUP_STRATEGY=azure-app-service-backup
+ALFRED_BACKUP_RETENTION_DAYS=14
 ENFORCE_HTTPS=true
 ```
 
 Set real API keys, Render secrets and publish profiles only in platform/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
+
+Live beta hardening:
+
+- Settings includes a Live Beta operations panel with readiness summary, SQLite integrity, backup freshness, Microsoft token freshness, private beta checklist and redacted operational metadata.
+- `GET /api/live-beta/status` returns monitoring and checklist status without exposing raw secrets, token values or absolute token paths.
+- `POST /api/live-beta/backups` creates a local SQLite snapshot using `VACUUM INTO` in `ALFRED_BACKUP_DIR` or `<ALFRED_DB_PATH directory>/backups`.
+- `ALFRED_BACKUP_RETENTION_DAYS` documents the expected retention window for local snapshots. Alfred reports retention and recent backups, but this phase does not delete backups automatically.
+- `ALFRED_TEMPORARY_RENDER_KEY_REVOKED=true` is a manual confirmation flag used by the private beta checklist after temporary Render/GitHub/Azure setup keys have been revoked.
+- Microsoft token status reports configured/connected state, expiry window, refresh token presence, read-only scopes and storage category only. Raw access and refresh tokens are never returned through the API.
+- Live beta hardening does not add external writes, Microsoft writes, Monday writes, property actions, financial transactions, voice execution or autonomous execution.
 
 Live setup handoff:
 
@@ -210,6 +227,8 @@ Health and aggregate workflows:
 | `GET` | `/api/health` | App, environment, database, integration, version, PWA and security health without secrets |
 | `GET` | `/api/app/status` | Public app metadata, release notes, environment validation and PWA readiness |
 | `GET` | `/api/deployment/preflight` | Production go-live checklist, API key assignment status and security boundary without secrets |
+| `GET` | `/api/live-beta/status` | Private beta operations status: SQLite integrity, backup freshness, Microsoft token metadata, monitoring checks and safety boundary with values redacted |
+| `POST` | `/api/live-beta/backups` | Create a local SQLite snapshot on the configured persistent disk; no external writes |
 | `GET` | `/api/dashboard` | Complete dashboard state |
 | `GET` | `/api/morning-brief` | Backend-generated executive brief |
 | `GET` | `/api/anthropic/status` | Anthropic configuration and read-only status |
