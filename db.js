@@ -674,6 +674,162 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS workload_metrics_agent_health
   ON workload_metrics(agent_id, health_status);
 
+  CREATE TABLE IF NOT EXISTS growth_channels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'growth',
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    outbound_enabled INTEGER NOT NULL DEFAULT 0 CHECK(outbound_enabled IN (0, 1)),
+    crm_write_enabled INTEGER NOT NULL DEFAULT 0 CHECK(crm_write_enabled IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS growth_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    client_name TEXT NOT NULL DEFAULT '',
+    contact_name TEXT NOT NULL DEFAULT '',
+    organisation_name TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    source_channel_id TEXT REFERENCES growth_channels(id),
+    lead_type TEXT NOT NULL DEFAULT 'lead',
+    status TEXT NOT NULL DEFAULT 'Research',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    estimated_value_gbp REAL NOT NULL DEFAULT 0,
+    probability INTEGER NOT NULL DEFAULT 0,
+    score INTEGER NOT NULL DEFAULT 0,
+    qualification_notes TEXT NOT NULL DEFAULT '',
+    recommended_next_step TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS growth_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    target_market TEXT NOT NULL DEFAULT '',
+    source_channel_id TEXT REFERENCES growth_channels(id),
+    stage TEXT NOT NULL DEFAULT 'Identified',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    estimated_value_gbp REAL NOT NULL DEFAULT 0,
+    probability INTEGER NOT NULL DEFAULT 0,
+    score INTEGER NOT NULL DEFAULT 0,
+    business_impact TEXT NOT NULL DEFAULT '',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    owner_notes TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS growth_partnerships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    partner_name TEXT NOT NULL,
+    partner_type TEXT NOT NULL DEFAULT 'strategic',
+    status TEXT NOT NULL DEFAULT 'Research',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    strategic_value TEXT NOT NULL DEFAULT '',
+    potential_value_gbp REAL NOT NULL DEFAULT 0,
+    probability INTEGER NOT NULL DEFAULT 0,
+    score INTEGER NOT NULL DEFAULT 0,
+    recommended_next_step TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS growth_strategies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    title TEXT NOT NULL,
+    focus_area TEXT NOT NULL DEFAULT 'Growth Strategy',
+    summary TEXT NOT NULL DEFAULT '',
+    target_outcome TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    source_type TEXT NOT NULL DEFAULT 'alfred',
+    source_id TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS growth_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    related_type TEXT NOT NULL DEFAULT 'growth_output',
+    related_id TEXT NOT NULL DEFAULT '',
+    feedback TEXT NOT NULL,
+    rating TEXT NOT NULL DEFAULT 'unrated',
+    recommendation_status TEXT NOT NULL DEFAULT 'unreviewed',
+    lesson_learned TEXT NOT NULL DEFAULT '',
+    future_work_suggestion TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS alex_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    record_type TEXT NOT NULL DEFAULT '',
+    record_id TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT '',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS growth_leads_status_score
+  ON growth_leads(status, score, priority);
+
+  CREATE UNIQUE INDEX IF NOT EXISTS growth_leads_source_unique
+  ON growth_leads(source_type, source_id)
+  WHERE source_id != '';
+
+  CREATE INDEX IF NOT EXISTS growth_opportunities_stage_score
+  ON growth_opportunities(stage, score, priority);
+
+  CREATE UNIQUE INDEX IF NOT EXISTS growth_opportunities_source_unique
+  ON growth_opportunities(source_type, source_id)
+  WHERE source_id != '';
+
+  CREATE INDEX IF NOT EXISTS growth_partnerships_status_score
+  ON growth_partnerships(status, score, priority);
+
+  CREATE UNIQUE INDEX IF NOT EXISTS growth_partnerships_source_unique
+  ON growth_partnerships(source_type, source_id)
+  WHERE source_id != '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS growth_strategies_source_unique
+  ON growth_strategies(source_type, source_id)
+  WHERE source_id != '';
+
+  CREATE INDEX IF NOT EXISTS alex_audit_events_created
+  ON alex_audit_events(created_at, event_type);
+
   CREATE TABLE IF NOT EXISTS project_email_signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -1940,10 +2096,113 @@ const AGENT_SEEDS = [
   ["westbridge-property-director", "Westbridge Property Director", "AI Investment Director", "westbridge", "Property Investment", "Board-level investment director for Westbridge Property Group. Analyses acquisition pipeline, portfolio cashflow, due diligence, refinance potential and investment risks. Advisory only; no purchases, offers, legal instructions, communications or external execution.", ["Portfolio Metrics", "Deal Analysis", "Westbridge Rules", "Due Diligence", "Refinance Scenarios", "Property Memory"], "Active"],
   ["sentinel", "Sentinel", "Chief Information Security Officer", null, "Security", "Planned CISO foundation for cyber, data, identity, integration and AI-governance risk across Alfred, Digitize, Westbridge and connected systems. Advisory only; no monitoring, tenant administration or enforcement automation in this phase.", ["Cyber Security", "Microsoft 365 Security", "Azure Security", "Identity Management", "Access Control", "Threat Detection", "Data Protection", "AI Governance", "Prompt Injection Defence", "Secrets Management", "GitHub Security", "Dependency Risk", "Audit Integrity", "Compliance", "Incident Response"], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
-  ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
+  ["alex", "Alex", "Growth Director", null, "Growth", "Executive Specialist reporting to Alfred. Provides advisory-only sales pipeline, partnership, lead generation, opportunity scoring, CRM intelligence and growth strategy recommendations. No outbound messages, CRM writes or autonomous execution.", ["Sales Pipeline", "Partnerships", "Lead Generation", "Opportunity Scoring", "CRM Intelligence", "Growth Strategy"], "Active"],
   ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
   ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
+];
+
+const GROWTH_CHANNEL_SEEDS = [
+  ["referrals", "Warm Referrals", "relationship", "Founder-led warm introductions and trusted network routes. Advisory planning only; no outbound messages.", "Planned"],
+  ["partnerships", "Strategic Partnerships", "partnership", "Partner and channel opportunities across Digitize, Westbridge, Product Studio and future ventures.", "Planned"],
+  ["inbound", "Inbound Signals", "demand", "Website, content, meeting and memory signals that suggest demand. Local intelligence only.", "Planned"],
+  ["crm-placeholder", "CRM Intelligence Placeholder", "crm", "Future CRM read-only intelligence placeholder. No CRM connection or write-back exists in this phase.", "Planned"],
+];
+
+const GROWTH_LEAD_SEEDS = [
+  {
+    businessEntityId: "digitize",
+    companyId: "digitize",
+    clientName: "Westminster City Council",
+    organisationName: "Westminster City Council",
+    title: "Westminster expansion discussion",
+    sourceChannelId: "referrals",
+    leadType: "existing_client_expansion",
+    status: "Research",
+    priority: "High",
+    estimatedValueGbp: 45000,
+    probability: 55,
+    score: 78,
+    qualificationNotes: "Existing client context suggests potential adjacent assurance or information management work. Confirm live need before any outreach.",
+    recommendedNextStep: "Ask Patrick to confirm whether Westminster has an approved reason for a growth review before preparing any approach.",
+  },
+  {
+    businessEntityId: "council-assurance-platform",
+    companyId: "product",
+    organisationName: "Public sector construction assurance teams",
+    title: "Council Assurance Platform validation cohort",
+    sourceChannelId: "inbound",
+    leadType: "market_validation",
+    status: "Qualify",
+    priority: "High",
+    estimatedValueGbp: 120000,
+    probability: 35,
+    score: 72,
+    qualificationNotes: "Validate pain points and buying route before treating this as pipeline.",
+    recommendedNextStep: "Prepare a no-outbound validation hypothesis and decision prompt for Patrick.",
+  },
+];
+
+const GROWTH_OPPORTUNITY_SEEDS = [
+  {
+    businessEntityId: "digitize",
+    companyId: "digitize",
+    title: "Public-sector digital construction assurance lane",
+    detail: "Package Digitize capability around practical assurance, information management and council delivery risk.",
+    targetMarket: "UK public-sector clients",
+    sourceChannelId: "partnerships",
+    stage: "Identified",
+    priority: "High",
+    estimatedValueGbp: 180000,
+    probability: 45,
+    score: 76,
+    businessImpact: "Could create repeatable consulting demand and feed the Council Assurance Platform product thesis.",
+    recommendedAction: "Map the first three credible client-safe use cases. Do not contact prospects yet.",
+  },
+  {
+    businessEntityId: "westbridge-property-group",
+    companyId: "westbridge",
+    title: "Property investor partner network",
+    detail: "Identify property brokers, sourcers and professional advisors who could support Westbridge deal flow.",
+    targetMarket: "UK property investment partners",
+    sourceChannelId: "partnerships",
+    stage: "Research",
+    priority: "Medium",
+    estimatedValueGbp: 0,
+    probability: 30,
+    score: 54,
+    businessImpact: "Could improve deal flow quality but requires strict governance and professional advice boundaries.",
+    recommendedAction: "Create criteria for acceptable partner introductions before any external conversation.",
+  },
+];
+
+const GROWTH_PARTNERSHIP_SEEDS = [
+  {
+    businessEntityId: "digitize",
+    companyId: "digitize",
+    partnerName: "Public-sector digital advisory partners",
+    partnerType: "channel",
+    status: "Research",
+    priority: "Medium",
+    strategicValue: "Potential referral and delivery partner route for councils needing assurance and information management support.",
+    potentialValueGbp: 90000,
+    probability: 40,
+    score: 62,
+    recommendedNextStep: "Define partner fit criteria and conflict boundaries before any outreach.",
+  },
+];
+
+const GROWTH_STRATEGY_SEEDS = [
+  {
+    businessEntityId: "group",
+    companyId: null,
+    title: "Group growth operating rhythm",
+    focusArea: "Growth Strategy",
+    summary: "Weekly review of pipeline, partnerships, validation opportunities, client expansion signals and CRM hygiene.",
+    targetOutcome: "Create a repeatable advisory growth cadence without outbound execution.",
+    status: "Planned",
+    priority: "High",
+  },
 ];
 
 const SARAH_TEAM_PLACEHOLDER_SEEDS = [
@@ -2013,6 +2272,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateProjectIntelligenceSchema(db);
   migrateMeetingIntelligenceSchema(db);
   migrateMondayOperatingSchema(db);
+  migrateAlexGrowthSchema(db);
   migratePropertySchema(db);
   seedDatabase(db);
   return db;
@@ -2216,6 +2476,38 @@ function migrateMondayOperatingSchema(db) {
   `);
 }
 
+function migrateAlexGrowthSchema(db) {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS growth_leads_status_score
+    ON growth_leads(status, score, priority);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS growth_leads_source_unique
+    ON growth_leads(source_type, source_id)
+    WHERE source_id != '';
+
+    CREATE INDEX IF NOT EXISTS growth_opportunities_stage_score
+    ON growth_opportunities(stage, score, priority);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS growth_opportunities_source_unique
+    ON growth_opportunities(source_type, source_id)
+    WHERE source_id != '';
+
+    CREATE INDEX IF NOT EXISTS growth_partnerships_status_score
+    ON growth_partnerships(status, score, priority);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS growth_partnerships_source_unique
+    ON growth_partnerships(source_type, source_id)
+    WHERE source_id != '';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS growth_strategies_source_unique
+    ON growth_strategies(source_type, source_id)
+    WHERE source_id != '';
+
+    CREATE INDEX IF NOT EXISTS alex_audit_events_created
+    ON alex_audit_events(created_at, event_type);
+  `);
+}
+
 function migratePropertySchema(db) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS property_opportunities_stage
@@ -2236,6 +2528,7 @@ export function seedDatabase(db) {
     updateProjectTags(db);
     updateAgentDefinitions(db);
     updateSarahTeamPlaceholders(db);
+    updateAlexGrowthSeeds(db);
     updateIntegrationDefinitions(db);
     updateWestbridgePropertySeeds(db);
     return;
@@ -2289,6 +2582,7 @@ export function seedDatabase(db) {
       insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     }
     updateSarahTeamPlaceholders(db);
+    updateAlexGrowthSeeds(db);
 
     const insertMemory = db.prepare(`
       INSERT INTO memories (type, title, detail, company_id, recorded_at)
@@ -2355,6 +2649,123 @@ function updateSarahTeamPlaceholders(db) {
   for (const placeholder of SARAH_TEAM_PLACEHOLDER_SEEDS) {
     insertPlaceholder.run(placeholder[0], placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4]);
     updatePlaceholder.run(placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4], placeholder[0]);
+  }
+}
+
+function updateAlexGrowthSeeds(db) {
+  const insertChannel = db.prepare(`
+    INSERT OR IGNORE INTO growth_channels (id, name, category, description, status, outbound_enabled, crm_write_enabled)
+    VALUES (?, ?, ?, ?, ?, 0, 0)
+  `);
+  const updateChannel = db.prepare(`
+    UPDATE growth_channels
+    SET name = ?, category = ?, description = ?, status = ?,
+        outbound_enabled = 0, crm_write_enabled = 0, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const channel of GROWTH_CHANNEL_SEEDS) {
+    insertChannel.run(...channel);
+    updateChannel.run(channel[1], channel[2], channel[3], channel[4], channel[0]);
+  }
+
+  const upsertLead = db.prepare(`
+    INSERT INTO growth_leads (
+      business_entity_id, company_id, client_name, contact_name, organisation_name,
+      title, source_channel_id, lead_type, status, priority, estimated_value_gbp,
+      probability, score, qualification_notes, recommended_next_step, source_type, source_id, metadata
+    )
+    VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, '{}')
+    ON CONFLICT DO NOTHING
+  `);
+  const existingLead = db.prepare("SELECT id FROM growth_leads WHERE source_type = 'seed' AND source_id = ?");
+  const updateLead = db.prepare(`
+    UPDATE growth_leads
+    SET business_entity_id = ?, company_id = ?, client_name = ?, organisation_name = ?,
+        title = ?, source_channel_id = ?, lead_type = ?, status = ?, priority = ?,
+        estimated_value_gbp = ?, probability = ?, score = ?, qualification_notes = ?,
+        recommended_next_step = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const seed of GROWTH_LEAD_SEEDS) {
+    const sourceId = seed.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    upsertLead.run(seed.businessEntityId, seed.companyId, seed.clientName || "", seed.organisationName || "", seed.title, seed.sourceChannelId, seed.leadType, seed.status, seed.priority, seed.estimatedValueGbp, seed.probability, seed.score, seed.qualificationNotes, seed.recommendedNextStep, sourceId);
+    if (existingLead.get(sourceId)) {
+      updateLead.run(seed.businessEntityId, seed.companyId, seed.clientName || "", seed.organisationName || "", seed.title, seed.sourceChannelId, seed.leadType, seed.status, seed.priority, seed.estimatedValueGbp, seed.probability, seed.score, seed.qualificationNotes, seed.recommendedNextStep, sourceId);
+    }
+  }
+
+  const upsertOpportunity = db.prepare(`
+    INSERT INTO growth_opportunities (
+      business_entity_id, company_id, title, detail, target_market, source_channel_id,
+      stage, priority, estimated_value_gbp, probability, score, business_impact,
+      recommended_action, owner_notes, source_type, source_id, metadata
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'seed', ?, '{}')
+    ON CONFLICT DO NOTHING
+  `);
+  const existingOpportunity = db.prepare("SELECT id FROM growth_opportunities WHERE source_type = 'seed' AND source_id = ?");
+  const updateOpportunity = db.prepare(`
+    UPDATE growth_opportunities
+    SET business_entity_id = ?, company_id = ?, title = ?, detail = ?, target_market = ?,
+        source_channel_id = ?, stage = ?, priority = ?, estimated_value_gbp = ?,
+        probability = ?, score = ?, business_impact = ?, recommended_action = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const seed of GROWTH_OPPORTUNITY_SEEDS) {
+    const sourceId = seed.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    upsertOpportunity.run(seed.businessEntityId, seed.companyId, seed.title, seed.detail, seed.targetMarket, seed.sourceChannelId, seed.stage, seed.priority, seed.estimatedValueGbp, seed.probability, seed.score, seed.businessImpact, seed.recommendedAction, sourceId);
+    if (existingOpportunity.get(sourceId)) {
+      updateOpportunity.run(seed.businessEntityId, seed.companyId, seed.title, seed.detail, seed.targetMarket, seed.sourceChannelId, seed.stage, seed.priority, seed.estimatedValueGbp, seed.probability, seed.score, seed.businessImpact, seed.recommendedAction, sourceId);
+    }
+  }
+
+  const upsertPartnership = db.prepare(`
+    INSERT INTO growth_partnerships (
+      business_entity_id, company_id, partner_name, partner_type, status, priority,
+      strategic_value, potential_value_gbp, probability, score, recommended_next_step,
+      source_type, source_id, metadata
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, '{}')
+    ON CONFLICT DO NOTHING
+  `);
+  const existingPartnership = db.prepare("SELECT id FROM growth_partnerships WHERE source_type = 'seed' AND source_id = ?");
+  const updatePartnership = db.prepare(`
+    UPDATE growth_partnerships
+    SET business_entity_id = ?, company_id = ?, partner_name = ?, partner_type = ?,
+        status = ?, priority = ?, strategic_value = ?, potential_value_gbp = ?,
+        probability = ?, score = ?, recommended_next_step = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const seed of GROWTH_PARTNERSHIP_SEEDS) {
+    const sourceId = seed.partnerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    upsertPartnership.run(seed.businessEntityId, seed.companyId, seed.partnerName, seed.partnerType, seed.status, seed.priority, seed.strategicValue, seed.potentialValueGbp, seed.probability, seed.score, seed.recommendedNextStep, sourceId);
+    if (existingPartnership.get(sourceId)) {
+      updatePartnership.run(seed.businessEntityId, seed.companyId, seed.partnerName, seed.partnerType, seed.status, seed.priority, seed.strategicValue, seed.potentialValueGbp, seed.probability, seed.score, seed.recommendedNextStep, sourceId);
+    }
+  }
+
+  const upsertStrategy = db.prepare(`
+    INSERT INTO growth_strategies (
+      business_entity_id, company_id, title, focus_area, summary, target_outcome,
+      status, priority, source_type, source_id, metadata
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, '{}')
+    ON CONFLICT DO NOTHING
+  `);
+  const existingStrategy = db.prepare("SELECT id FROM growth_strategies WHERE source_type = 'seed' AND source_id = ?");
+  const updateStrategy = db.prepare(`
+    UPDATE growth_strategies
+    SET business_entity_id = ?, company_id = ?, title = ?, focus_area = ?, summary = ?,
+        target_outcome = ?, status = ?, priority = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const seed of GROWTH_STRATEGY_SEEDS) {
+    const sourceId = seed.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    upsertStrategy.run(seed.businessEntityId, seed.companyId, seed.title, seed.focusArea, seed.summary, seed.targetOutcome, seed.status, seed.priority, sourceId);
+    if (existingStrategy.get(sourceId)) {
+      updateStrategy.run(seed.businessEntityId, seed.companyId, seed.title, seed.focusArea, seed.summary, seed.targetOutcome, seed.status, seed.priority, sourceId);
+    }
   }
 }
 
@@ -3900,6 +4311,122 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.future_work_suggestion ? `Future work suggestion: ${row.future_work_suggestion}.` : "",
         row.memory_reference ? `Memory reference: ${row.memory_reference}.` : "",
         row.source_reference ? `Source: ${row.source_reference}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const growthLeads = db.prepare(`
+    SELECT l.*, c.name AS channel_name
+    FROM growth_leads l
+    LEFT JOIN growth_channels c ON c.id = l.source_channel_id
+    ORDER BY l.updated_at DESC, l.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of growthLeads) {
+    records.push(semanticRecord({
+      sourceType: "growth_lead",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Growth lead: ${row.title}.`,
+        row.organisation_name ? `Organisation: ${row.organisation_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        row.channel_name ? `Channel: ${row.channel_name}.` : "",
+        `Status: ${row.status}. Priority: ${row.priority}. Score: ${row.score}. Probability: ${row.probability}%.`,
+        row.qualification_notes,
+        row.recommended_next_step ? `Recommended next step: ${row.recommended_next_step}.` : "",
+        "No outbound message, CRM write or external growth action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const growthOpportunities = db.prepare(`
+    SELECT o.*, c.name AS channel_name
+    FROM growth_opportunities o
+    LEFT JOIN growth_channels c ON c.id = o.source_channel_id
+    ORDER BY o.updated_at DESC, o.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of growthOpportunities) {
+    records.push(semanticRecord({
+      sourceType: "growth_opportunity",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Growth opportunity: ${row.title}.`,
+        row.target_market ? `Target market: ${row.target_market}.` : "",
+        row.channel_name ? `Channel: ${row.channel_name}.` : "",
+        `Stage: ${row.stage}. Priority: ${row.priority}. Score: ${row.score}. Probability: ${row.probability}%.`,
+        row.detail,
+        row.business_impact ? `Business impact: ${row.business_impact}.` : "",
+        row.recommended_action ? `Recommended action: ${row.recommended_action}.` : "",
+        "No outbound message, CRM write or external growth action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const growthPartnerships = db.prepare(`
+    SELECT *
+    FROM growth_partnerships
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of growthPartnerships) {
+    records.push(semanticRecord({
+      sourceType: "growth_partnership",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.partner_name,
+      summary: [
+        `Growth partnership: ${row.partner_name}.`,
+        `Type: ${row.partner_type}. Status: ${row.status}. Priority: ${row.priority}. Score: ${row.score}. Probability: ${row.probability}%.`,
+        row.strategic_value,
+        row.recommended_next_step ? `Recommended next step: ${row.recommended_next_step}.` : "",
+        "No outbound message, CRM write or external growth action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const growthStrategies = db.prepare(`
+    SELECT *
+    FROM growth_strategies
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 100
+  `).all();
+  for (const row of growthStrategies) {
+    records.push(semanticRecord({
+      sourceType: "growth_strategy",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Growth strategy: ${row.title}.`,
+        `Focus area: ${row.focus_area}. Status: ${row.status}. Priority: ${row.priority}.`,
+        row.summary,
+        row.target_outcome ? `Target outcome: ${row.target_outcome}.` : "",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const growthFeedback = db.prepare(`
+    SELECT *
+    FROM growth_feedback
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 100
+  `).all();
+  for (const row of growthFeedback) {
+    records.push(semanticRecord({
+      sourceType: "growth_feedback",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: `Growth feedback ${row.id}`,
+      summary: [
+        `Growth feedback: ${row.feedback}.`,
+        `Rating: ${row.rating}. Recommendation status: ${row.recommendation_status}.`,
+        row.lesson_learned ? `Lesson learned: ${row.lesson_learned}.` : "",
+        row.future_work_suggestion ? `Future work suggestion: ${row.future_work_suggestion}.` : "",
       ].filter(Boolean).join(" "),
     }));
   }

@@ -5,12 +5,12 @@ export const CURRENT_AGENT_IDS = Object.freeze([
   "olivia",
   "sarah",
   "westbridge-property-director",
+  "alex",
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
   "sentinel",
   "maya",
-  "alex",
   "ethan",
   "liam",
   "james",
@@ -159,12 +159,12 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     accentColor: "#7fa9e2",
     voicePersonaPlaceholder: "alex-growth-voice",
     expertiseTags: ["Pipeline", "Partnerships", "Sales strategy", "Market signals"],
-    status: "Planned",
-    statusCategory: "planned",
+    status: "Active advisory",
+    statusCategory: "active",
     reportingLine: "Alfred",
-    mission: "Future placeholder for growth strategy, lead qualification and revenue opportunity intelligence.",
-    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
-    plannedCapabilitySummary: "Future pipeline, partnerships, growth experiments and revenue opportunity analysis.",
+    mission: "Provide advisory-only sales pipeline, partnership, lead generation, opportunity scoring, CRM intelligence and growth strategy recommendations without outbound execution.",
+    currentCapabilitySummary: "Local growth dashboard, lead scoring, pipeline review, partnership intelligence, feedback and Monday OS workload integration.",
+    plannedCapabilitySummary: "Future CRM or outreach integrations require explicit approval, read-only-first setup and separate write safeguards.",
   },
   {
     id: "ethan",
