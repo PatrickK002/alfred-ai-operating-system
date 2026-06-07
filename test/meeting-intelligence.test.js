@@ -121,12 +121,12 @@ test("transcript processing extracts follow-ups without storing raw transcript b
   });
 });
 
-test("agent reviews route meeting context to Alfred, Sarah, Olivia, James, Westbridge and Sentinel", () => {
+test("agent reviews route meeting context to Alfred, Sarah, Liam, Olivia, James, Westbridge and Sentinel", () => {
   withDatabase((db) => {
     const detail = createMeetingRecord(db, {
       ...westminsterMeeting({
         id: "calendar-agent-routing-1",
-        bodyPreview: "BIM, invoice, product MVP validation, property due diligence and confidential access review.",
+        bodyPreview: "BIM, Dataverse, Power Apps, invoice, product MVP validation, property due diligence and confidential access review.",
       }),
       transcriptText: transcriptText(),
       transcriptPermitted: true,
@@ -135,6 +135,7 @@ test("agent reviews route meeting context to Alfred, Sarah, Olivia, James, Westb
 
     assert.ok(reviewers.has("alfred"));
     assert.ok(reviewers.has("sarah"));
+    assert.ok(reviewers.has("liam"));
     assert.ok(reviewers.has("olivia"));
     assert.ok(reviewers.has("james"));
     assert.ok(reviewers.has("westbridge-property-director"));

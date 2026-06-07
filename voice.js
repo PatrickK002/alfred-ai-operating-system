@@ -14,6 +14,7 @@ import {
 import { getFinancialDashboardData } from "./financial.js";
 import { getProjectDashboard, searchProjectKnowledge } from "./project-intelligence.js";
 import { getSarahDashboard, SARAH_READ_ONLY_BOUNDARY } from "./sarah.js";
+import { getLiamDashboard, LIAM_READ_ONLY_BOUNDARY } from "./liam.js";
 import { getPropertyDashboardData, PROPERTY_READ_ONLY_BOUNDARY, searchPropertyKnowledge } from "./property.js";
 import { getJamesDashboard, JAMES_READ_ONLY_BOUNDARY } from "./james.js";
 import { AGENT_AVATAR_PROFILES } from "./agent-avatars.js";
@@ -53,6 +54,8 @@ export const SUPPORTED_VOICE_COMMANDS = [
   "Ask Sarah to review Westminster",
   "Ask Olivia for revenue forecast",
   "Ask Westbridge for property pipeline",
+  "Ask Liam for Power Platform risks",
+  "Ask Liam for the Dataverse blueprint",
   "What property opportunities need attention?",
   "What is projected property cashflow?",
   "Ask James for product validation",
@@ -110,6 +113,14 @@ export function detectVoiceIntent(transcript = "") {
       intent: "olivia_revenue_forecast",
       routedAgent: "olivia",
       linkedBusiness: "group",
+      confidence: "high",
+    };
+  }
+  if (/liam|power platform|power apps|dataverse|power automate|power bi|sharepoint|low code|low-code/.test(text)) {
+    return {
+      intent: "liam_power_platform_review",
+      routedAgent: "liam",
+      linkedBusiness: "digitize",
       confidence: "high",
     };
   }
@@ -455,6 +466,33 @@ function summarizeWestbridge(property = {}) {
   };
 }
 
+function summarizeLiam(liam = {}) {
+  const metrics = liam.metrics || {};
+  const risks = asArray(liam.risks);
+  const opportunities = asArray(liam.opportunities);
+  const decisions = asArray(liam.decisions);
+  const topRisk = risks.find((risk) => risk.severity === "high") || risks[0];
+  const topOpportunity = opportunities[0];
+  const spokenResponse = [
+    `Liam's advisory Power Platform view: ${metrics.solutions || 0} solution blueprint${metrics.solutions === 1 ? "" : "s"}, ${metrics.openRisks || risks.length || 0} open risk${(metrics.openRisks || risks.length) === 1 ? "" : "s"}, and ${metrics.decisionsRequired || decisions.length || 0} decision${(metrics.decisionsRequired || decisions.length) === 1 ? "" : "s"} requiring review.`,
+    topRisk ? `Priority risk: ${topRisk.title}.` : "",
+    topOpportunity ? `Opportunity: ${topOpportunity.title}.` : "",
+    "No Power Apps, flows, Dataverse records, Power BI reports, SharePoint sites or Microsoft tenant settings were created or changed.",
+  ].filter(Boolean).join(" ");
+  return {
+    spokenResponse,
+    specialistContributions: [{
+      agent: "Liam",
+      assessment: `Power Platform blueprints ${metrics.solutions || 0}, open risks ${metrics.openRisks || risks.length || 0}, decisions ${metrics.decisionsRequired || decisions.length || 0}.`,
+      sourceReference: "liam:dashboard",
+    }],
+    sourceReferences: [
+      sourceReference("liam:dashboard", "Liam Power Platform dashboard", "liam"),
+      ...(topRisk ? [sourceReference(`power_platform_risk:${topRisk.id}`, topRisk.title, "liam")] : []),
+    ],
+  };
+}
+
 function summarizeJames(james = {}) {
   const metrics = james.metrics || {};
   const ventures = asArray(james.ventures);
@@ -558,6 +596,7 @@ function summarizeExecutiveBrief(context = {}) {
   const base = summarizeBrief(context.brief);
   const olivia = summarizeOlivia(context.financial);
   const sarah = summarizeSarah(context.sarah);
+  const liam = summarizeLiam(context.liam);
   const westbridge = summarizeWestbridge(context.property);
   const james = summarizeJames(context.james);
   return {
@@ -565,6 +604,7 @@ function summarizeExecutiveBrief(context = {}) {
       base.spokenResponse,
       `Olivia: ${compactText(olivia.specialistContributions[0]?.assessment, 160)}`,
       `Sarah: ${compactText(sarah.specialistContributions[0]?.assessment, 160)}`,
+      `Liam: ${compactText(liam.specialistContributions[0]?.assessment, 160)}`,
       `Westbridge: ${compactText(westbridge.specialistContributions[0]?.assessment, 160)}`,
       `James: ${compactText(james.specialistContributions[0]?.assessment, 160)}`,
       "This is advisory intelligence only.",
@@ -572,6 +612,7 @@ function summarizeExecutiveBrief(context = {}) {
     specialistContributions: [
       ...asArray(olivia.specialistContributions),
       ...asArray(sarah.specialistContributions),
+      ...asArray(liam.specialistContributions),
       ...asArray(westbridge.specialistContributions),
       ...asArray(james.specialistContributions),
     ],
@@ -579,6 +620,7 @@ function summarizeExecutiveBrief(context = {}) {
       ...asArray(base.sourceReferences),
       ...asArray(olivia.sourceReferences),
       ...asArray(sarah.sourceReferences),
+      ...asArray(liam.sourceReferences),
       ...asArray(westbridge.sourceReferences),
       ...asArray(james.sourceReferences),
     ],
@@ -588,6 +630,7 @@ function summarizeExecutiveBrief(context = {}) {
 function deterministicVoiceAnalysis(intent, context) {
   if (intent.intent === "sarah_project_review") return summarizeSarah(context.sarah, intent.linkedProject);
   if (intent.intent === "olivia_revenue_forecast") return summarizeOlivia(context.financial);
+  if (intent.intent === "liam_power_platform_review") return summarizeLiam(context.liam);
   if (intent.intent === "westbridge_property_pipeline" || intent.intent === "westbridge_cashflow") return summarizeWestbridge(context.property);
   if (intent.intent === "james_product_review") return summarizeJames(context.james);
   if (intent.intent === "project_status") return summarizeProject(context.projectDashboard, context.projectSearch, intent.linkedProject);
@@ -597,7 +640,7 @@ function deterministicVoiceAnalysis(intent, context) {
   if (intent.intent === "approval_decisions") return summarizeApprovals(context.approvals);
   if (intent.intent === "executive_briefing") return summarizeExecutiveBrief(context);
   return {
-    spokenResponse: `I heard: ${compactText(context.transcript, 120)}. I can brief you, review projects, ask Sarah, ask Olivia, ask James, or review Westbridge property. No action has been taken.`,
+    spokenResponse: `I heard: ${compactText(context.transcript, 120)}. I can brief you, review projects, ask Sarah, ask Olivia, ask Liam, ask James, or review Westbridge property. No action has been taken.`,
     sourceReferences: [],
   };
 }
@@ -799,6 +842,7 @@ export function createVoiceCommandService({
       brief,
       financial,
       sarah,
+      liam,
       property,
       james,
       projectDashboard,
@@ -806,6 +850,7 @@ export function createVoiceCommandService({
       getExecutiveBrief(),
       Promise.resolve().then(() => getFinancialDashboardData(db)),
       Promise.resolve().then(() => getSarahDashboard(db)),
+      Promise.resolve().then(() => getLiamDashboard(db)),
       Promise.resolve().then(() => getPropertyDashboardData(db)),
       Promise.resolve().then(() => getJamesDashboard(db)),
       Promise.resolve().then(() => getProjectDashboard(db)),
@@ -822,6 +867,7 @@ export function createVoiceCommandService({
       brief,
       financial,
       sarah,
+      liam,
       property,
       james,
       projectDashboard,
@@ -937,6 +983,7 @@ export function createVoiceCommandService({
       "executive_briefing",
       intent.routedAgent === "sarah" ? "sarah_project_context" : "",
       intent.routedAgent === "olivia" ? "olivia_financial_context" : "",
+      intent.routedAgent === "liam" ? "liam_power_platform_context" : "",
       intent.routedAgent === "westbridge-property-director" ? "westbridge_property_context" : "",
       intent.routedAgent === "james" ? "james_product_context" : "",
       context.memoryContext?.records?.length ? "semantic_memory" : "",

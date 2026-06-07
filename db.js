@@ -222,6 +222,7 @@ const SCHEMA = `
     location TEXT NOT NULL DEFAULT '',
     web_url TEXT NOT NULL DEFAULT '',
     online_meeting_url TEXT NOT NULL DEFAULT '',
+    body_preview TEXT NOT NULL DEFAULT '',
     client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
     client_name TEXT NOT NULL DEFAULT '',
     project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
@@ -1314,6 +1315,122 @@ const SCHEMA = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS power_platform_solutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'digitize',
+    company_id TEXT NOT NULL DEFAULT 'digitize' REFERENCES companies(id),
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    solution_type TEXT NOT NULL DEFAULT 'Power Platform',
+    platform_area TEXT NOT NULL DEFAULT 'Power Apps',
+    status TEXT NOT NULL DEFAULT 'Proposed',
+    owner_name TEXT NOT NULL DEFAULT 'Liam',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS power_platform_components (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    solution_id INTEGER REFERENCES power_platform_solutions(id) ON DELETE CASCADE,
+    component_type TEXT NOT NULL DEFAULT 'Power Apps',
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Planned',
+    summary TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(solution_id, component_type, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS power_platform_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    solution_id INTEGER REFERENCES power_platform_solutions(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'medium' CHECK(severity IN ('low', 'medium', 'high')),
+    status TEXT NOT NULL DEFAULT 'open',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS power_platform_opportunities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    solution_id INTEGER REFERENCES power_platform_solutions(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    business_value TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS power_platform_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    solution_id INTEGER REFERENCES power_platform_solutions(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    approval_required INTEGER NOT NULL DEFAULT 1 CHECK(approval_required IN (0, 1)),
+    decision_required_by TEXT NOT NULL DEFAULT 'Patrick King',
+    source_type TEXT NOT NULL DEFAULT 'seed',
+    source_id TEXT NOT NULL DEFAULT '',
+    confidence TEXT NOT NULL DEFAULT 'inferred' CHECK(confidence IN ('confirmed', 'inferred', 'assumption')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS power_platform_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_action TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT 'liam-deterministic-v1',
+    executive_summary TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '[]',
+    risks TEXT NOT NULL DEFAULT '[]',
+    opportunities TEXT NOT NULL DEFAULT '[]',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    confidence_level TEXT NOT NULL DEFAULT 'medium',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS liam_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 0 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS product_ventures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     business_entity_id TEXT NOT NULL DEFAULT 'council-assurance-platform' REFERENCES financial_business_entities(id),
@@ -1460,6 +1577,24 @@ const SCHEMA = `
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE INDEX IF NOT EXISTS power_platform_solutions_status
+  ON power_platform_solutions(status, platform_area);
+
+  CREATE INDEX IF NOT EXISTS power_platform_components_solution
+  ON power_platform_components(solution_id, component_type, status);
+
+  CREATE INDEX IF NOT EXISTS power_platform_risks_status
+  ON power_platform_risks(status, severity);
+
+  CREATE INDEX IF NOT EXISTS power_platform_opportunities_status
+  ON power_platform_opportunities(status, priority);
+
+  CREATE INDEX IF NOT EXISTS power_platform_decisions_status
+  ON power_platform_decisions(status, approval_required);
+
+  CREATE INDEX IF NOT EXISTS liam_audit_events_created
+  ON liam_audit_events(created_at);
 
   CREATE INDEX IF NOT EXISTS product_ventures_stage
   ON product_ventures(stage, status);
@@ -2177,7 +2312,7 @@ const AGENT_SEEDS = [
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
   ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
-  ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.", [], "Planned"],
+  ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Executive Specialist reporting to Alfred. Provides advisory-only Power Apps, Dataverse, Power Automate, Power BI, SharePoint and low-code delivery intelligence for Digitize. No app creation, flow creation, tenant changes, SharePoint writes, Dataverse writes, report publishing or external execution.", ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint", "Low-code Governance"], "Active"],
   ["james", "James", "Product CEO", "product", "Product", "Executive Specialist reporting to Alfred. Provides advisory-only SaaS product strategy, MVP validation, roadmap, experiment, risk and product-portfolio intelligence for Product Studio. No code deployment, product publication, customer outreach, pricing changes, payments, contract changes or external execution.", ["SaaS Strategy", "MVP Validation", "Product Roadmap", "Customer Discovery", "Pricing Hypotheses", "Product Risk"], "Active"],
 ];
 
@@ -2189,6 +2324,90 @@ const SARAH_TEAM_PLACEHOLDER_SEEDS = [
   ["digital-twin-consultant", "Digital Twin Consultant", "Digital Twin Consultant", ["Digital Twin Strategy", "Operational Data", "Asset Performance", "Smart Asset Management"], "Future placeholder only. No runtime or autonomous behaviour."],
   ["building-safety-consultant", "Building Safety Consultant", "Building Safety Consultant", ["Golden Thread", "Building Safety Act", "Information Assurance", "Compliance Information"], "Future placeholder only. No runtime or autonomous behaviour."],
   ["power-platform-consultant", "Power Platform Consultant", "Power Platform Consultant", ["Power Apps", "Dataverse", "Power Automate", "Power BI", "SharePoint"], "Future placeholder only. No runtime or autonomous behaviour."],
+];
+
+const POWER_PLATFORM_SOLUTION_SEEDS = [
+  {
+    sourceId: "council-assurance-platform",
+    projectName: "Council Construction Assurance Platform",
+    clientName: "",
+    name: "Council Construction Assurance Platform",
+    solutionType: "Product Workflow Platform",
+    platformArea: "Power Apps + Dataverse",
+    status: "Discovery",
+    confidence: "inferred",
+    summary: "Power Platform delivery context for the Council Construction Assurance Platform concept. Liam may assess app strategy, Dataverse model, reporting and workflow risks, but no app or flow is created.",
+    components: [
+      ["Power Apps", "Assurance review app", "Planned", "Model-driven or canvas app option to be assessed only."],
+      ["Dataverse", "Assurance data model", "Planned", "Entities and relationships require Patrick-approved architecture before any build."],
+      ["Power BI", "Council assurance dashboard", "Planned", "Reporting concept only; no report publishing is enabled."],
+      ["Power Automate", "Review notification flows", "Planned", "Workflow concept only; no flow creation is enabled."],
+    ],
+  },
+  {
+    sourceId: "digitize-project-controls",
+    projectName: "KSPF",
+    clientName: "KSPF",
+    name: "Digitize Project Controls App",
+    solutionType: "Internal Delivery App",
+    platformArea: "Power Apps",
+    status: "Proposed",
+    confidence: "assumption",
+    summary: "Potential internal project controls app to track delivery signals, actions, risks and information management status across Digitize projects.",
+    components: [
+      ["Power Apps", "Project controls canvas app", "Proposed", "Internal app concept only."],
+      ["SharePoint", "Project controls evidence library", "Proposed", "Metadata and structure only; SharePoint writes are disabled."],
+    ],
+  },
+  {
+    sourceId: "client-assurance-reporting",
+    projectName: "RBKC",
+    clientName: "RBKC",
+    name: "Client Assurance Reporting Pack",
+    solutionType: "Reporting Pack",
+    platformArea: "Power BI",
+    status: "Proposed",
+    confidence: "inferred",
+    summary: "Potential Power BI reporting layer for client assurance metrics, open information risks, actions and delivery health.",
+    components: [
+      ["Power BI", "Assurance reporting model", "Proposed", "Dashboard concept only; no Power BI publish is enabled."],
+      ["Dataverse", "Assurance KPI table", "Proposed", "Data model concept only; no Dataverse writes are enabled."],
+    ],
+  },
+  {
+    sourceId: "sharepoint-client-delivery-hub",
+    projectName: "Westminster",
+    clientName: "Westminster",
+    name: "SharePoint Client Delivery Hub",
+    solutionType: "Information Workspace",
+    platformArea: "SharePoint",
+    status: "Proposed",
+    confidence: "inferred",
+    summary: "Potential SharePoint information workspace for client delivery documents, actions, decisions and controlled evidence views.",
+    components: [
+      ["SharePoint", "Client delivery hub", "Proposed", "Workspace concept only; no SharePoint creation or editing is enabled."],
+      ["Power Automate", "Evidence reminder flow", "Proposed", "Reminder flow concept only; no flow creation is enabled."],
+    ],
+  },
+];
+
+const POWER_PLATFORM_RISK_SEEDS = [
+  ["council-assurance-platform", "Dataverse model not approved", "The Council Construction Assurance Platform needs an approved data model before any credible Power Platform build path can be recommended.", "high", "Confirm entities, ownership, retention and reporting requirements before any build activity.", "liam-risk-dataverse-model"],
+  ["digitize-project-controls", "Power Automate execution boundary", "Workflow ideas must remain advisory until Patrick approves a write/action framework. Alfred must not create, run or modify flows.", "high", "Keep all automation as process design only and route future execution through approval preflight.", "liam-risk-flow-boundary"],
+  ["client-assurance-reporting", "Power BI evidence quality", "Reporting value depends on clean, governed source data from projects, Monday OS, memories and client records.", "medium", "Define source-of-truth records and confidence labels before reporting design.", "liam-risk-reporting-data"],
+  ["sharepoint-client-delivery-hub", "SharePoint governance and permissions", "Client delivery workspaces need clear permissions, information architecture and ownership before any live SharePoint changes.", "medium", "Review permissions, naming, retention and access boundaries before implementation.", "liam-risk-sharepoint-governance"],
+];
+
+const POWER_PLATFORM_OPPORTUNITY_SEEDS = [
+  ["council-assurance-platform", "Model Council Assurance MVP as Power Platform blueprint", "Use Liam to define a read-only blueprint for Power Apps, Dataverse, Power BI and workflow architecture before choosing a build route.", "Accelerates MVP clarity without building prematurely.", "high", "Prepare a blueprint and decision pack only.", "liam-opportunity-cap-blueprint"],
+  ["digitize-project-controls", "Digitize internal delivery control app", "A lightweight Power Apps concept could help standardise project actions, risks, decisions and information management checks.", "Creates repeatable delivery discipline across Digitize projects.", "medium", "Assess against existing Alfred and Monday OS records first.", "liam-opportunity-project-controls"],
+  ["client-assurance-reporting", "Client assurance reporting layer", "Power BI could turn project intelligence, risks and delivery health into client-facing assurance reports once data governance is agreed.", "Potential premium reporting offer for public-sector construction assurance.", "medium", "Define report audience, source records and confidence labels.", "liam-opportunity-assurance-reporting"],
+];
+
+const POWER_PLATFORM_DECISION_SEEDS = [
+  ["council-assurance-platform", "Approve Power Platform reference architecture", "Patrick should approve the first reference architecture before any Power Apps, Dataverse, Power BI, SharePoint or Power Automate delivery is attempted.", "high", "liam-decision-reference-architecture"],
+  ["digitize-project-controls", "Confirm no-build boundary for Liam", "Liam may analyse and recommend only. Any future app, flow, report, SharePoint, Dataverse or tenant action must require explicit approval and a separate executor path.", "high", "liam-decision-no-build-boundary"],
+  ["client-assurance-reporting", "Choose first Power Platform business case", "Select whether Liam's first business case is Council Assurance Platform, internal Digitize project controls or client assurance reporting.", "medium", "liam-decision-first-business-case"],
 ];
 
 const INTEGRATION_SEEDS = [
@@ -2389,6 +2608,10 @@ function migrateProjectIntelligenceSchema(db) {
 }
 
 function migrateMeetingIntelligenceSchema(db) {
+  const columns = new Set(db.prepare("PRAGMA table_info(meeting_records)").all().map((column) => column.name));
+  if (!columns.has("body_preview")) {
+    db.exec("ALTER TABLE meeting_records ADD COLUMN body_preview TEXT NOT NULL DEFAULT ''");
+  }
   db.exec(`
     CREATE INDEX IF NOT EXISTS meeting_records_start_datetime
     ON meeting_records(start_datetime);
@@ -2472,6 +2695,7 @@ export function seedDatabase(db) {
     updateAgentDefinitions(db);
     updateSarahTeamPlaceholders(db);
     updateIntegrationDefinitions(db);
+    updateLiamPowerPlatformSeeds(db);
     updateWestbridgePropertySeeds(db);
     updateJamesProductSeeds(db);
     return;
@@ -2535,6 +2759,7 @@ export function seedDatabase(db) {
     insertMemory.run("idea", "Council Construction Assurance Platform", "Initial Product Studio SaaS concept focused on council construction assurance.", "product", "2026-06-05");
 
     updateIntegrationDefinitions(db);
+    updateLiamPowerPlatformSeeds(db);
     updateWestbridgePropertySeeds(db);
     updateJamesProductSeeds(db);
 
@@ -2623,6 +2848,161 @@ function insertOperatingRecordIfMissing(db, table, companyId, title, detail, pri
       WHERE company_id = ? AND title = ?
     )
   `).run(companyId, title, detail, priority, due, companyId, title);
+}
+
+function updateLiamPowerPlatformSeeds(db) {
+  insertOperatingRecordIfMissing(
+    db,
+    "opportunities",
+    "digitize",
+    "Power Platform delivery blueprint",
+    "Use Liam to assess Power Apps, Dataverse, Power Automate, Power BI and SharePoint opportunities for Digitize and the Council Construction Assurance Platform. Advisory only; no apps, flows, reports or tenant changes are created.",
+    "medium",
+    "Next",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "risks",
+    "digitize",
+    "Power Platform execution boundary",
+    "Liam must not create Power Apps, Power Automate flows, Dataverse tables, Power BI reports, SharePoint sites or any Microsoft tenant changes without a future approval and executor framework.",
+    "high",
+    "Always",
+  );
+  insertOperatingRecordIfMissing(
+    db,
+    "decisions",
+    "digitize",
+    "Approve first Power Platform business case",
+    "Choose whether Liam's first business case focuses on the Council Construction Assurance Platform, Digitize project controls or client assurance reporting.",
+    "medium",
+    "This quarter",
+  );
+
+  const findProject = db.prepare(`
+    SELECT id FROM project_profiles
+    WHERE project_name = ?
+    ORDER BY id ASC
+    LIMIT 1
+  `);
+  const insertSolution = db.prepare(`
+    INSERT OR IGNORE INTO power_platform_solutions (
+      business_entity_id, company_id, project_profile_id, client_name, name,
+      solution_type, platform_area, status, summary, source_type, source_id, confidence
+    )
+    VALUES (?, 'digitize', ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?)
+  `);
+  const updateSolution = db.prepare(`
+    UPDATE power_platform_solutions
+    SET project_profile_id = ?, client_name = ?, solution_type = ?, platform_area = ?,
+        status = ?, summary = ?, confidence = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE company_id = 'digitize' AND name = ?
+  `);
+  const insertComponent = db.prepare(`
+    INSERT OR IGNORE INTO power_platform_components (
+      solution_id, component_type, name, status, summary, source_type, source_id, confidence
+    )
+    VALUES (?, ?, ?, ?, ?, 'seed', ?, 'inferred')
+  `);
+  const updateComponent = db.prepare(`
+    UPDATE power_platform_components
+    SET status = ?, summary = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE solution_id = ? AND component_type = ? AND name = ?
+  `);
+
+  for (const seed of POWER_PLATFORM_SOLUTION_SEEDS) {
+    const project = findProject.get(seed.projectName);
+    const businessEntityId = seed.projectName === "Council Construction Assurance Platform"
+      ? "council-assurance-platform"
+      : "digitize";
+    insertSolution.run(
+      businessEntityId,
+      project?.id || null,
+      seed.clientName,
+      seed.name,
+      seed.solutionType,
+      seed.platformArea,
+      seed.status,
+      seed.summary,
+      seed.sourceId,
+      seed.confidence,
+    );
+    updateSolution.run(
+      project?.id || null,
+      seed.clientName,
+      seed.solutionType,
+      seed.platformArea,
+      seed.status,
+      seed.summary,
+      seed.confidence,
+      seed.name,
+    );
+    const solution = db.prepare(`
+      SELECT id FROM power_platform_solutions
+      WHERE company_id = 'digitize' AND name = ?
+    `).get(seed.name);
+    if (!solution) continue;
+    for (const [componentType, name, status, summary] of seed.components) {
+      const sourceId = `${seed.sourceId}:${componentType}:${name}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      insertComponent.run(solution.id, componentType, name, status, summary, sourceId);
+      updateComponent.run(status, summary, solution.id, componentType, name);
+    }
+  }
+
+  const solutionBySource = db.prepare("SELECT id FROM power_platform_solutions WHERE source_id = ?");
+  const insertRisk = db.prepare(`
+    INSERT OR IGNORE INTO power_platform_risks (
+      solution_id, title, detail, severity, recommended_action, source_type, source_id, confidence
+    )
+    VALUES (?, ?, ?, ?, ?, 'seed', ?, 'inferred')
+  `);
+  const updateRisk = db.prepare(`
+    UPDATE power_platform_risks
+    SET solution_id = ?, title = ?, detail = ?, severity = ?, recommended_action = ?,
+        status = 'open', updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const [solutionSource, title, detail, severity, recommendedAction, sourceId] of POWER_PLATFORM_RISK_SEEDS) {
+    const solution = solutionBySource.get(solutionSource);
+    insertRisk.run(solution?.id || null, title, detail, severity, recommendedAction, sourceId);
+    updateRisk.run(solution?.id || null, title, detail, severity, recommendedAction, sourceId);
+  }
+
+  const insertOpportunity = db.prepare(`
+    INSERT OR IGNORE INTO power_platform_opportunities (
+      solution_id, title, detail, business_value, priority, recommended_action, source_type, source_id, confidence
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'seed', ?, 'inferred')
+  `);
+  const updateOpportunity = db.prepare(`
+    UPDATE power_platform_opportunities
+    SET solution_id = ?, title = ?, detail = ?, business_value = ?, priority = ?,
+        recommended_action = ?, status = 'open', updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const [solutionSource, title, detail, businessValue, priority, recommendedAction, sourceId] of POWER_PLATFORM_OPPORTUNITY_SEEDS) {
+    const solution = solutionBySource.get(solutionSource);
+    insertOpportunity.run(solution?.id || null, title, detail, businessValue, priority, recommendedAction, sourceId);
+    updateOpportunity.run(solution?.id || null, title, detail, businessValue, priority, recommendedAction, sourceId);
+  }
+
+  const insertDecision = db.prepare(`
+    INSERT OR IGNORE INTO power_platform_decisions (
+      solution_id, title, detail, priority, approval_required, source_type, source_id, confidence
+    )
+    VALUES (?, ?, ?, ?, 1, 'seed', ?, 'inferred')
+  `);
+  const updateDecision = db.prepare(`
+    UPDATE power_platform_decisions
+    SET solution_id = ?, title = ?, detail = ?, priority = ?, approval_required = 1,
+        status = 'open', updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const [solutionSource, title, detail, priority, sourceId] of POWER_PLATFORM_DECISION_SEEDS) {
+    const solution = solutionBySource.get(solutionSource);
+    insertDecision.run(solution?.id || null, title, detail, priority, sourceId);
+    updateDecision.run(solution?.id || null, title, detail, priority, sourceId);
+  }
 }
 
 function updateWestbridgePropertySeeds(db) {
@@ -4160,6 +4540,114 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.organizer ? `Organizer: ${row.organizer}.` : "",
         row.body_preview,
         `Association: ${row.association_reason || "metadata match"}.`,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const powerPlatformSolutions = db.prepare(`
+    SELECT s.*, p.project_name, p.client_name AS project_client_name
+    FROM power_platform_solutions s
+    LEFT JOIN project_profiles p ON p.id = s.project_profile_id
+    ORDER BY s.updated_at DESC, s.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of powerPlatformSolutions) {
+    records.push(semanticRecord({
+      sourceType: "power_platform_solution",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.name,
+      summary: [
+        `Power Platform solution: ${row.name}.`,
+        `Area: ${row.platform_area}.`,
+        `Type: ${row.solution_type}.`,
+        `Status: ${row.status}.`,
+        row.project_name ? `Linked project: ${row.project_name}.` : "",
+        row.client_name || row.project_client_name ? `Client: ${row.client_name || row.project_client_name}.` : "",
+        `Confidence: ${row.confidence}.`,
+        row.summary,
+        "Liam records are advisory local intelligence only; no app, flow, report, SharePoint, Dataverse or tenant change occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const powerPlatformComponents = db.prepare(`
+    SELECT c.*, s.name AS solution_name, s.platform_area
+    FROM power_platform_components c
+    LEFT JOIN power_platform_solutions s ON s.id = c.solution_id
+    ORDER BY c.updated_at DESC, c.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of powerPlatformComponents) {
+    records.push(semanticRecord({
+      sourceType: "power_platform_component",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.name,
+      summary: [
+        `Power Platform component: ${row.name}.`,
+        row.solution_name ? `Solution: ${row.solution_name}.` : "",
+        `Component type: ${row.component_type}.`,
+        `Status: ${row.status}.`,
+        `Confidence: ${row.confidence}.`,
+        row.summary,
+        "Component metadata is local only; no Microsoft tenant or Power Platform object was created.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  for (const [table, sourceType, label] of [
+    ["power_platform_risks", "power_platform_risk", "Power Platform risk"],
+    ["power_platform_opportunities", "power_platform_opportunity", "Power Platform opportunity"],
+    ["power_platform_decisions", "power_platform_decision", "Power Platform decision"],
+  ]) {
+    const rows = db.prepare(`
+      SELECT r.*, s.name AS solution_name, s.platform_area
+      FROM ${table} r
+      LEFT JOIN power_platform_solutions s ON s.id = r.solution_id
+      ORDER BY r.updated_at DESC, r.id DESC
+      LIMIT 200
+    `).all();
+    for (const row of rows) {
+      records.push(semanticRecord({
+        sourceType,
+        sourceId: row.id,
+        sourceCreatedAt: row.updated_at || row.created_at,
+        title: row.title,
+        summary: [
+          `${label}: ${row.title}.`,
+          row.solution_name ? `Solution: ${row.solution_name}.` : "",
+          row.platform_area ? `Area: ${row.platform_area}.` : "",
+          row.severity ? `Severity: ${row.severity}.` : "",
+          row.priority ? `Priority: ${row.priority}.` : "",
+          `Status: ${row.status}.`,
+          row.business_value ? `Business value: ${row.business_value}.` : "",
+          row.approval_required !== undefined ? `Approval required: ${row.approval_required ? "yes" : "no"}.` : "",
+          row.detail,
+          row.recommended_action ? `Recommended action: ${row.recommended_action}.` : "",
+          "Recommendation only; no Power Platform or Microsoft write action occurred.",
+        ].filter(Boolean).join(" "),
+      }));
+    }
+  }
+
+  const liamReviews = db.prepare(`
+    SELECT *
+    FROM power_platform_reviews
+    ORDER BY requested_at DESC, id DESC
+    LIMIT 100
+  `).all();
+  for (const row of liamReviews) {
+    records.push(semanticRecord({
+      sourceType: "power_platform_review",
+      sourceId: row.id,
+      sourceCreatedAt: row.requested_at || row.created_at,
+      title: `Liam Power Platform review ${row.id}`,
+      summary: [
+        `Liam review generated ${row.requested_at}.`,
+        row.executive_summary,
+        `Confidence: ${row.confidence_level}.`,
+        "Review output is advisory only; execution_attempted is false.",
       ].filter(Boolean).join(" "),
     }));
   }

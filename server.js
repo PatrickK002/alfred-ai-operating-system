@@ -77,6 +77,21 @@ import {
   sarahBriefingForDaily,
 } from "./sarah.js";
 import {
+  LIAM_READ_ONLY_BOUNDARY,
+  buildLiamAnalysisInput,
+  createPowerPlatformDecision,
+  createPowerPlatformRisk,
+  generateLiamAnalysis,
+  getLiamDashboard,
+  liamBriefingForDaily,
+  listLiamAudit,
+  listPowerPlatformDecisions,
+  listPowerPlatformOpportunities,
+  listPowerPlatformRisks,
+  listPowerPlatformSolutions,
+  searchLiamKnowledge,
+} from "./liam.js";
+import {
   PROPERTY_READ_ONLY_BOUNDARY,
   createPropertyOpportunity,
   getPropertyDashboardData,
@@ -421,6 +436,80 @@ async function handleApi(request, response, url) {
       return sendJson(response, 200, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
     }
   }
+  if (url.pathname === "/api/liam/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getLiamDashboard(db));
+  }
+  if (url.pathname === "/api/liam/search" && request.method === "GET") {
+    const query = url.searchParams.get("q") || "";
+    const result = searchLiamKnowledge(db, query);
+    const memory = await semanticMemory.search(query, {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: LIAM_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/liam/audit" && request.method === "GET") {
+    return sendJson(response, 200, listLiamAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/liam/solutions" && request.method === "GET") {
+    return sendJson(response, 200, listPowerPlatformSolutions(db));
+  }
+  if (url.pathname === "/api/liam/risks") {
+    if (request.method === "GET") return sendJson(response, 200, listPowerPlatformRisks(db));
+    if (request.method === "POST") {
+      const risk = createPowerPlatformRisk(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...risk, boundary: LIAM_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/liam/opportunities" && request.method === "GET") {
+    return sendJson(response, 200, listPowerPlatformOpportunities(db));
+  }
+  if (url.pathname === "/api/liam/decisions") {
+    if (request.method === "GET") return sendJson(response, 200, listPowerPlatformDecisions(db));
+    if (request.method === "POST") {
+      const decision = createPowerPlatformDecision(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...decision, boundary: LIAM_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/ai/liam/analyse-power-platform" && request.method === "POST") {
+    const body = await readJson(request);
+    const memoryContext = await semanticMemory.retrieveContext([
+      "Liam Power Platform review",
+      "Power Apps Dataverse Power Automate Power BI SharePoint low-code governance",
+      body.context || "",
+    ].join(" "), {
+      maxRecords: 8,
+      maxTokens: 1200,
+    }).catch(() => ({ records: [], sourceRecordReferences: [], semantic: false }));
+    const input = buildLiamAnalysisInput(db, {
+      retrievedMemoryContext: {
+        ...memoryContext,
+        records: (memoryContext.records || []).map(memoryRecordForClaude),
+      },
+    });
+    const result = generateLiamAnalysis(db, {
+      userAction: body.userAction || "liam:analyse-power-platform",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, {
+      ...result,
+      inputSummary: {
+        solutions: input.solutions.length,
+        risks: input.risks.length,
+        opportunities: input.opportunities.length,
+        decisions: input.decisions.length,
+        memoryRecords: input.relevantMemory.length,
+      },
+      relatedMemory: input.relevantMemory,
+      memoryContext: memoryContextSummary({ ...memoryContext, records: memoryContext.records || [] }),
+      boundary: LIAM_READ_ONLY_BOUNDARY,
+    });
+  }
   if (url.pathname === "/api/james/dashboard" && request.method === "GET") {
     return sendJson(response, 200, getJamesDashboard(db));
   }
@@ -428,11 +517,6 @@ async function handleApi(request, response, url) {
     const query = url.searchParams.get("q") || "";
     const result = searchJamesKnowledge(db, query);
     const memory = await semanticMemory.search(query, {
-      limit: url.searchParams.get("limit") || 8,
-    }).catch(() => null);
-    return sendJson(response, 200, {
-      ...result,
-      semanticMemory: memory?.results || [],
       boundary: JAMES_READ_ONLY_BOUNDARY,
     });
   }
@@ -811,6 +895,7 @@ async function handleApi(request, response, url) {
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
+        context.liamPowerPlatformBrief?.items?.length ? "liam_power_platform" : "",
         context.jamesProductBrief?.items?.length ? "james_product_ceo" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ]),
@@ -1067,6 +1152,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.executivePriorities = analysis.executivePriorities;
   brief.projectIntelligence = projectAttentionForBriefing(db);
   brief.sarah = sarahBriefingForDaily(db);
+  brief.liam = liamBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
   brief.james = jamesBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
@@ -1100,6 +1186,13 @@ async function generateExecutiveBrief({ save = true } = {}) {
       category: "sarah",
       score: item.priority === "high" ? 78 : 52,
     })),
+    ...brief.liam.items.map((item, index) => ({
+      ...item,
+      id: `liam-${index + 1}`,
+      rank: index + 1,
+      category: "liam",
+      score: item.priority === "high" ? 77 : 51,
+    })),
     ...brief.james.items.map((item, index) => ({
       ...item,
       id: `james-${index + 1}`,
@@ -1129,6 +1222,9 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
+  brief.summary.liamPowerPlatformSignals = brief.liam.items.length;
+  brief.summary.liamPowerPlatformRisks = brief.liam.metrics.openRisks;
+  brief.summary.liamPowerPlatformDecisions = brief.liam.metrics.decisionsRequired;
   brief.summary.jamesProductSignals = brief.james.items.length;
   brief.summary.jamesProductRisks = brief.james.metrics.openRisks;
   brief.summary.jamesProductDecisions = brief.james.metrics.decisionsRequired;
@@ -1222,6 +1318,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Sarah digital construction signal",
       category: "sarah",
     })),
+    ...compactRecords(context.liamPowerPlatformBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `liam:${record.title}`,
+      label: record.title || "Liam Power Platform signal",
+      category: "liam_power_platform",
+    })),
     ...compactRecords(context.jamesProductBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
       reference: record.sourceReference || `james:${record.title}`,
       label: record.title || "James product signal",
@@ -1288,6 +1389,7 @@ function memoryQueryForBriefing(context) {
     ...(context.propertyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.liamPowerPlatformBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.jamesProductBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
@@ -1392,6 +1494,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       summary: briefing.sarah?.summary || "",
       items: compactRecords(briefing.sarah?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
       boundary: briefing.sarah?.boundary || SARAH_READ_ONLY_BOUNDARY,
+    },
+    liamPowerPlatformBrief: {
+      title: briefing.liam?.title || "Liam Power Platform Brief",
+      summary: briefing.liam?.summary || "",
+      metrics: compactValue(briefing.liam?.metrics || {}),
+      items: compactRecords(briefing.liam?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      boundary: briefing.liam?.boundary || LIAM_READ_ONLY_BOUNDARY,
     },
     jamesProductBrief: {
       title: briefing.james?.title || "James Product CEO Brief",

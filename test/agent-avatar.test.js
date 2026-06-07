@@ -57,6 +57,21 @@ test("Sentinel CISO metadata exists as planned advisory governance only", () => 
   assert.match(sentinel.plannedCapabilitySummary, /MFA|GitHub|dependencies|incident/i);
 });
 
+test("Liam Power Platform metadata exists as active advisory only", () => {
+  const liam = buildAgentAvatarRenderModel({ id: "liam" });
+  assert.equal(liam.name, "Liam");
+  assert.equal(liam.title, "Power Platform Director");
+  assert.equal(liam.department, "Power Platform");
+  assert.equal(liam.statusCategory, "active");
+  assert.equal(liam.reportingLine, "Alfred");
+  assert.equal(liam.fallbackInitials, "L");
+  assert.ok(liam.expertiseTags.includes("Power Apps"));
+  assert.ok(liam.expertiseTags.includes("Dataverse"));
+  assert.ok(liam.expertiseTags.includes("SharePoint"));
+  assert.match(liam.currentCapabilitySummary, /dashboard|governance|Monday OS/i);
+  assert.match(liam.plannedCapabilitySummary, /read-only|approval/i);
+});
+
 test("James Product CEO metadata exists as active advisory only", () => {
   const james = buildAgentAvatarRenderModel({ id: "james" });
   assert.equal(james.name, "James");
@@ -131,6 +146,7 @@ test("avatar UI hooks exist for dashboards and briefing surfaces", () => {
   assert.match(html, /id="voice-agent-identity"/);
   assert.match(html, /id="finance-agent-identity"/);
   assert.match(html, /id="sarah-agent-identity"/);
+  assert.match(html, /id="liam-agent-identity"/);
   assert.match(html, /id="james-agent-identity"/);
   assert.match(html, /id="property-agent-identity"/);
   assert.match(html, /id="settings-avatar-summary"/);

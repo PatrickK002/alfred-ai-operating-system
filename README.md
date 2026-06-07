@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah, James and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan and Liam as planned future identities
+- Alfred, Olivia, Sarah, Liam, James and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex and Ethan as planned future identities
 
 Database files are excluded from Git.
 
@@ -207,6 +207,16 @@ Health and aggregate workflows:
 | `POST` | `/api/ai/sarah/project-health-review` | Deterministic Sarah project health, BIM maturity and digital readiness review |
 | `POST` | `/api/ai/sarah/client-review` | Claude-powered Sarah client portfolio review |
 | `POST` | `/api/ai/sarah/draft-deliverable` | Draft an internal outline only; no document is created or edited |
+| `GET` | `/api/liam/dashboard` | Liam's Power Platform dashboard with solutions, components, risks, opportunities, decisions and internal Monday OS workload links |
+| `GET` | `/api/liam/search?q=Dataverse` | Search local Power Platform records and semantic memory references |
+| `GET` | `/api/liam/audit` | Metadata-only Liam advisory audit events |
+| `GET` | `/api/liam/solutions` | List local Power Platform solution blueprints |
+| `GET` | `/api/liam/risks` | List Liam Power Platform risks |
+| `POST` | `/api/liam/risks` | Create a local advisory Power Platform risk record |
+| `GET` | `/api/liam/opportunities` | List Liam Power Platform opportunities |
+| `GET` | `/api/liam/decisions` | List Liam Power Platform decisions |
+| `POST` | `/api/liam/decisions` | Create a local advisory Power Platform decision record |
+| `POST` | `/api/ai/liam/analyse-power-platform` | Generate Liam's advisory Power Platform analysis without creating apps, flows, reports or tenant changes |
 | `GET` | `/api/james/dashboard` | James Product CEO dashboard with SaaS products, roadmap, validation experiments, risks, opportunities, decisions and Monday OS workload links |
 | `GET` | `/api/james/search?q=MVP` | Search local Product Studio records and semantic memory references |
 | `GET` | `/api/james/audit` | Metadata-only James advisory audit events |
@@ -460,7 +470,7 @@ It combines:
 - Microsoft calendar metadata through the existing read-only Microsoft 365 connection
 - Locally supplied and permitted Teams transcript text, where available
 - Structured meeting records, attendees, summaries, actions, decisions, risks, opportunities, questions and feedback
-- Agent reviews from Alfred, Sarah, Olivia, James, Westbridge Property Director and Sentinel where the meeting context is relevant
+- Agent reviews from Alfred, Sarah, Olivia, Liam, James, Westbridge Property Director and Sentinel where the meeting context is relevant
 - Meeting memory links for Voyage semantic retrieval using summaries and metadata first
 
 Calendar import is metadata-only. Alfred records the title, time, organiser, attendees, web URL, meeting URL, client/project association and transcript status. If no transcript is available, the meeting detail explicitly says Alfred reviewed metadata only and did not infer meeting minutes.
@@ -630,7 +640,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, James Product CEO intelligence, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Liam Power Platform intelligence, James Product CEO intelligence, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -646,6 +656,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `property.js` - Westbridge portfolio metrics, deal analysis, rules engine, due diligence, property memory and audit logging
 - `james.js` - James Product CEO profile, SaaS product records, roadmap, validation experiments, risks, opportunities, decisions, advisory analysis, Monday OS links and no-execution audit boundary
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
+- `liam.js` - Liam Power Platform profile, solution blueprints, risks, opportunities, decisions, advisory analysis, Monday OS links and no-execution audit boundary
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
@@ -655,6 +666,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `manifest.json` / `service-worker.js` / `offline.html` - installable PWA shell, static cache and offline fallback
 - `assets/avatars/` - local abstract executive avatar placeholders
 - `index.html` / `styles.css` - executive command centre interface and responsive iPad/iPhone layouts
+- `test/liam.test.js` - Liam Power Platform dashboard, analysis, memory and security-boundary tests
 - `test/db.test.js` - database and workflow tests
 - `test/james.test.js` - James Product CEO dashboard, analysis, memory and security-boundary tests
 
@@ -1012,6 +1024,56 @@ Sarah project health review returns project score, information quality score, BI
 Sarah client review answers what projects exist for a client, what risks and actions remain, what information is missing, what opportunities exist and what Patrick should discuss next.
 
 Sarah deliverable support is draft-outline only for BIM Strategy, EIR, AIR, BEP, Information Management Plan, Digital Twin Strategy and GIS Strategy outlines. No file is created, edited, saved, uploaded or published.
+
+## Liam Power Platform Director
+
+Liam is Alfred's active advisory Power Platform Director for Digitize Consultants.
+
+- Name: Liam
+- Role: Power Platform Director
+- Reports to: Alfred
+- Business area: Digitize Consultants / Digital Solutions
+- Status: Active advisory
+
+Liam turns local Alfred records into board-level Power Platform intelligence. The current implementation stores Power Platform solution blueprints, components, risks, opportunities, decisions, reviews and audit events in SQLite. Liam links his work into the internal Monday Operating System and contributes to Alfred's executive briefing.
+
+Liam specialises in:
+
+- Power Apps strategy and app blueprinting
+- Dataverse data-model governance
+- Power Automate workflow design and execution boundaries
+- Power BI reporting concepts and evidence-quality risks
+- SharePoint information architecture and permissions
+- Low-code governance, licensing, ALM and support model considerations
+
+Current seeded Liam records include:
+
+- Council Construction Assurance Platform
+- Digitize Project Controls App
+- Client Assurance Reporting Pack
+- SharePoint Client Delivery Hub
+
+Liam can:
+
+- Analyse Power Platform opportunities
+- Identify Dataverse, SharePoint, Power BI and Power Automate risks
+- Recommend blueprint and governance next steps
+- Create local Alfred risk and decision records
+- Reflect advisory workload into Alfred's internal Monday OS
+- Contribute to voice briefings and meeting routing
+
+Liam cannot:
+
+- Create Power Apps
+- Create or run Power Automate flows
+- Write Dataverse records or tables
+- Publish Power BI reports
+- Create SharePoint sites or edit SharePoint content
+- Change Microsoft tenant settings
+- Create connectors, environments or external actions
+- Bypass approvals or execute autonomous actions
+
+All Liam outputs are advisory only. Future live Microsoft or Power Platform integrations must start read-only and any write-capable path must use explicit Patrick approval, execution preflight and a separate executor review.
 
 ### Future Sarah Team
 
