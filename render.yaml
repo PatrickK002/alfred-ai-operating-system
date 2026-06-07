@@ -45,34 +45,16 @@ services:
         value: render-persistent-disk-daily-snapshots
       - key: ENFORCE_HTTPS
         value: "true"
-      - key: ANTHROPIC_API_KEY
-        sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-4-6
-      - key: VOYAGE_API_KEY
-        sync: false
       - key: VOYAGE_MODEL
         value: voyage-4-lite
       - key: SEMANTIC_INDEXING_ENABLED
         value: "true"
-      - key: MICROSOFT_CLIENT_ID
-        sync: false
-      - key: MICROSOFT_TENANT_ID
-        sync: false
-      - key: MONDAY_API_TOKEN
-        sync: false
-      - key: MONDAY_FINANCE_BOARD_IDS
-        sync: false
       - key: MONDAY_API_VERSION
         value: "2025-04"
-      - key: DEEPGRAM_API_KEY
-        sync: false
       - key: DEEPGRAM_MODEL
         value: nova-3
-      - key: ELEVENLABS_API_KEY
-        sync: false
-      - key: ELEVENLABS_VOICE_ID
-        sync: false
       - key: ELEVENLABS_MODEL
         value: eleven_multilingual_v2
       - key: VOICE_ENABLED

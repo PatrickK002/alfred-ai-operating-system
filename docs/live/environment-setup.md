@@ -65,12 +65,13 @@ Render setup steps:
    - `ALFRED_BASIC_AUTH_USERNAME`
    - `ALFRED_BASIC_AUTH_PASSWORD`
    - `ALFRED_ALLOWED_USERS`
-   - provider API keys when approved
 6. Deploy and open the generated `onrender.com` URL.
 7. Confirm Basic Auth blocks unauthenticated access.
 8. Run `/api/health` and `/api/deployment/preflight` after signing in.
 
-Do not assign provider API keys until the Basic Auth gate is confirmed.
+Do not assign provider API keys until the Basic Auth gate is confirmed. Add provider keys later from:
+
+`Render Dashboard -> Alfred service -> Environment`
 
 ## 2. GitHub Deployment Settings For Azure
 

@@ -21,19 +21,16 @@ test("Render Blueprint exists with Node service and persistent SQLite disk", () 
   assert.match(blueprint, /MICROSOFT_TOKEN_PATH[\s\S]*value:\s*\/var\/data\/microsoft-token\.json/);
 });
 
-test("Render Blueprint keeps secrets out of source control", () => {
+test("Render Blueprint prompts only for launch gate secrets", () => {
   const blueprint = readFileSync(RENDER_YAML, "utf8");
-  const secretKeys = [
-    "ALFRED_BASIC_AUTH_PASSWORD",
-    "ANTHROPIC_API_KEY",
-    "VOYAGE_API_KEY",
-    "MONDAY_API_TOKEN",
-    "DEEPGRAM_API_KEY",
-    "ELEVENLABS_API_KEY",
-  ];
+  const launchGateKeys = ["ALFRED_BASIC_AUTH_USERNAME", "ALFRED_BASIC_AUTH_PASSWORD", "ALFRED_ALLOWED_USERS"];
+  const providerKeys = ["ANTHROPIC_API_KEY", "VOYAGE_API_KEY", "MONDAY_API_TOKEN", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY"];
 
-  for (const key of secretKeys) {
+  for (const key of launchGateKeys) {
     assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]*?sync:\\s*false`));
+  }
+  for (const key of providerKeys) {
+    assert.doesNotMatch(blueprint, new RegExp(`key:\\s*${key}`));
   }
   assert.doesNotMatch(blueprint, /sk-ant-/i);
   assert.doesNotMatch(blueprint, /eyJ[a-z0-9_-]+\./i);
