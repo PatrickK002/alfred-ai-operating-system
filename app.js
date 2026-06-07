@@ -311,6 +311,34 @@ const seedData = {
     futureTeamPlaceholders: [],
     boundary: { advisoryOnly: true, readOnly: true },
   },
+  james: {
+    profile: {
+      name: "James",
+      role: "Product CEO",
+      reportsTo: "Alfred",
+      status: "Advisory only",
+    },
+    metrics: {
+      products: 0,
+      features: 0,
+      experiments: 0,
+      roadmapItems: 0,
+      highRisks: 0,
+      openRisks: 0,
+      opportunities: 0,
+      decisionsRequired: 0,
+    },
+    ventures: [],
+    features: [],
+    experiments: [],
+    roadmap: [],
+    risks: [],
+    opportunities: [],
+    decisions: [],
+    reviews: [],
+    monday: { workItems: [], deliverables: [], risks: [], decisions: [] },
+    boundary: { advisoryOnly: true, readOnly: true },
+  },
   property: {
     business: {
       id: "westbridge",
@@ -371,6 +399,7 @@ const seedData = {
         "Ask Sarah to review Westminster",
         "Ask Olivia for revenue forecast",
         "Ask Westbridge for property pipeline",
+        "Ask James about the Council Assurance Platform MVP",
       ],
       providers: {
         deepgram: { state: "Not connected", configured: false },
@@ -507,6 +536,7 @@ async function loadDashboard() {
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
+    state.james = await apiRequest("/api/james/dashboard").catch(() => seedData.james);
     state.sarah = await apiRequest("/api/sarah/dashboard").catch(() => seedData.sarah);
     state.voice = {
       ...seedData.voice,
@@ -1952,6 +1982,94 @@ async function syncMondayFollowups() {
   }
 }
 
+function jamesList(records, empty, formatter, limit = 8) {
+  return records?.length
+    ? `<div class="sarah-list">${records.slice(0, limit).map((record) => `<article>${formatter(record)}</article>`).join("")}</div>`
+    : `<div class="empty-state project-empty">${empty}</div>`;
+}
+
+function renderJamesAnalysis(result = null) {
+  const analysis = result?.analysis || result;
+  if (!analysis?.executiveSummary) {
+    $("#james-analysis-output").innerHTML = '<div class="empty-state">Ask James to analyse Product Studio. Outputs are recommendations only.</div>';
+    return;
+  }
+  $("#james-analysis-output").innerHTML = `
+    <div class="ai-boundary">James analysed local Product Studio records only. No code, deployment, publication, customer outreach, pricing, payment, contract or external product action was executed.</div>
+    <article>
+      <strong>Product CEO summary</strong>
+      <span>${escapeHTML(analysis.executiveSummary)}</span>
+      <small>Confidence: ${escapeHTML(analysis.confidenceLevel || "medium")} · ${escapeHTML(analysis.model || "james-deterministic-v1")}</small>
+    </article>
+    ${jamesList(analysis.recommendations || [], "No recommendations returned.", (item) => `
+      <strong>${escapeHTML(item.recommendation)}</strong>
+      <span>${escapeHTML(item.rationale || "")}</span>
+      <small>${item.approvalRequiredBeforeAction ? "Patrick approval required before action" : "Recommendation only"} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${jamesList(analysis.risks || [], "No product risks returned.", (item) => `
+      <strong>${escapeHTML(item.risk)}</strong>
+      <span>${escapeHTML(item.impact || "")}</span>
+      <small>${escapeHTML(item.severity || "medium")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${jamesList(analysis.decisionsRequired || [], "No product decisions returned.", (item) => `
+      <strong>${escapeHTML(item.decision)}</strong>
+      <span>${escapeHTML(item.detail || "")}</span>
+      <small>${item.approvalRequired ? "Patrick approval required" : "Review"} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+  `;
+}
+
+function renderJames() {
+  const james = state.james || seedData.james;
+  const metrics = james.metrics || {};
+  $("#james-agent-identity").innerHTML = renderAgentIdentitySummary("james");
+  $("#james-metrics").innerHTML = [
+    ["PRODUCTS", metrics.products],
+    ["FEATURES", metrics.features],
+    ["EXPERIMENTS", metrics.experiments],
+    ["ROADMAP", metrics.roadmapItems],
+    ["HIGH RISKS", metrics.highRisks],
+    ["DECISIONS", metrics.decisionsRequired],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+
+  $("#james-products").innerHTML = jamesList(james.ventures || [], "No product ventures recorded yet.", (product) => `
+    <strong>${escapeHTML(product.name)}</strong>
+    <span>${escapeHTML(product.productType || "Product")} · ${escapeHTML(product.stage || "Discovery")} · ${escapeHTML(product.status || "active")}</span>
+    <small>${escapeHTML(product.targetCustomer || product.valueProposition || "Target customer not defined.")}</small>
+  `);
+  $("#james-roadmap").innerHTML = jamesList(james.roadmap || [], "No roadmap items recorded yet.", (item) => `
+    <strong>${escapeHTML(item.title)}</strong>
+    <span>${escapeHTML(item.productName || "Product Studio")} · ${escapeHTML(item.theme || "Roadmap")} · ${escapeHTML(item.quarter || "Unscheduled")}</span>
+    <small>${escapeHTML(item.detail || "")}</small>
+  `);
+  $("#james-experiments").innerHTML = jamesList(james.experiments || [], "No validation experiments recorded yet.", (item) => `
+    <strong>${escapeHTML(item.title)}</strong>
+    <span>${escapeHTML(item.productName || "Product Studio")} · ${escapeHTML(item.status || "planned")}</span>
+    <small>${escapeHTML(item.hypothesis || item.successMetric || "")}</small>
+  `);
+  $("#james-risks").innerHTML = jamesList(james.risks || [], "No product risks found.", (risk) => `
+    <strong>${escapeHTML(risk.title)}</strong>
+    <span>${escapeHTML(risk.detail || "")}</span>
+    <small>${escapeHTML(risk.productName || "Product Studio")} · ${escapeHTML(risk.severity || "medium")} · ${escapeHTML(risk.recommendedAction || "")}</small>
+  `);
+  $("#james-decisions").innerHTML = jamesList(james.decisions || [], "No product decisions queued.", (decision) => `
+    <strong>${escapeHTML(decision.title)}</strong>
+    <span>${escapeHTML(decision.detail || "")}</span>
+    <small>${decision.approvalRequired ? "Patrick approval required" : "Review"} · ${escapeHTML(decision.sourceId || `product_decision:${decision.id || ""}`)}</small>
+  `);
+  $("#james-opportunities").innerHTML = jamesList(james.opportunities || [], "No product opportunities detected yet.", (opportunity) => `
+    <strong>${escapeHTML(opportunity.title)}</strong>
+    <span>${escapeHTML(opportunity.businessValue || opportunity.detail || "")}</span>
+    <small>${escapeHTML(opportunity.productName || "Product Studio")} · ${escapeHTML(opportunity.priority || "medium")} · ${escapeHTML(opportunity.recommendedAction || "")}</small>
+  `);
+  renderJamesAnalysis((james.reviews || [])[0]);
+}
+
 function sarahProjectOptions() {
   const projects = state.projectIntelligence?.projects || [];
   return projects.map((project) => `
@@ -2026,6 +2144,7 @@ function renderAll() {
   renderProjectIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
+  renderJames();
   renderSarah();
   renderFinance();
   renderMemory();
@@ -2044,6 +2163,7 @@ function navigate(view) {
     projects: "Project Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
+    james: "James",
     sarah: "Sarah",
     finance: "Finance",
     memory: "Memory",
@@ -2097,7 +2217,7 @@ function renderBriefAgentStatus(agents = []) {
   })));
   return `
     <section class="brief-section agent-brief-section">
-      <h4>13. AGENT STATUS</h4>
+      <h4>14. AGENT STATUS</h4>
       <div class="brief-agent-grid">
         ${roster.map((agent) => `
           <article style="--agent-accent:${escapeHTML(agent.accentColor)}">
@@ -2152,6 +2272,7 @@ function buildBrief(brief) {
       ${brief.property?.items?.length ? `${brief.property.items.length} Westbridge property signal(s) found. ` : ""}
       ${brief.projectIntelligence?.projectsNeedingAttention?.length ? `${brief.projectIntelligence.projectsNeedingAttention.length} project(s) need attention. ` : ""}
       ${brief.sarah?.items?.length ? `${brief.sarah.items.length} Sarah digital construction signal(s) found. ` : ""}
+      ${brief.james?.items?.length ? `${brief.james.items.length} James product signal(s) found. ` : ""}
       ${brief.mondayOperating?.items?.length ? `${brief.mondayOperating.items.length} Monday OS internal work signal(s) found. ` : ""}
       ${brief.meetingIntelligence?.items?.length ? `${brief.meetingIntelligence.items.length} meeting intelligence signal(s) found. ` : ""}
       Signals inferred from email language are clearly labelled and require your review.
@@ -2170,8 +2291,9 @@ function buildBrief(brief) {
     ${section("8. WESTBRIDGE PROPERTY", brief.property?.items || [], "No Westbridge property exceptions detected from current records.")}
     ${section("9. PROJECT INTELLIGENCE", brief.projectIntelligence?.projectsNeedingAttention || [], "No projects currently require attention from project intelligence.")}
     ${section("10. SARAH DIGITAL CONSTRUCTION BRIEF", brief.sarah?.items || [], "No Sarah digital construction exceptions detected from current records.")}
-    ${section("11. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
-    ${section("12. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
+    ${section("11. JAMES PRODUCT CEO BRIEF", brief.james?.items || [], "No James product exceptions detected from current records.")}
+    ${section("12. MONDAY OPERATING SYSTEM", brief.mondayOperating?.items || [], "No internal Monday OS work exceptions detected from current records.")}
+    ${section("13. TEAMS MEETING INTELLIGENCE", brief.meetingIntelligence?.items || [], "No meeting intelligence exceptions detected from current records.")}
     ${renderBriefAgentStatus(brief.agents || [])}
   `;
   enhanceAvatarFallbacks($("#brief-dialog"));
@@ -2226,6 +2348,7 @@ function buildFallbackBrief() {
     property: { title: "Westbridge Property Brief", items: [], summary: "Backend required for property briefing.", metrics: {} },
     projectIntelligence: { projectsNeedingAttention: [] },
     sarah: { title: "Daily Digital Construction Brief", items: [], summary: "Backend required for Sarah briefing." },
+    james: { title: "James Product CEO Brief", items: [], summary: "Backend required for James product briefing.", metrics: {} },
     mondayOperating: { title: "Monday Operating System", items: [], summary: "Backend required for internal work intelligence.", metrics: {} },
     meetingIntelligence: { title: "Teams Meeting Intelligence Brief", items: [], summary: "Backend required for meeting intelligence.", metrics: {} },
     microsoft: { connected: false },
@@ -2950,6 +3073,72 @@ async function askProjectAnalysis(projectId) {
   }
 }
 
+async function refreshJamesDashboard() {
+  if (!backendAvailable) {
+    showToast("James requires the backend");
+    return;
+  }
+  state.james = await apiRequest("/api/james/dashboard");
+  persist();
+  renderJames();
+}
+
+async function askJamesAnalysis() {
+  if (!backendAvailable) {
+    showToast("James analysis requires the backend");
+    return;
+  }
+  $("#james-analysis-output").innerHTML = '<div class="ai-loading">James is analysing Product Studio...</div>';
+  try {
+    const product = (state.james?.ventures || [])[0];
+    const result = await apiRequest("/api/ai/james/analyse-product", {
+      method: "POST",
+      body: JSON.stringify({
+        productVentureId: product?.id || null,
+        productName: product?.name || "Product Studio",
+        userAction: "ui:james:analyse-product",
+      }),
+    });
+    renderJamesAnalysis(result);
+    await refreshJamesDashboard();
+    showToast("James product analysis generated");
+  } catch (error) {
+    $("#james-analysis-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
+async function searchJames(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("James search requires the backend");
+    return;
+  }
+  const query = $("#james-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a product search topic");
+    return;
+  }
+  $("#james-search-results").innerHTML = '<div class="ai-loading">Searching James product memory...</div>';
+  try {
+    const result = await apiRequest(`/api/james/search?q=${encodeURIComponent(query)}`);
+    $("#james-search-results").innerHTML = `
+      ${renderList("James results", result.results || [], (item) => `
+        <strong>${escapeHTML(item.title || "Product record")}</strong>
+        <span>${escapeHTML(item.summary || "")}</span>
+        <small>${escapeHTML(item.type || "record")} · relevance ${Number(item.relevanceScore || 0).toFixed(2)} · ${escapeHTML(item.sourceReference || "")}</small>
+      `)}
+      ${renderList("Semantic memory", result.semanticMemory || [], (memory) => `
+        <strong>${escapeHTML(memory.sourceReference || `${memory.sourceType}:${memory.sourceId}`)}</strong>
+        <span>${escapeHTML(memory.shortSummary || memory.summary || "")}</span>
+        <small>${escapeHTML(memory.sensitivityLabel || "local_sensitive_business_data")}</small>
+      `)}
+    `;
+  } catch (error) {
+    $("#james-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
 async function refreshSarahDashboard() {
   if (!backendAvailable) {
     showToast("Sarah requires the backend");
@@ -3556,6 +3745,20 @@ function runCommand(command) {
     if (normalized.includes("review") && backendAvailable) askSarahProjectReview();
   } else if (normalized.includes("brief")) {
     generateBrief();
+  } else if (normalized.includes("james") || normalized.includes("product") || normalized.includes("saas") || normalized.includes("mvp") || normalized.includes("validation") || normalized.includes("roadmap")) {
+    navigate("james");
+    if (backendAvailable && (normalized.includes("analyse") || normalized.includes("analyze") || normalized.includes("review"))) {
+      askJamesAnalysis();
+    } else if (backendAvailable && (normalized.includes("council") || normalized.includes("assurance") || normalized.includes("pricing") || normalized.includes("mvp") || normalized.includes("validation"))) {
+      $("#james-search-query").value = normalized.includes("pricing")
+        ? "pricing"
+        : normalized.includes("mvp")
+          ? "MVP"
+          : normalized.includes("validation")
+            ? "validation risk"
+            : "Council Assurance Platform";
+      $("#james-search-form").requestSubmit();
+    }
   } else if (normalized.includes("risk")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "risk").length} known risk(s) in the operating register`);
@@ -3631,6 +3834,9 @@ $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);
 $("#refresh-monday-os").addEventListener("click", refreshMondayOperating);
 $("#sync-monday-followups").addEventListener("click", syncMondayFollowups);
+$("#refresh-james").addEventListener("click", refreshJamesDashboard);
+$("#ask-james").addEventListener("click", askJamesAnalysis);
+$("#james-search-form").addEventListener("submit", searchJames);
 $("#sarah-project-select").addEventListener("change", (event) => {
   sarahCurrentProjectId = event.target.value;
 });

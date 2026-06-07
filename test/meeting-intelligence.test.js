@@ -64,6 +64,7 @@ function transcriptText() {
     "What project information is still missing?",
     "Client confirmed the meeting summary was useful feedback.",
     "Olivia should review revenue and invoice exposure.",
+    "James should review the Council Assurance Platform MVP validation plan.",
     "Westbridge property due diligence is unrelated but should remain separate.",
   ].join(" ");
 }
@@ -120,12 +121,12 @@ test("transcript processing extracts follow-ups without storing raw transcript b
   });
 });
 
-test("agent reviews route meeting context to Alfred, Sarah, Olivia, Westbridge and Sentinel", () => {
+test("agent reviews route meeting context to Alfred, Sarah, Olivia, James, Westbridge and Sentinel", () => {
   withDatabase((db) => {
     const detail = createMeetingRecord(db, {
       ...westminsterMeeting({
         id: "calendar-agent-routing-1",
-        bodyPreview: "BIM, invoice, property due diligence and confidential access review.",
+        bodyPreview: "BIM, invoice, product MVP validation, property due diligence and confidential access review.",
       }),
       transcriptText: transcriptText(),
       transcriptPermitted: true,
@@ -135,6 +136,7 @@ test("agent reviews route meeting context to Alfred, Sarah, Olivia, Westbridge a
     assert.ok(reviewers.has("alfred"));
     assert.ok(reviewers.has("sarah"));
     assert.ok(reviewers.has("olivia"));
+    assert.ok(reviewers.has("james"));
     assert.ok(reviewers.has("westbridge-property-director"));
     assert.ok(reviewers.has("sentinel"));
   });

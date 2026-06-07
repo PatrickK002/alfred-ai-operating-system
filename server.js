@@ -116,6 +116,21 @@ import {
   syncMeetingFollowupsToWorkItems,
   updateWorkItem,
 } from "./monday-operating-system.js";
+import {
+  JAMES_READ_ONLY_BOUNDARY,
+  buildJamesAnalysisInput,
+  createProductDecision,
+  createProductRisk,
+  generateJamesAnalysis,
+  getJamesDashboard,
+  jamesBriefingForDaily,
+  listJamesAudit,
+  listProductDecisions,
+  listProductOpportunities,
+  listProductRisks,
+  listProductVentures,
+  searchJamesKnowledge,
+} from "./james.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -405,6 +420,75 @@ async function handleApi(request, response, url) {
       await tryIndexSemanticMemory();
       return sendJson(response, 200, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
     }
+  }
+  if (url.pathname === "/api/james/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getJamesDashboard(db));
+  }
+  if (url.pathname === "/api/james/search" && request.method === "GET") {
+    const query = url.searchParams.get("q") || "";
+    const result = searchJamesKnowledge(db, query);
+    const memory = await semanticMemory.search(query, {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: JAMES_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/james/audit" && request.method === "GET") {
+    return sendJson(response, 200, listJamesAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/james/products" && request.method === "GET") {
+    return sendJson(response, 200, listProductVentures(db));
+  }
+  if (url.pathname === "/api/james/risks") {
+    if (request.method === "GET") return sendJson(response, 200, listProductRisks(db));
+    if (request.method === "POST") {
+      const record = createProductRisk(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: JAMES_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/james/opportunities" && request.method === "GET") {
+    return sendJson(response, 200, listProductOpportunities(db));
+  }
+  if (url.pathname === "/api/james/decisions") {
+    if (request.method === "GET") return sendJson(response, 200, listProductDecisions(db));
+    if (request.method === "POST") {
+      const record = createProductDecision(db, await readJson(request));
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: JAMES_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/ai/james/analyse-product" && request.method === "POST") {
+    const body = await readJson(request);
+    const query = [
+      "James Product CEO",
+      body.query || "",
+      body.productName || "",
+      body.productVentureId || "",
+    ].join(" ");
+    const retrievedMemoryContext = await semanticMemory.retrieveContext(query, {
+      maxRecords: 6,
+      maxTokens: 1200,
+    }).catch(() => null);
+    const input = buildJamesAnalysisInput(db, {
+      productVentureId: body.productVentureId,
+      retrievedMemoryContext,
+    });
+    const analysis = generateJamesAnalysis(db, {
+      productVentureId: body.productVentureId,
+      userAction: body.userAction || "api:james:analyse-product",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, {
+      analysis,
+      input,
+      relatedMemory: retrievedMemoryContext?.records || [],
+      memoryContext: retrievedMemoryContext ? memoryContextSummary(retrievedMemoryContext) : null,
+      boundary: JAMES_READ_ONLY_BOUNDARY,
+    });
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
     const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
@@ -714,7 +798,7 @@ async function handleApi(request, response, url) {
     const context = await withRetrievedMemoryContext(baseContext, memoryQueryForBriefing(baseContext));
     const result = await aiReasoning.analyzeBriefing(context, {
       userAction: body.userAction || "briefing-screen:ask-alfred",
-      dataCategories: [
+      dataCategories: compactCategories([
         "executive_briefing",
         "outlook_signals",
         "calendar_signals",
@@ -727,8 +811,9 @@ async function handleApi(request, response, url) {
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
+        context.jamesProductBrief?.items?.length ? "james_product_ceo" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
-      ],
+      ]),
     });
     return sendJson(response, 200, {
       ...result,
@@ -983,6 +1068,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.projectIntelligence = projectAttentionForBriefing(db);
   brief.sarah = sarahBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
+  brief.james = jamesBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
   brief.mondayOperating = mondayOperatingBriefForDaily(db);
   brief.executivePriorities = [
@@ -1014,6 +1100,13 @@ async function generateExecutiveBrief({ save = true } = {}) {
       category: "sarah",
       score: item.priority === "high" ? 78 : 52,
     })),
+    ...brief.james.items.map((item, index) => ({
+      ...item,
+      id: `james-${index + 1}`,
+      rank: index + 1,
+      category: "james",
+      score: item.priority === "high" ? 79 : 53,
+    })),
     ...brief.projectIntelligence.projectsNeedingAttention.map((project, index) => ({
       ...project,
       rank: index + 1,
@@ -1036,6 +1129,9 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.projectsWithFinancialRisk = brief.projectIntelligence.projectsWithFinancialRisk.length;
   brief.summary.projectsWithInformationQualityRisk = brief.projectIntelligence.projectsWithInformationQualityRisk.length;
   brief.summary.sarahDigitalConstructionSignals = brief.sarah.items.length;
+  brief.summary.jamesProductSignals = brief.james.items.length;
+  brief.summary.jamesProductRisks = brief.james.metrics.openRisks;
+  brief.summary.jamesProductDecisions = brief.james.metrics.decisionsRequired;
   brief.summary.meetingIntelligenceSignals = brief.meetingIntelligence.items.length;
   brief.summary.meetingActions = brief.meetingIntelligence.metrics.openActions;
   brief.summary.meetingRisks = brief.meetingIntelligence.metrics.risks;
@@ -1126,6 +1222,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Sarah digital construction signal",
       category: "sarah",
     })),
+    ...compactRecords(context.jamesProductBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `james:${record.title}`,
+      label: record.title || "James product signal",
+      category: "james",
+    })),
     ...compactRecords(context.outlookSignals, ["id", "title", "subject"]).map((record) => sourceReference("outlook", record)),
     ...compactRecords(context.calendarSignals, ["id", "title", "subject"]).map((record) => sourceReference("calendar", record)),
     ...compactRecords(context.approvalQueue, ["id", "title"]).map((record) => sourceReference("approval", record)),
@@ -1187,6 +1288,7 @@ function memoryQueryForBriefing(context) {
     ...(context.propertyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.projectIntelligence?.projectsNeedingAttention || []).map((item) => `${item.title} ${item.detail || ""}`),
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
+    ...(context.jamesProductBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
@@ -1290,6 +1392,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       summary: briefing.sarah?.summary || "",
       items: compactRecords(briefing.sarah?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
       boundary: briefing.sarah?.boundary || SARAH_READ_ONLY_BOUNDARY,
+    },
+    jamesProductBrief: {
+      title: briefing.james?.title || "James Product CEO Brief",
+      summary: briefing.james?.summary || "",
+      metrics: compactValue(briefing.james?.metrics || {}),
+      items: compactRecords(briefing.james?.items || [], ["title", "detail", "priority", "sourceReference"], 8),
+      boundary: briefing.james?.boundary || JAMES_READ_ONLY_BOUNDARY,
     },
     approvalQueue: compactRecords(listApprovalRequests(db), ["id", "actionType", "targetSystem", "title", "description", "riskLevel", "status", "expiresAt"], 8),
     briefingHistory: history,

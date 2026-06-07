@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan, Liam and James as planned future identities
+- Alfred, Olivia, Sarah, James and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan and Liam as planned future identities
 
 Database files are excluded from Git.
 
@@ -207,6 +207,16 @@ Health and aggregate workflows:
 | `POST` | `/api/ai/sarah/project-health-review` | Deterministic Sarah project health, BIM maturity and digital readiness review |
 | `POST` | `/api/ai/sarah/client-review` | Claude-powered Sarah client portfolio review |
 | `POST` | `/api/ai/sarah/draft-deliverable` | Draft an internal outline only; no document is created or edited |
+| `GET` | `/api/james/dashboard` | James Product CEO dashboard with SaaS products, roadmap, validation experiments, risks, opportunities, decisions and Monday OS workload links |
+| `GET` | `/api/james/search?q=MVP` | Search local Product Studio records and semantic memory references |
+| `GET` | `/api/james/audit` | Metadata-only James advisory audit events |
+| `GET` | `/api/james/products` | List local Product Studio SaaS product records |
+| `GET` | `/api/james/risks` | List James product risks |
+| `POST` | `/api/james/risks` | Create a local advisory product risk record |
+| `GET` | `/api/james/opportunities` | List James product opportunities |
+| `GET` | `/api/james/decisions` | List James product decisions |
+| `POST` | `/api/james/decisions` | Create a local advisory product decision record |
+| `POST` | `/api/ai/james/analyse-product` | Generate James' advisory Product CEO analysis without deploying, publishing, contacting customers or changing pricing |
 | `GET` | `/api/financial/dashboard?scopeType=group&scopeId=group` | Olivia's scoped CFO dashboard |
 | `GET` | `/api/financial/forecast?scopeType=business&scopeId=digitize` | Monthly, quarterly, annual and scenario forecasts for a reporting scope |
 | `POST` | `/api/financial/order-book/import` | Import Excel/CSV order book data into local read-only intelligence tables for a `businessEntityId` |
@@ -275,6 +285,7 @@ curl -X POST http://localhost:4173/api/actions \
 - Agent definitions and their actual status
 - Westbridge property opportunity, due diligence and cashflow signals
 - Sarah and Project Intelligence attention signals
+- James Product Studio SaaS validation, roadmap, product risk and decision signals
 - Teams Meeting Intelligence actions, risks, decisions, missing transcripts and Sentinel confidentiality concerns
 - Monday Operating System internal workloads, blocked work, overdue items, decisions, meeting follow-ups, deliverables due and feedback requiring review
 
@@ -449,7 +460,7 @@ It combines:
 - Microsoft calendar metadata through the existing read-only Microsoft 365 connection
 - Locally supplied and permitted Teams transcript text, where available
 - Structured meeting records, attendees, summaries, actions, decisions, risks, opportunities, questions and feedback
-- Agent reviews from Alfred, Sarah, Olivia, Westbridge Property Director and Sentinel where the meeting context is relevant
+- Agent reviews from Alfred, Sarah, Olivia, James, Westbridge Property Director and Sentinel where the meeting context is relevant
 - Meeting memory links for Voyage semantic retrieval using summaries and metadata first
 
 Calendar import is metadata-only. Alfred records the title, time, organiser, attendees, web URL, meeting URL, client/project association and transcript status. If no transcript is available, the meeting detail explicitly says Alfred reviewed metadata only and did not infer meeting minutes.
@@ -619,7 +630,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, James Product CEO intelligence, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -633,6 +644,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `semantic-memory.js` - SQLite-backed semantic indexing, search and Claude context retrieval
 - `financial.js` - Olivia CFO calculations, order book import persistence, board reports and read-only finance audits
 - `property.js` - Westbridge portfolio metrics, deal analysis, rules engine, due diligence, property memory and audit logging
+- `james.js` - James Product CEO profile, SaaS product records, roadmap, validation experiments, risks, opportunities, decisions, advisory analysis, Monday OS links and no-execution audit boundary
 - `project-intelligence.js` - Project profiles, Microsoft metadata association, health scoring, search and read-only project audits
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
@@ -644,6 +656,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `assets/avatars/` - local abstract executive avatar placeholders
 - `index.html` / `styles.css` - executive command centre interface and responsive iPad/iPhone layouts
 - `test/db.test.js` - database and workflow tests
+- `test/james.test.js` - James Product CEO dashboard, analysis, memory and security-boundary tests
 
 ## Next Integration Steps
 
@@ -1013,6 +1026,62 @@ The database stores placeholders only for future Sarah-managed specialist roles:
 - Power Platform Consultant
 
 These are not active agents and have no autonomous behaviour.
+
+## James Product CEO
+
+James is Alfred's active advisory Product CEO for Product Studio.
+
+- Name: James
+- Role: Product CEO
+- Reports to: Alfred
+- Business: Product Studio
+- Current focus: Council Construction Assurance Platform and future SaaS product portfolio discipline
+
+James turns local Alfred records into board-level product intelligence. The current implementation stores SaaS product ventures, features, validation experiments, roadmap items, risks, opportunities, decisions, reviews and audit events in SQLite. James links his work into the internal Monday Operating System and contributes to Alfred's executive briefing.
+
+James specialises in:
+
+- SaaS strategy
+- MVP validation
+- Customer discovery planning
+- Product roadmap discipline
+- Pricing hypotheses
+- Product risk review
+- Product portfolio prioritisation
+
+Current seeded James records include:
+
+- Council Construction Assurance Platform
+- Future SaaS Products Portfolio
+- Assurance evidence register
+- Product risk and decision board
+- Council problem interview pack
+- MVP scope and non-goals
+- Product validation risks and decisions
+
+James can:
+
+- Analyse Product Studio records
+- Recommend MVP validation priorities
+- Identify product risks and scope creep
+- Prepare roadmap and validation recommendations
+- Search Product Studio memory
+- Link product work into Alfred's internal Monday OS
+- Contribute Product CEO signals to the executive briefing
+
+James cannot:
+
+- Deploy code
+- Publish product assets
+- Contact customers
+- Change pricing
+- Process payments
+- Change contracts
+- Create external tasks
+- Modify Microsoft, Monday, billing, analytics, CRM or product systems
+- Execute autonomous actions
+
+All James outputs are advisory only. Future live product, analytics, CRM, billing or deployment integrations must start read-only and any write-capable path must use explicit Patrick approval, execution preflight and a separate executor review.
 
 ## Olivia CFO Financial Intelligence
 
