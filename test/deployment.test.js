@@ -4,7 +4,9 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   APP_METADATA,
+  apiKeyAssignmentReadiness,
   buildHealthResponse,
+  buildProductionPreflight,
   currentEnvironment,
   pwaReadiness,
   validateEnvironment,
@@ -69,6 +71,59 @@ test("production configuration warnings do not expose raw secrets", () => {
   assert.doesNotMatch(serialized, /super-secret-voyage-key/);
   assert.equal(health.security.secretsInFrontend, false);
   assert.equal(health.security.apiKeysInLocalStorage, false);
+  assert.equal(health.apiKeyReadiness.valuesRedacted, true);
+});
+
+test("production preflight blocks live exposure without HTTPS auth and persistent database", () => {
+  const preflight = buildProductionPreflight({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "http://alfred.example",
+    AUTHENTICATION_ENABLED: "false",
+    ENFORCE_HTTPS: "true",
+  }, { nodeVersion: "24.0.0" });
+
+  assert.equal(preflight.goLiveReady, false);
+  assert.ok(preflight.checks.some((check) => check.id === "https_public_url" && check.status === "block"));
+  assert.ok(preflight.checks.some((check) => check.id === "authentication_gate" && check.status === "block"));
+  assert.ok(preflight.checks.some((check) => check.id === "persistent_database" && check.status === "block"));
+  assert.equal(preflight.securityBoundary.externalWritesEnabled, false);
+  assert.equal(preflight.securityBoundary.providerValuesRedacted, true);
+});
+
+test("API key assignment readiness reports status without exposing values", () => {
+  const readiness = apiKeyAssignmentReadiness({
+    ANTHROPIC_API_KEY: "secret-anthropic-key",
+    VOYAGE_API_KEY: "secret-voyage-key",
+    MICROSOFT_CLIENT_ID: "client-id",
+    MICROSOFT_TENANT_ID: "tenant-id",
+  });
+  const serialized = JSON.stringify(readiness);
+
+  assert.equal(readiness.groups.find((group) => group.id === "anthropic").status, "ready");
+  assert.equal(readiness.groups.find((group) => group.id === "microsoft").status, "ready");
+  assert.equal(readiness.groups.find((group) => group.id === "monday").status, "missing");
+  assert.doesNotMatch(serialized, /secret-anthropic-key/);
+  assert.doesNotMatch(serialized, /secret-voyage-key/);
+  assert.equal(readiness.valuesRedacted, true);
+});
+
+test("production preflight can pass blockers while warning for optional provider keys", () => {
+  const preflight = buildProductionPreflight({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "https://alfred.example",
+    AUTHENTICATION_ENABLED: "true",
+    ALFRED_DB_PATH: "/home/data/alfred.db",
+    ALFRED_BACKUP_STRATEGY: "azure-app-service-backup",
+    ENFORCE_HTTPS: "true",
+    ANTHROPIC_API_KEY: "secret-anthropic-key",
+  }, { nodeVersion: "24.0.0" });
+
+  assert.equal(preflight.goLiveReady, true);
+  assert.equal(preflight.blockers, 0);
+  assert.ok(preflight.warnings >= 1);
+  assert.ok(preflight.checks.some((check) => check.id === "api_key_assignment" && check.status === "warn"));
 });
 
 test("PWA manifest and service worker assets exist with install metadata", () => {
@@ -116,4 +171,14 @@ test("iPhone and iPad responsive layout markers are present", () => {
   assert.match(css, /min-width: 761px/);
   assert.match(css, /max-width: 1366px/);
   assert.match(css, /min-height: 44px/);
+});
+
+test("settings page exposes live readiness and API key assignment panels", () => {
+  const html = readFileSync(join(ROOT, "index.html"), "utf8");
+  const app = readFileSync(join(ROOT, "app.js"), "utf8");
+
+  assert.match(html, /api-key-readiness-list/);
+  assert.match(html, /live-readiness-list/);
+  assert.match(app, /apiKeyReadiness/);
+  assert.match(app, /liveReadiness/);
 });

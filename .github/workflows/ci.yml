@@ -36,6 +36,9 @@ jobs:
       - name: Check app metadata syntax
         run: node --check app-metadata.js
 
+      - name: Check production preflight syntax
+        run: node --check scripts/production-preflight.js
+
       - name: Check agent avatar metadata syntax
         run: node --check agent-avatars.js
 
@@ -71,6 +74,12 @@ jobs:
 
       - name: Check voice command centre syntax
         run: node --check voice.js
+
+      - name: Check Liam Power Platform syntax
+        run: node --check liam.js
+
+      - name: Check James Product CEO syntax
+        run: node --check james.js
 
       - name: Check meeting intelligence syntax
         run: node --check meeting-intelligence.js

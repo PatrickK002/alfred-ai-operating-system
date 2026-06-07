@@ -57,10 +57,41 @@ APP_ENV=production
 APP_BASE_URL=https://your-alfred-app.azurewebsites.net
 HOST=0.0.0.0
 PORT=<provided by Azure>
-AUTHENTICATION_ENABLED=false
+AUTHENTICATION_ENABLED=true
+ALFRED_DB_PATH=/home/data/alfred.db
+ALFRED_BACKUP_STRATEGY=azure-app-service-backup
+ENFORCE_HTTPS=true
 ```
 
 Set real API keys and publish profiles only in Azure/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
+
+Production preflight:
+
+```bash
+npm run preflight:production
+```
+
+The preflight reports live blockers, provider key assignment status and security posture without printing secret values. It should show no blockers before Alfred is exposed on a live URL. Missing optional provider keys are shown as warnings because Alfred falls back gracefully when Anthropic, Voyage, Monday, Deepgram or ElevenLabs are not configured.
+
+Provider keys can be assigned as server-side environment variables:
+
+| Provider | Required values | Purpose |
+| --- | --- | --- |
+| Anthropic | `ANTHROPIC_API_KEY` | Claude reasoning for briefings and advisory analysis |
+| Voyage | `VOYAGE_API_KEY` | Semantic memory embeddings from compact summaries |
+| Microsoft 365 | `MICROSOFT_CLIENT_ID`, `MICROSOFT_TENANT_ID` | Read-only Outlook, calendar and OneDrive/SharePoint access |
+| Monday.com | `MONDAY_API_TOKEN` | Read-only finance and operating board intelligence |
+| Deepgram | `DEEPGRAM_API_KEY` | Voice speech-to-text |
+| ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Spoken Alfred responses |
+
+Production blockers:
+
+- `APP_BASE_URL` must use HTTPS.
+- `AUTHENTICATION_ENABLED=true` must be set before public/private live exposure.
+- `ALFRED_DB_PATH` must point to persistent storage.
+- A backup strategy must be defined before relying on live operating records.
+- API keys must stay in server-side environment variables or platform secrets only.
+- No Microsoft, Monday, finance, property, voice or specialist write actions are enabled.
 
 GitHub deployment configuration:
 
@@ -130,6 +161,7 @@ Health and aggregate workflows:
 | --- | --- | --- |
 | `GET` | `/api/health` | App, environment, database, integration, version, PWA and security health without secrets |
 | `GET` | `/api/app/status` | Public app metadata, release notes, environment validation and PWA readiness |
+| `GET` | `/api/deployment/preflight` | Production go-live checklist, API key assignment status and security boundary without secrets |
 | `GET` | `/api/dashboard` | Complete dashboard state |
 | `GET` | `/api/morning-brief` | Backend-generated executive brief |
 | `GET` | `/api/anthropic/status` | Anthropic configuration and read-only status |

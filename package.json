@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch-path=server.js server.js",
+    "preflight:production": "node scripts/production-preflight.js",
     "test": "node --test"
   },
   "engines": {

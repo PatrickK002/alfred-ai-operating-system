@@ -42,6 +42,8 @@ jobs:
           node --check db.js
           node --check app.js
           node --check app-metadata.js
+          node --check scripts/production-preflight.js
+          node --check agent-avatars.js
           node --check ai.js
           node --check anthropic.js
           node --check voyage.js
@@ -53,6 +55,10 @@ jobs:
           node --check sarah.js
           node --check property.js
           node --check voice.js
+          node --check meeting-intelligence.js
+          node --check monday-operating-system.js
+          node --check liam.js
+          node --check james.js
           node --check briefing.js
           node --check microsoft.js
           node --check service-worker.js
