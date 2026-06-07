@@ -147,6 +147,7 @@ import {
   listProductVentures,
   searchJamesKnowledge,
 } from "./james.js";
+import { buildLiveBetaStatus, createSqliteBackup } from "./live-beta.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -266,6 +267,15 @@ async function handleApi(request, response, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/deployment/preflight") {
     return sendJson(response, 200, buildProductionPreflight());
+  }
+  if (request.method === "GET" && url.pathname === "/api/live-beta/status") {
+    return sendJson(response, 200, await liveBetaStatus());
+  }
+  if (request.method === "POST" && url.pathname === "/api/live-beta/backups") {
+    return sendJson(response, 201, {
+      ...createSqliteBackup(db),
+      status: await liveBetaStatus(),
+    });
   }
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
     syncAnthropicStatus();
@@ -1719,6 +1729,20 @@ function healthResponse() {
         executionEnabled: false,
       },
     },
+  });
+}
+
+async function liveBetaStatus() {
+  const microsoftStatus = await syncMicrosoftStatus().catch((error) => ({
+    configured: microsoft.configured,
+    connected: false,
+    error: error.message,
+  }));
+  return buildLiveBetaStatus({
+    db,
+    microsoft,
+    microsoftStatus,
+    uptimeSeconds: Math.round((Date.now() - SERVER_STARTED_AT) / 1000),
   });
 }
 
