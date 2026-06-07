@@ -58,6 +58,10 @@ APP_BASE_URL=https://your-alfred-app.azurewebsites.net
 HOST=0.0.0.0
 PORT=<provided by Azure>
 AUTHENTICATION_ENABLED=true
+AUTHENTICATION_PROVIDER=azure-app-service-easy-auth
+AUTHENTICATED_USER_HEADER=x-ms-client-principal
+ALFRED_ALLOWED_USERS=patrick@example.com
+ALFRED_REQUIRE_USER_ALLOWLIST=true
 ALFRED_DB_PATH=/home/data/alfred.db
 ALFRED_BACKUP_STRATEGY=azure-app-service-backup
 ENFORCE_HTTPS=true
@@ -87,7 +91,8 @@ Provider keys can be assigned as server-side environment variables:
 Production blockers:
 
 - `APP_BASE_URL` must use HTTPS.
-- `AUTHENTICATION_ENABLED=true` must be set before public/private live exposure.
+- `AUTHENTICATION_ENABLED=true` and `AUTHENTICATION_PROVIDER=azure-app-service-easy-auth` must be set before public/private live exposure.
+- `ALFRED_ALLOWED_USERS` must list Patrick's approved sign-in email address(es).
 - `ALFRED_DB_PATH` must point to persistent storage.
 - A backup strategy must be defined before relying on live operating records.
 - API keys must stay in server-side environment variables or platform secrets only.
@@ -111,7 +116,8 @@ The PWA includes `manifest.json`, `service-worker.js`, icon placeholders, local 
 Production security notes:
 
 - HTTPS is enforced in `production` unless `ENFORCE_HTTPS=false` is explicitly set.
-- Production must not be publicly exposed until Microsoft Entra ID authentication is enabled.
+- Production must not be publicly exposed until Microsoft Entra ID authentication is enabled and Alfred is receiving the `x-ms-client-principal` authenticated-user header from Azure App Service Easy Auth.
+- Alfred enforces `ALFRED_ALLOWED_USERS` server-side when authentication is enabled, so a misconfigured tenant-wide login does not automatically expose the dashboard.
 - No secrets are returned through `/api/health` or stored in frontend `localStorage`.
 - No external write actions are enabled.
 - Approval safeguards remain required for any future execution capability.

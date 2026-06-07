@@ -1234,6 +1234,8 @@ function renderSettings() {
     ["External writes enabled", security.externalWritesEnabled],
     ["Approval safeguards required", security.approvalSafeguardsRequired],
     ["Authentication", security.authenticationEnabled ? "Enabled" : security.authenticationProvider || "Microsoft Entra ID planned"],
+    ["Authentication provider", security.authenticationProvider || "Not configured"],
+    ["Allowed users configured", security.allowedUsersConfigured],
   ].map(([label, value]) => `
     <article class="${value === false || value === "Disabled" ? "blocked" : "ok"}">
       <strong>${escapeHTML(label)}</strong>

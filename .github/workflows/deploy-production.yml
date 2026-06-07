@@ -43,6 +43,7 @@ jobs:
           node --check app.js
           node --check app-metadata.js
           node --check scripts/production-preflight.js
+          node --check authentication.js
           node --check agent-avatars.js
           node --check ai.js
           node --check anthropic.js
