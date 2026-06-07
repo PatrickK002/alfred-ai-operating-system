@@ -545,6 +545,8 @@ let currentPropertyOpportunityId = null;
 let voiceMediaRecorder = null;
 let voiceAudioChunks = [];
 let voiceCurrentStream = null;
+let voicePlaybackPrimed = false;
+let currentVoiceAudio = null;
 let toastTimer;
 
 const $ = (selector) => document.querySelector(selector);
@@ -858,6 +860,11 @@ function renderVoiceCommandCentre() {
           <strong>Alfred</strong>
         </div>
         <p>${escapeHTML(last.response || last.message || "")}</p>
+        <div class="voice-answer-actions">
+          <button class="secondary-button" id="voice-play-response" type="button">
+            ${last.audio?.audioBase64 ? "Play Alfred audio" : "Speak response"}
+          </button>
+        </div>
         <small>
           Intent: ${escapeHTML(last.detectedIntent?.intent || last.detectedIntent || "unknown")}
           · Audio: ${escapeHTML(last.audio?.status || "text_only")}
@@ -3750,22 +3757,85 @@ function speakWithBrowserFallback(text, rate = 1) {
   });
 }
 
+function primeVoicePlayback() {
+  if (voicePlaybackPrimed) return;
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const buffer = context.createBuffer(1, 1, 22050);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.start(0);
+    context.resume?.().catch(() => {});
+    voicePlaybackPrimed = true;
+  } catch {
+    voicePlaybackPrimed = false;
+  }
+}
+
+function playAudioData(audioData = {}) {
+  return new Promise((resolve) => {
+    if (!audioData.audioBase64 || !audioData.mimeType) {
+      resolve({ played: false, errorCode: "VOICE_AUDIO_MISSING" });
+      return;
+    }
+    let settled = false;
+    const settle = (played, errorCode = "") => {
+      if (settled) return;
+      settled = true;
+      resolve({ played, errorCode });
+    };
+    currentVoiceAudio = new Audio(`data:${audioData.mimeType};base64,${audioData.audioBase64}`);
+    currentVoiceAudio.preload = "auto";
+    currentVoiceAudio.onended = () => settle(true);
+    currentVoiceAudio.onerror = () => settle(false, "VOICE_AUDIO_ELEMENT_ERROR");
+    const playAttempt = currentVoiceAudio.play();
+    if (playAttempt?.then) {
+      playAttempt
+        .then(() => {})
+        .catch((error) => settle(false, error?.name || "VOICE_AUDIO_PLAYBACK_BLOCKED"));
+    }
+  });
+}
+
+async function replayLastVoiceResponse() {
+  const result = state.voice?.lastResult;
+  if (!result) {
+    showToast("No Alfred response to replay yet");
+    return;
+  }
+  primeVoicePlayback();
+  setVoiceUiState("Speaking", result.audio?.audioBase64 ? "Playing Alfred audio." : "Speaking locally.");
+  if (result.audio?.audioBase64 && result.audio?.mimeType) {
+    const playback = await playAudioData(result.audio);
+    if (playback.played) {
+      setVoiceUiState("Ready", "Voice response complete.");
+      return;
+    }
+  }
+  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
+  const spoke = await speakWithBrowserFallback(result.response || result.message || "", settings.speechSpeed);
+  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio playback is blocked. Check Safari tab sound settings.");
+  if (!spoke) showToast("Audio playback was blocked. Check Safari tab sound settings.");
+}
+
 async function playVoiceResult(result) {
   const settings = state.voice?.status?.settings || seedData.voice.status.settings;
   if (result.audio?.audioBase64 && result.audio?.mimeType) {
     setVoiceUiState("Speaking", "Playing Alfred through ElevenLabs.");
-    const audio = new Audio(`data:${result.audio.mimeType};base64,${result.audio.audioBase64}`);
-    await new Promise((resolve) => {
-      audio.onended = resolve;
-      audio.onerror = resolve;
-      audio.play().catch(resolve);
-    });
-    setVoiceUiState("Ready", "Voice response complete.");
-    return;
+    const playback = await playAudioData(result.audio);
+    if (playback.played) {
+      setVoiceUiState("Ready", "Voice response complete.");
+      return;
+    }
+    setVoiceUiState("Speaking", "Safari blocked automatic audio. Trying local speech fallback.");
+    showToast("Safari blocked automatic audio. Use Play Alfred audio if needed.");
   }
   setVoiceUiState("Speaking", result.audio?.errorCode ? "Using local browser speech fallback." : "Speaking locally.");
   const spoke = await speakWithBrowserFallback(result.response, settings.speechSpeed);
-  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Text response ready. Browser speech is unavailable.");
+  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio ready. Click Play Alfred audio.");
 }
 
 async function submitVoiceCommand(payload) {
@@ -3773,6 +3843,7 @@ async function submitVoiceCommand(payload) {
     showToast("Voice requires the backend API");
     return;
   }
+  primeVoicePlayback();
   setVoiceUiState("Thinking", "Routing your command through Alfred.");
   try {
     const result = await apiRequest("/api/voice/command", {
@@ -4224,6 +4295,9 @@ $("#voice-selection").addEventListener("change", updateVoiceSettings);
 $("#voice-retention-days").addEventListener("change", updateVoiceSettings);
 $("#voice-run-diagnostics").addEventListener("click", runVoiceDiagnostics);
 $("#voice-purge-history").addEventListener("click", purgeOldVoiceTurns);
+document.addEventListener("click", (event) => {
+  if (event.target.closest("#voice-play-response")) replayLastVoiceResponse();
+});
 $("#voice-speech-speed").addEventListener("input", () => {
   $("#voice-speed-label").textContent = `${Number($("#voice-speech-speed").value || 1).toFixed(2)}x`;
 });

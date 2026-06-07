@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -286,4 +286,16 @@ test("voice cannot bypass approvals or execute external actions", async () => {
     assert.equal(result.executedActions.length, 0);
     assert.equal(audit[0].executionAttempted, false);
   });
+});
+
+test("frontend voice playback exposes manual replay when autoplay is blocked", () => {
+  const app = readFileSync(join(process.cwd(), "app.js"), "utf8");
+  const css = readFileSync(join(process.cwd(), "styles.css"), "utf8");
+
+  assert.match(app, /function primeVoicePlayback/);
+  assert.match(app, /function playAudioData/);
+  assert.match(app, /function replayLastVoiceResponse/);
+  assert.match(app, /id="voice-play-response"/);
+  assert.match(app, /Safari blocked automatic audio/);
+  assert.match(css, /voice-answer-actions/);
 });

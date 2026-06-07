@@ -994,6 +994,19 @@ h3 {
   line-height: 1.6;
 }
 
+.voice-answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.voice-answer-actions .secondary-button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border-color: rgba(98, 234, 213, 0.28);
+}
+
 .voice-answer small {
   color: var(--muted);
   font-size: 10px;
