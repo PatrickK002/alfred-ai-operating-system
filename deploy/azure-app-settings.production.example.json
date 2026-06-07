@@ -32,5 +32,5 @@
   "DEEPGRAM_MODEL": "nova-3",
   "ELEVENLABS_API_KEY": "<set-in-azure-app-settings-or-key-vault-reference>",
   "ELEVENLABS_VOICE_ID": "<elevenlabs-voice-id>",
-  "ELEVENLABS_MODEL": "eleven_multilingual_v2"
+  "ELEVENLABS_MODEL": "eleven_turbo_v2_5"
 }

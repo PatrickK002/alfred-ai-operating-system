@@ -68,6 +68,7 @@ function serviceFor(db, overrides = {}) {
 }
 
 test("voice command intent detection routes supported commands", () => {
+  assert.deepEqual(detectVoiceIntent("hi").intent, "greeting");
   assert.deepEqual(detectVoiceIntent("Alfred, brief me").intent, "executive_briefing");
   assert.equal(detectVoiceIntent("Ask Sarah to review Westminster").routedAgent, "sarah");
   assert.equal(detectVoiceIntent("Ask Olivia for revenue forecast").routedAgent, "olivia");
@@ -75,6 +76,47 @@ test("voice command intent detection routes supported commands", () => {
   assert.equal(detectVoiceIntent("Ask Westbridge for property pipeline").routedAgent, "westbridge-property-director");
   assert.equal(detectVoiceIntent("Ask James about the Council Assurance Platform MVP").routedAgent, "james");
   assert.equal(detectVoiceIntent("Show Westminster status").linkedProject, "Westminster");
+});
+
+test("short greetings use a fast path without Claude or executive context", async () => {
+  await withDatabase(async (db) => {
+    let executiveBriefCalled = false;
+    let claudeCalled = false;
+    const service = serviceFor(db, {
+      getExecutiveBrief: async () => {
+        executiveBriefCalled = true;
+        throw new Error("greeting should not build executive context");
+      },
+      textToSpeech: {
+        status: () => ({ provider: "elevenlabs", configured: true, model: "test-tts" }),
+        synthesize: async ({ text }) => ({
+          audioBase64: Buffer.from(text).toString("base64"),
+          mimeType: "audio/mpeg",
+          provider: "elevenlabs",
+          model: "test-tts",
+        }),
+      },
+      aiReasoning: {
+        analyzeVoiceCommand: async () => {
+          claudeCalled = true;
+          throw new Error("greeting should not call Claude");
+        },
+      },
+    });
+
+    const result = await service.handleCommand({ transcript: "hi", userAction: "test:voice:greeting" });
+    const audit = listVoiceAudit(db);
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.detectedIntent.intent, "greeting");
+    assert.match(result.spokenResponse, /Hi Patrick/);
+    assert.equal(result.audio.status, "ready");
+    assert.equal(executiveBriefCalled, false);
+    assert.equal(claudeCalled, false);
+    assert.deepEqual(audit[0].dataCategories, ["voice_transcript", "greeting"]);
+    assert.equal(audit[0].metadata.fastPath, true);
+    assert.equal(audit[0].metadata.usedClaude, false);
+  });
 });
 
 test("voice session creation stores local session metadata", () => {
@@ -302,6 +344,7 @@ test("ElevenLabs synthesis uses natural voice settings and punctuated speech tex
 
   assert.equal(result.provider, "elevenlabs");
   assert.equal(requestBody.text, "hello patrick.");
+  assert.equal(requestBody.model_id, "eleven_turbo_v2_5");
   assert.equal(requestBody.voice_settings.stability, 0.38);
   assert.equal(requestBody.voice_settings.similarity_boost, 0.82);
   assert.equal(requestBody.voice_settings.style, 0.28);
@@ -338,12 +381,13 @@ test("frontend voice playback exposes manual replay when autoplay is blocked", (
   assert.match(app, /function renderVoiceResponseText/);
   assert.match(app, /voice-answer-text/);
   assert.match(app, /voice-history-response/);
-  assert.match(app, /result\.spokenResponse \|\| result\.response/);
   assert.match(app, /function primeVoicePlayback/);
   assert.match(app, /function playAudioData/);
   assert.match(app, /function replayLastVoiceResponse/);
   assert.match(app, /id="voice-play-response"/);
+  assert.match(app, /ElevenLabs audio unavailable/);
   assert.match(app, /Safari blocked automatic audio/);
+  assert.match(app, /Browser speech fallback is disabled for voice quality/);
   assert.match(css, /voice-answer-actions/);
   assert.match(css, /voice-answer-text/);
   assert.match(css, /voice-history-response/);

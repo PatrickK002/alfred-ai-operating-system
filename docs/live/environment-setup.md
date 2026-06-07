@@ -161,7 +161,7 @@ Optional model/version settings:
 - `VOYAGE_MODEL=voyage-4-lite`
 - `MONDAY_API_VERSION=2025-04`
 - `DEEPGRAM_MODEL=nova-3`
-- `ELEVENLABS_MODEL=eleven_multilingual_v2`
+- `ELEVENLABS_MODEL=eleven_turbo_v2_5`
 
 ## 6. Verification
 

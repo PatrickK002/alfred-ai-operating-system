@@ -131,10 +131,31 @@ function detectProjectName(transcript = "") {
   return match?.[0] || "";
 }
 
+function isGreetingText(text = "") {
+  return /^(hi|hello|hey|hiya|morning|afternoon|evening|good morning|good afternoon|good evening)( alfred)?$/.test(text);
+}
+
+function isFastVoiceIntent(intent = {}, transcript = "") {
+  const wordCount = String(transcript || "").trim().split(/\s+/).filter(Boolean).length;
+  return intent.intent === "greeting" || (intent.intent === "unknown" && wordCount <= 4);
+}
+
+function fastVoiceContext(transcript = "") {
+  return {
+    transcript,
+    memoryContext: { records: [], semantic: false, indexingEnabled: false },
+    approvals: [],
+    briefingHistory: [],
+  };
+}
+
 export function detectVoiceIntent(transcript = "") {
   const text = String(transcript || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
   const projectName = detectProjectName(transcript);
 
+  if (isGreetingText(text)) {
+    return { intent: "greeting", routedAgent: "alfred", confidence: "high" };
+  }
   if (/sarah/.test(text)) {
     return {
       intent: "sarah_project_review",
@@ -268,7 +289,7 @@ export class ElevenLabsSpeechClient {
   constructor({
     apiKey = process.env.ELEVENLABS_API_KEY || "",
     voiceId = process.env.ELEVENLABS_VOICE_ID || "",
-    model = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+    model = process.env.ELEVENLABS_MODEL || "eleven_turbo_v2_5",
     fetchImpl = globalThis.fetch,
     timeoutMs = 45_000,
   } = {}) {
@@ -630,6 +651,20 @@ function summarizeApprovals(approvals = []) {
   };
 }
 
+function summarizeGreeting() {
+  const spokenResponse = "Hi Patrick. I'm here. Ask me for a briefing, a project check, or what needs your attention.";
+  return {
+    spokenResponse,
+    displayResponse: [
+      "Hi Patrick. I'm here.",
+      "",
+      "- Try: \"Alfred, brief me.\"",
+      "- Or ask for risks, meetings, Sarah, Olivia, James, Liam, or Westbridge.",
+    ].join("\n"),
+    sourceReferences: [],
+  };
+}
+
 function summarizeExecutiveBrief(context = {}) {
   const base = summarizeBrief(context.brief);
   const olivia = summarizeOlivia(context.financial);
@@ -666,6 +701,7 @@ function summarizeExecutiveBrief(context = {}) {
 }
 
 function deterministicVoiceAnalysis(intent, context) {
+  if (intent.intent === "greeting") return summarizeGreeting();
   if (intent.intent === "sarah_project_review") return summarizeSarah(context.sarah, intent.linkedProject);
   if (intent.intent === "olivia_revenue_forecast") return summarizeOlivia(context.financial);
   if (intent.intent === "liam_power_platform_review") return summarizeLiam(context.liam);
@@ -967,7 +1003,7 @@ export function createVoiceCommandService({
         audioBase64: "",
         mimeType: "",
         status: "text_only",
-        provider: "browser-fallback",
+        provider: "text-only",
         errorCode: error.code || "ELEVENLABS_SYNTHESIS_FAILED",
         message: error.message,
       };
@@ -1011,9 +1047,10 @@ export function createVoiceCommandService({
     }
 
     const intent = detectVoiceIntent(transcript);
-    const context = await buildContext(transcript, intent);
+    const fastPath = isFastVoiceIntent(intent, transcript);
+    const context = fastPath ? fastVoiceContext(transcript) : await buildContext(transcript, intent);
     const fallback = deterministicVoiceAnalysis(intent, context);
-    const ai = await runClaude(intent, context, fallback, userAction);
+    const ai = fastPath ? null : await runClaude(intent, context, fallback, userAction);
     const aiFailed = ai?.fallbackErrorCode;
     const voiceAnalysis = aiFailed ? normalizeClaudeVoiceResult(null, fallback) : normalizeClaudeVoiceResult(ai, fallback);
     const displayResponse = voiceAnalysis.displayResponse || voiceAnalysis.spokenResponse;
@@ -1021,7 +1058,7 @@ export function createVoiceCommandService({
     const dataCategories = [
       "voice_transcript",
       intent.intent,
-      "executive_briefing",
+      fastPath ? "" : "executive_briefing",
       intent.routedAgent === "sarah" ? "sarah_project_context" : "",
       intent.routedAgent === "olivia" ? "olivia_financial_context" : "",
       intent.routedAgent === "liam" ? "liam_power_platform_context" : "",
@@ -1046,6 +1083,7 @@ export function createVoiceCommandService({
         audioProviderStatus: audio.status,
         rawAudioStored: false,
         usedClaude: voiceAnalysis.usedClaude,
+        fastPath,
       },
     });
     const turn = recordVoiceConversationTurn(db, {

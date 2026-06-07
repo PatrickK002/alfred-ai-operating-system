@@ -63,7 +63,7 @@ services:
       - key: DEEPGRAM_MODEL
         value: nova-3
       - key: ELEVENLABS_MODEL
-        value: eleven_multilingual_v2
+        value: eleven_turbo_v2_5
       - key: VOICE_ENABLED
         value: "true"
       - key: VOICE_TRANSCRIPT_LOGGING_ENABLED

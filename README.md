@@ -437,7 +437,7 @@ DEEPGRAM_API_KEY="your-deepgram-key"
 DEEPGRAM_MODEL="nova-3"
 ELEVENLABS_API_KEY="your-elevenlabs-key"
 ELEVENLABS_VOICE_ID="your-elevenlabs-voice-id"
-ELEVENLABS_MODEL="eleven_multilingual_v2"
+ELEVENLABS_MODEL="eleven_turbo_v2_5"
 VOICE_ENABLED=true
 VOICE_TRANSCRIPT_LOGGING_ENABLED=true
 VOICE_TRANSCRIPT_RETENTION_DAYS=30
@@ -446,7 +446,7 @@ VOICE_AI_TIMEOUT_MS=12000
 
 `VOICE_ENABLED` controls the local voice interface. `VOICE_TRANSCRIPT_LOGGING_ENABLED=false` prevents transcript content from being persisted in `voice_conversation_turns`.
 `VOICE_TRANSCRIPT_RETENTION_DAYS` sets the local purge threshold for stored transcript turns. The Voice Command Centre includes a setup checklist, a local diagnostics button and a purge control for old local voice turns.
-`VOICE_AI_TIMEOUT_MS` caps how long voice commands wait for Claude before using deterministic local fallback.
+`VOICE_AI_TIMEOUT_MS` caps how long voice commands wait for Claude before using deterministic local fallback. Short greetings such as "hi" use a fast local route and skip the executive context/Claude path.
 
 ### Supported Commands
 

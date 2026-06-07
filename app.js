@@ -902,7 +902,7 @@ function renderVoiceCommandCentre() {
         <div class="voice-answer-text">${renderVoiceResponseText(last.response || last.message || "")}</div>
         <div class="voice-answer-actions">
           <button class="secondary-button" id="voice-play-response" type="button">
-            ${last.audio?.audioBase64 ? "Play Alfred audio" : "Speak response"}
+            ${last.audio?.audioBase64 ? "Play Alfred audio" : "ElevenLabs audio unavailable"}
           </button>
         </div>
         <small>
@@ -3847,22 +3847,22 @@ async function replayLastVoiceResponse() {
     return;
   }
   primeVoicePlayback();
-  setVoiceUiState("Speaking", result.audio?.audioBase64 ? "Playing Alfred audio." : "Speaking locally.");
+  setVoiceUiState("Speaking", result.audio?.audioBase64 ? "Playing Alfred audio." : "ElevenLabs audio unavailable.");
   if (result.audio?.audioBase64 && result.audio?.mimeType) {
     const playback = await playAudioData(result.audio);
     if (playback.played) {
       setVoiceUiState("Ready", "Voice response complete.");
       return;
     }
+    setVoiceUiState("Ready", "Audio playback is blocked. Click Play Alfred audio again, or check Safari tab sound settings.");
+    showToast("ElevenLabs audio was blocked by Safari. Click Play Alfred audio.");
+    return;
   }
-  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
-  const spoke = await speakWithBrowserFallback(result.spokenResponse || result.response || result.message || "", settings.speechSpeed);
-  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio playback is blocked. Check Safari tab sound settings.");
-  if (!spoke) showToast("Audio playback was blocked. Check Safari tab sound settings.");
+  setVoiceUiState("Ready", "ElevenLabs audio unavailable. Check Voice provider setup.");
+  showToast("ElevenLabs audio unavailable. Browser speech fallback is disabled for voice quality.");
 }
 
 async function playVoiceResult(result) {
-  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
   if (result.audio?.audioBase64 && result.audio?.mimeType) {
     setVoiceUiState("Speaking", "Playing Alfred through ElevenLabs.");
     const playback = await playAudioData(result.audio);
@@ -3870,12 +3870,12 @@ async function playVoiceResult(result) {
       setVoiceUiState("Ready", "Voice response complete.");
       return;
     }
-    setVoiceUiState("Speaking", "Safari blocked automatic audio. Trying local speech fallback.");
-    showToast("Safari blocked automatic audio. Use Play Alfred audio if needed.");
+    setVoiceUiState("Ready", "Safari blocked automatic audio. Click Play Alfred audio to hear the ElevenLabs voice.");
+    showToast("Safari blocked automatic audio. Click Play Alfred audio.");
+    return;
   }
-  setVoiceUiState("Speaking", result.audio?.errorCode ? "Using local browser speech fallback." : "Speaking locally.");
-  const spoke = await speakWithBrowserFallback(result.spokenResponse || result.response, settings.speechSpeed);
-  setVoiceUiState("Ready", spoke ? "Voice response complete." : "Audio ready. Click Play Alfred audio.");
+  setVoiceUiState("Ready", "ElevenLabs audio unavailable. Check Voice provider setup.");
+  showToast("ElevenLabs audio unavailable. Browser speech fallback is disabled for voice quality.");
 }
 
 async function submitVoiceCommand(payload) {
