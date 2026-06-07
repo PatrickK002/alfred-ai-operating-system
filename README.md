@@ -35,9 +35,15 @@ PORT=4180 npm start
 
 ## Cloud, PWA And Device Access
 
-Alfred is prepared for Azure App Service hosting and installable PWA access.
+Alfred is prepared for Render or Azure App Service hosting and installable PWA access.
 
-Target architecture:
+Current recommended first-live architecture:
+
+```text
+GitHub -> Render Blueprint -> Render Web Service + Persistent Disk -> Alfred secure URL
+```
+
+Azure target architecture remains supported when App Service quota is available:
 
 ```text
 GitHub -> GitHub Actions -> Azure App Service -> Alfred secure URL
@@ -46,8 +52,35 @@ GitHub -> GitHub Actions -> Azure App Service -> Alfred secure URL
 Environment behaviour:
 
 - `development` - local use from a MacBook.
-- `testing` - `develop` branch deployment to an Azure testing App Service.
-- `production` - `main` branch deployment to an Azure production App Service.
+- `testing` - `develop` branch deployment for validation before production.
+- `production` - `main` branch deployment for Patrick's secure executive operating system.
+
+Recommended Render settings are managed by [render.yaml](render.yaml):
+
+```text
+NODE_ENV=production
+APP_ENV=production
+APP_BASE_URL=https://alfred-ai-operating-system.onrender.com
+HOST=0.0.0.0
+AUTHENTICATION_ENABLED=true
+AUTHENTICATION_PROVIDER=basic-auth
+ALFRED_BASIC_AUTH_USERNAME=<Patrick sign-in username>
+ALFRED_BASIC_AUTH_PASSWORD=<strong generated password>
+ALFRED_ALLOWED_USERS=<same approved username/email>
+ALFRED_REQUIRE_USER_ALLOWLIST=true
+ALFRED_DB_PATH=/var/data/alfred.db
+MICROSOFT_TOKEN_PATH=/var/data/microsoft-token.json
+ALFRED_BACKUP_STRATEGY=render-persistent-disk-daily-snapshots
+ENFORCE_HTTPS=true
+```
+
+Render deployment notes:
+
+- Use the `starter` web service plan or higher because persistent disks are not available on free web services.
+- The Render disk is mounted at `/var/data`; only files under that path persist between deploys.
+- Keep `numInstances=1` while Alfred uses SQLite on a single attached disk.
+- Render uses `/api/healthz` for unauthenticated platform health checks; Alfred's full `/api/health` remains behind the authentication gate.
+- Set Basic Auth and provider API keys as Render environment secrets. Do not commit them.
 
 Recommended Azure App Service settings:
 
@@ -67,11 +100,12 @@ ALFRED_BACKUP_STRATEGY=azure-app-service-backup
 ENFORCE_HTTPS=true
 ```
 
-Set real API keys and publish profiles only in Azure/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
+Set real API keys, Render secrets and publish profiles only in platform/GitHub secrets. Do not commit `.env`, publish profiles, API keys or production credentials.
 
 Live setup handoff:
 
 - [docs/live/environment-setup.md](docs/live/environment-setup.md)
+- [render.yaml](render.yaml)
 - [deploy/azure-app-settings.testing.example.json](deploy/azure-app-settings.testing.example.json)
 - [deploy/azure-app-settings.production.example.json](deploy/azure-app-settings.production.example.json)
 
@@ -97,7 +131,9 @@ Provider keys can be assigned as server-side environment variables:
 Production blockers:
 
 - `APP_BASE_URL` must use HTTPS.
-- `AUTHENTICATION_ENABLED=true` and `AUTHENTICATION_PROVIDER=azure-app-service-easy-auth` must be set before public/private live exposure.
+- `AUTHENTICATION_ENABLED=true` and a supported provider must be configured before public/private live exposure.
+- For Render, use `AUTHENTICATION_PROVIDER=basic-auth` with a strong `ALFRED_BASIC_AUTH_PASSWORD`.
+- For Azure, use `AUTHENTICATION_PROVIDER=azure-app-service-easy-auth` after Microsoft Entra authentication is enabled.
 - `ALFRED_ALLOWED_USERS` must list Patrick's approved sign-in email address(es).
 - `ALFRED_DB_PATH` must point to persistent storage.
 - A backup strategy must be defined before relying on live operating records.

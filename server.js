@@ -202,16 +202,20 @@ function securityHeaders() {
   };
 }
 
-function sendJson(response, statusCode, body) {
+function sendJson(response, statusCode, body, extraHeaders = {}) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    ...extraHeaders,
     ...securityHeaders(),
   });
   response.end(JSON.stringify(body));
 }
 
 function sendAuthenticationFailure(response, auth) {
+  const headers = auth.config?.provider === "basic-auth" && auth.statusCode === 401
+    ? { "WWW-Authenticate": 'Basic realm="Alfred AI Operating System", charset="UTF-8"' }
+    : {};
   return sendJson(response, auth.statusCode || 401, {
     error: auth.message || "Authentication required",
     authentication: {
@@ -220,7 +224,7 @@ function sendAuthenticationFailure(response, auth) {
       provider: auth.config?.provider || "not_configured",
       code: auth.code || "AUTHENTICATION_FAILED",
     },
-  });
+  }, headers);
 }
 
 async function readJson(request) {
@@ -1757,6 +1761,13 @@ const server = createServer(async (request, response) => {
         ...securityHeaders(),
       });
       response.end();
+      return;
+    }
+    if (url.pathname === "/api/healthz") {
+      sendJson(response, 200, {
+        status: "ok",
+        service: "alfred-ai-operating-system",
+      });
       return;
     }
     const auth = authenticateHeaders(request.headers, process.env);

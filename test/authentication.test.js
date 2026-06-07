@@ -98,3 +98,42 @@ test("authentication gate enforces Alfred allowed users", () => {
   assert.equal(blocked.statusCode, 403);
   assert.equal(blocked.code, "AUTH_USER_NOT_ALLOWED");
 });
+
+test("basic auth provider protects Render deployment with server-side credentials", () => {
+  const header = Buffer.from("patrick@example.com:correct-password").toString("base64");
+  const allowed = authenticateHeaders({
+    authorization: `Basic ${header}`,
+  }, {
+    APP_ENV: "production",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_BASIC_AUTH_USERNAME: "patrick@example.com",
+    ALFRED_BASIC_AUTH_PASSWORD: "correct-password",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+  });
+  const blocked = authenticateHeaders({
+    authorization: `Basic ${Buffer.from("patrick@example.com:wrong").toString("base64")}`,
+  }, {
+    APP_ENV: "production",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_BASIC_AUTH_USERNAME: "patrick@example.com",
+    ALFRED_BASIC_AUTH_PASSWORD: "correct-password",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+  });
+  const notConfigured = authenticateHeaders({}, {
+    APP_ENV: "production",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+  });
+
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.user.email, "patrick@example.com");
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.statusCode, 401);
+  assert.equal(blocked.code, "AUTHENTICATION_REQUIRED");
+  assert.equal(notConfigured.allowed, false);
+  assert.equal(notConfigured.statusCode, 503);
+  assert.equal(notConfigured.code, "BASIC_AUTH_NOT_CONFIGURED");
+});

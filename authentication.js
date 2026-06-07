@@ -1,5 +1,8 @@
+import { timingSafeEqual } from "node:crypto";
+
 export const SUPPORTED_AUTHENTICATION_PROVIDERS = Object.freeze([
   "azure-app-service-easy-auth",
+  "basic-auth",
   "reverse-proxy-header",
 ]);
 
@@ -21,6 +24,28 @@ function normalizeIdentifier(value) {
 function headerValue(headers, name) {
   const value = headers?.[String(name).toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function safeEqual(actual, expected) {
+  const actualBuffer = Buffer.from(String(actual || ""));
+  const expectedBuffer = Buffer.from(String(expected || ""));
+  return actualBuffer.length === expectedBuffer.length
+    && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function parseBasicAuthorization(value) {
+  if (!hasValue(value) || !String(value).toLowerCase().startsWith("basic ")) return null;
+  try {
+    const decoded = Buffer.from(String(value).slice(6).trim(), "base64").toString("utf8");
+    const separator = decoded.indexOf(":");
+    if (separator < 0) return null;
+    return {
+      username: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function currentEnvironment(env) {
@@ -49,6 +74,7 @@ export function authenticationConfig(env = process.env) {
     allowedUsers,
     allowedUsersConfigured: allowedUsers.length > 0,
     requireUserAllowlist,
+    basicAuthConfigured: hasValue(env.ALFRED_BASIC_AUTH_USERNAME) && hasValue(env.ALFRED_BASIC_AUTH_PASSWORD),
   };
 }
 
@@ -73,6 +99,28 @@ function claimValue(principal, names) {
 
 export function authenticatedUserFromHeaders(headers = {}, env = process.env) {
   const config = authenticationConfig(env);
+  if (config.provider === "basic-auth") {
+    const credentials = parseBasicAuthorization(headerValue(headers, "authorization"));
+    if (
+      !config.basicAuthConfigured
+      || !credentials
+      || !safeEqual(credentials.username, env.ALFRED_BASIC_AUTH_USERNAME)
+      || !safeEqual(credentials.password, env.ALFRED_BASIC_AUTH_PASSWORD)
+    ) {
+      return null;
+    }
+
+    const username = String(credentials.username || "").trim();
+    return {
+      provider: config.provider,
+      id: username,
+      name: username,
+      email: username.includes("@") ? username : "",
+      identifiers: [normalizeIdentifier(username)].filter(Boolean),
+      claimsCount: 0,
+    };
+  }
+
   const encodedPrincipal = headerValue(headers, config.principalHeader);
   const principal = decodeClientPrincipal(encodedPrincipal) || {};
   const headerName = headerValue(headers, config.nameHeader) || "";
@@ -114,6 +162,18 @@ export function authenticateHeaders(headers = {}, env = process.env) {
       statusCode: 503,
       code: "AUTH_PROVIDER_NOT_CONFIGURED",
       message: "Production authentication is enabled but no supported authentication provider is configured.",
+      config,
+      user: null,
+    };
+  }
+
+  if (config.provider === "basic-auth" && !config.basicAuthConfigured) {
+    return {
+      required: true,
+      allowed: false,
+      statusCode: 503,
+      code: "BASIC_AUTH_NOT_CONFIGURED",
+      message: "Basic authentication is enabled but Alfred's Basic Auth credentials are not configured.",
       config,
       user: null,
     };

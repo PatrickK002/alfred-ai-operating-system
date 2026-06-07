@@ -52,13 +52,13 @@ export const ENVIRONMENT_PROFILES = {
     label: "Testing",
     description: "Develop branch deployment for validation before production.",
     branch: "develop",
-    deployment: "Azure App Service testing slot/app",
+    deployment: "Render or Azure testing app",
   },
   production: {
     label: "Production",
     description: "Main branch deployment for Patrick's secure executive operating system.",
     branch: "main",
-    deployment: "Azure App Service production app",
+    deployment: "Render or Azure production app",
   },
 };
 
@@ -73,6 +73,8 @@ export const ENVIRONMENT_VARIABLES = [
   { key: "AUTHENTICATION_ENABLED", category: "security", publicName: "Authentication gate", productionCritical: true, secret: false },
   { key: "AUTHENTICATION_PROVIDER", category: "security", publicName: "Authentication provider", productionCritical: true, secret: false },
   { key: "AUTHENTICATED_USER_HEADER", category: "security", publicName: "Authenticated user principal header", productionCritical: false, secret: false },
+  { key: "ALFRED_BASIC_AUTH_USERNAME", category: "security", publicName: "Basic Auth username", productionCritical: false, secret: false },
+  { key: "ALFRED_BASIC_AUTH_PASSWORD", category: "security", publicName: "Basic Auth password", productionCritical: false, secret: true },
   { key: "ALFRED_ALLOWED_USERS", category: "security", publicName: "Allowed Alfred users", productionCritical: true, secret: false },
   { key: "ALFRED_REQUIRE_USER_ALLOWLIST", category: "security", publicName: "Require user allowlist", productionCritical: false, secret: false },
   { key: "ENFORCE_HTTPS", category: "security", publicName: "HTTPS enforcement", productionCritical: true, secret: false },
@@ -293,7 +295,7 @@ export function validateEnvironment(env = process.env) {
     warnings.push({
       code: "AUTHENTICATION_PROVIDER_REQUIRED",
       severity: "high",
-      message: "AUTHENTICATION_PROVIDER must be set to azure-app-service-easy-auth or reverse-proxy-header.",
+      message: `AUTHENTICATION_PROVIDER must be set to one of: ${SUPPORTED_AUTHENTICATION_PROVIDERS.join(", ")}.`,
     });
   }
   if (
@@ -305,6 +307,18 @@ export function validateEnvironment(env = process.env) {
       code: "AUTHENTICATION_PROVIDER_UNSUPPORTED",
       severity: "high",
       message: `AUTHENTICATION_PROVIDER must be one of: ${SUPPORTED_AUTHENTICATION_PROVIDERS.join(", ")}.`,
+    });
+  }
+  if (
+    isProduction
+    && env.AUTHENTICATION_ENABLED === "true"
+    && env.AUTHENTICATION_PROVIDER === "basic-auth"
+    && (!hasValue(env.ALFRED_BASIC_AUTH_USERNAME) || !hasValue(env.ALFRED_BASIC_AUTH_PASSWORD))
+  ) {
+    warnings.push({
+      code: "BASIC_AUTH_CREDENTIALS_REQUIRED",
+      severity: "high",
+      message: "Render Basic Auth requires ALFRED_BASIC_AUTH_USERNAME and ALFRED_BASIC_AUTH_PASSWORD.",
     });
   }
   if (isProduction && !hasValue(env.ALFRED_ALLOWED_USERS)) {
@@ -368,6 +382,8 @@ export function buildProductionPreflight(env = process.env, {
   const appBaseUrl = env.APP_BASE_URL || "";
   const authenticationProviderSupported = hasValue(env.AUTHENTICATION_PROVIDER)
     && SUPPORTED_AUTHENTICATION_PROVIDERS.includes(env.AUTHENTICATION_PROVIDER);
+  const authenticationCredentialsConfigured = env.AUTHENTICATION_PROVIDER !== "basic-auth"
+    || (hasValue(env.ALFRED_BASIC_AUTH_USERNAME) && hasValue(env.ALFRED_BASIC_AUTH_PASSWORD));
   const checks = [
     readinessCheck({
       id: "node_runtime",
@@ -386,9 +402,9 @@ export function buildProductionPreflight(env = process.env, {
     readinessCheck({
       id: "authentication_gate",
       label: "Authentication gate",
-      passed: env.AUTHENTICATION_ENABLED === "true" && authenticationProviderSupported,
+      passed: env.AUTHENTICATION_ENABLED === "true" && authenticationProviderSupported && authenticationCredentialsConfigured,
       message: "Production must be protected by a supported server-enforced authentication provider before any live URL is shared.",
-      action: "Set AUTHENTICATION_ENABLED=true and AUTHENTICATION_PROVIDER=azure-app-service-easy-auth after enabling Microsoft Entra ID access restrictions.",
+      action: `Set AUTHENTICATION_ENABLED=true and AUTHENTICATION_PROVIDER to one of: ${SUPPORTED_AUTHENTICATION_PROVIDERS.join(", ")}.`,
     }),
     readinessCheck({
       id: "authenticated_user_allowlist",

@@ -38,6 +38,13 @@ test("health endpoint model includes environment, database, integrations and ver
   assert.equal(health.security.externalWritesEnabled, false);
 });
 
+test("server exposes a minimal unauthenticated platform health check", () => {
+  const server = readFileSync(join(ROOT, "server.js"), "utf8");
+
+  assert.match(server, /url\.pathname === "\/api\/healthz"/);
+  assert.match(server, /service: "alfred-ai-operating-system"/);
+});
+
 test("environment validation warns for production without secure base URL and authentication", () => {
   const validation = validateEnvironment({
     NODE_ENV: "production",
@@ -74,6 +81,55 @@ test("production configuration warnings do not expose raw secrets", () => {
   assert.equal(health.security.secretsInFrontend, false);
   assert.equal(health.security.apiKeysInLocalStorage, false);
   assert.equal(health.apiKeyReadiness.valuesRedacted, true);
+});
+
+test("production validation blocks Render Basic Auth until credentials are configured", () => {
+  const validation = validateEnvironment({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "https://alfred.example",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+  });
+  const preflight = buildProductionPreflight({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "https://alfred.example",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+    ALFRED_DB_PATH: "/var/data/alfred.db",
+    ALFRED_BACKUP_STRATEGY: "render-persistent-disk-daily-snapshots",
+    ENFORCE_HTTPS: "true",
+  }, { nodeVersion: "24.0.0" });
+
+  assert.equal(validation.productionReady, false);
+  assert.ok(validation.warnings.some((warning) => warning.code === "BASIC_AUTH_CREDENTIALS_REQUIRED"));
+  assert.equal(preflight.goLiveReady, false);
+  assert.ok(preflight.checks.some((check) => check.id === "authentication_gate" && check.status === "block"));
+});
+
+test("production preflight accepts Render Basic Auth with persistent disk path", () => {
+  const preflight = buildProductionPreflight({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "https://alfred-ai-operating-system.onrender.com",
+    AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "basic-auth",
+    ALFRED_BASIC_AUTH_USERNAME: "patrick@example.com",
+    ALFRED_BASIC_AUTH_PASSWORD: "correct-password",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
+    ALFRED_DB_PATH: "/var/data/alfred.db",
+    ALFRED_BACKUP_STRATEGY: "render-persistent-disk-daily-snapshots",
+    ENFORCE_HTTPS: "true",
+    ANTHROPIC_API_KEY: "secret-anthropic-key",
+  }, { nodeVersion: "24.0.0" });
+
+  assert.equal(preflight.goLiveReady, true);
+  assert.equal(preflight.blockers, 0);
+  assert.ok(preflight.checks.some((check) => check.id === "authentication_gate" && check.status === "pass"));
+  assert.ok(preflight.checks.some((check) => check.id === "persistent_database" && check.status === "pass"));
 });
 
 test("production preflight blocks live exposure without HTTPS auth and persistent database", () => {

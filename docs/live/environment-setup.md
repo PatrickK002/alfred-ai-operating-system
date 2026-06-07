@@ -4,7 +4,75 @@ This guide is the handoff for putting Alfred behind a secure HTTPS URL and assig
 
 Do not paste API keys, publish profiles, access tokens or Microsoft refresh tokens into chat, issues, pull requests, README files or source code.
 
-## 1. GitHub Deployment Settings
+## 1. Render First-Live Deployment
+
+Render is the preferred immediate hosting route while Azure App Service B1 quota is pending.
+
+Use the Blueprint in:
+
+- `render.yaml`
+
+Recommended Render service:
+
+| Setting | Value |
+| --- | --- |
+| Service type | Web service |
+| Runtime | Node |
+| Region | Frankfurt |
+| Plan | Starter or higher |
+| Branch | `develop` for first live testing |
+| Build command | `npm install` |
+| Start command | `npm start` |
+| Health check | `/api/healthz` |
+| Disk mount path | `/var/data` |
+| Disk size | `1 GB` initially |
+
+Persistent storage notes:
+
+- Render services have an ephemeral filesystem unless a persistent disk is attached.
+- Alfred uses SQLite, so `ALFRED_DB_PATH` must be `/var/data/alfred.db` on Render.
+- Microsoft tokens, when configured, must use `/var/data/microsoft-token.json`.
+- Keep the service at one instance while SQLite uses a single attached disk.
+- Render creates daily persistent disk snapshots, but operational backup ownership should still be reviewed before relying on live records.
+- Render uses `/api/healthz` for unauthenticated platform health checks; Alfred's full `/api/health` remains behind the authentication gate.
+
+Required Render environment values:
+
+| Name | Required value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `APP_ENV` | `production` |
+| `APP_BASE_URL` | Final Render HTTPS URL |
+| `HOST` | `0.0.0.0` |
+| `AUTHENTICATION_ENABLED` | `true` |
+| `AUTHENTICATION_PROVIDER` | `basic-auth` |
+| `ALFRED_BASIC_AUTH_USERNAME` | Patrick's approved username/email |
+| `ALFRED_BASIC_AUTH_PASSWORD` | Strong generated password |
+| `ALFRED_ALLOWED_USERS` | Same approved username/email |
+| `ALFRED_REQUIRE_USER_ALLOWLIST` | `true` |
+| `ALFRED_DB_PATH` | `/var/data/alfred.db` |
+| `MICROSOFT_TOKEN_PATH` | `/var/data/microsoft-token.json` |
+| `ALFRED_BACKUP_STRATEGY` | `render-persistent-disk-daily-snapshots` |
+| `ENFORCE_HTTPS` | `true` |
+
+Render setup steps:
+
+1. Commit and push `render.yaml`.
+2. In Render, choose `New -> Blueprint`.
+3. Connect the GitHub repository.
+4. Select the `develop` branch for first live testing.
+5. Enter the prompted secret values:
+   - `ALFRED_BASIC_AUTH_USERNAME`
+   - `ALFRED_BASIC_AUTH_PASSWORD`
+   - `ALFRED_ALLOWED_USERS`
+   - provider API keys when approved
+6. Deploy and open the generated `onrender.com` URL.
+7. Confirm Basic Auth blocks unauthenticated access.
+8. Run `/api/health` and `/api/deployment/preflight` after signing in.
+
+Do not assign provider API keys until the Basic Auth gate is confirmed.
+
+## 2. GitHub Deployment Settings For Azure
 
 Configure these in GitHub repository settings:
 
@@ -24,9 +92,9 @@ Repository secrets:
 | `AZURE_TESTING_PUBLISH_PROFILE` | testing | Azure App Service testing publish profile |
 | `AZURE_PRODUCTION_PUBLISH_PROFILE` | production | Azure App Service production publish profile |
 
-The GitHub Actions workflows deploy only when both the web app name variable and publish profile secret exist.
+The Azure GitHub Actions workflows deploy only when both the web app name variable and publish profile secret exist.
 
-## 2. Azure App Service Settings
+## 3. Azure App Service Settings
 
 Use the templates in:
 
@@ -60,7 +128,7 @@ Persistent storage notes:
 - Use `/home/data/alfred.db` for production unless the App Service storage design changes.
 - Confirm App Service backups or an equivalent backup process before relying on live operating records.
 
-## 3. Microsoft Entra Authentication
+## 4. Microsoft Entra Authentication
 
 In Azure App Service:
 
@@ -73,9 +141,9 @@ In Azure App Service:
 
 Alfred also enforces `ALFRED_ALLOWED_USERS` server-side. This is intentional: even if Azure authentication is accidentally broad, Alfred still blocks users outside the allowlist.
 
-## 4. Provider Keys
+## 5. Provider Keys
 
-Assign provider keys as Azure App Service environment variables or Key Vault references.
+Assign provider keys as Render environment secrets, Azure App Service environment variables or Key Vault references.
 
 | Provider | Required setting | Notes |
 | --- | --- | --- |
@@ -94,13 +162,13 @@ Optional model/version settings:
 - `DEEPGRAM_MODEL=nova-3`
 - `ELEVENLABS_MODEL=eleven_multilingual_v2`
 
-## 5. Verification
+## 6. Verification
 
 Before sharing a live URL:
 
 1. Confirm GitHub Actions CI passes.
 2. Confirm the relevant deploy workflow completes.
-3. Sign in through Microsoft Entra.
+3. Confirm Render Basic Auth or Microsoft Entra authentication is active.
 4. Open `/api/health` after authentication.
 5. Open `/api/deployment/preflight` after authentication.
 6. Confirm `goLiveReady` is `true` or that remaining warnings are accepted fallbacks.
@@ -117,10 +185,14 @@ Expected security boundary:
 - No autonomous execution.
 - Approval safeguards remain required for any future write-capable path.
 
-## 6. Current External Values Needed
+## 7. Current External Values Needed
 
 These values cannot be discovered from the codebase:
 
+- Render account/workspace access.
+- Render generated service URL.
+- Render Basic Auth username.
+- Render Basic Auth password.
 - Testing Azure App Service name.
 - Production Azure App Service name.
 - Testing publish profile.

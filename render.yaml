@@ -1,0 +1,83 @@
+services:
+  - type: web
+    runtime: node
+    name: alfred-ai-operating-system
+    region: frankfurt
+    plan: starter
+    branch: develop
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/healthz
+    autoDeployTrigger: commit
+    numInstances: 1
+    disk:
+      name: alfred-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: APP_BASE_URL
+        value: https://alfred-ai-operating-system.onrender.com
+      - key: HOST
+        value: 0.0.0.0
+      - key: AUTHENTICATION_ENABLED
+        value: "true"
+      - key: AUTHENTICATION_PROVIDER
+        value: basic-auth
+      - key: ALFRED_BASIC_AUTH_USERNAME
+        sync: false
+      - key: ALFRED_BASIC_AUTH_PASSWORD
+        sync: false
+      - key: ALFRED_ALLOWED_USERS
+        sync: false
+      - key: ALFRED_REQUIRE_USER_ALLOWLIST
+        value: "true"
+      - key: ALFRED_DB_PATH
+        value: /var/data/alfred.db
+      - key: MICROSOFT_TOKEN_PATH
+        value: /var/data/microsoft-token.json
+      - key: ALFRED_BACKUP_STRATEGY
+        value: render-persistent-disk-daily-snapshots
+      - key: ENFORCE_HTTPS
+        value: "true"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: VOYAGE_MODEL
+        value: voyage-4-lite
+      - key: SEMANTIC_INDEXING_ENABLED
+        value: "true"
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_FINANCE_BOARD_IDS
+        sync: false
+      - key: MONDAY_API_VERSION
+        value: "2025-04"
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: DEEPGRAM_MODEL
+        value: nova-3
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: ELEVENLABS_MODEL
+        value: eleven_multilingual_v2
+      - key: VOICE_ENABLED
+        value: "true"
+      - key: VOICE_TRANSCRIPT_LOGGING_ENABLED
+        value: "true"
+      - key: VOICE_TRANSCRIPT_RETENTION_DAYS
+        value: "30"
