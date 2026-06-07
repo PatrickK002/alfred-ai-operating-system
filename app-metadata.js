@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SUPPORTED_AUTHENTICATION_PROVIDERS } from "./authentication.js";
 
 const ROOT_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_JSON = JSON.parse(readFileSync(resolve(ROOT_DIR, "package.json"), "utf8"));
@@ -70,6 +71,10 @@ export const ENVIRONMENT_VARIABLES = [
   { key: "ALFRED_DB_PATH", category: "deployment", publicName: "SQLite database path", productionCritical: true, secret: false },
   { key: "ALFRED_BACKUP_STRATEGY", category: "deployment", publicName: "Database backup strategy", productionCritical: false, secret: false },
   { key: "AUTHENTICATION_ENABLED", category: "security", publicName: "Authentication gate", productionCritical: true, secret: false },
+  { key: "AUTHENTICATION_PROVIDER", category: "security", publicName: "Authentication provider", productionCritical: true, secret: false },
+  { key: "AUTHENTICATED_USER_HEADER", category: "security", publicName: "Authenticated user principal header", productionCritical: false, secret: false },
+  { key: "ALFRED_ALLOWED_USERS", category: "security", publicName: "Allowed Alfred users", productionCritical: true, secret: false },
+  { key: "ALFRED_REQUIRE_USER_ALLOWLIST", category: "security", publicName: "Require user allowlist", productionCritical: false, secret: false },
   { key: "ENFORCE_HTTPS", category: "security", publicName: "HTTPS enforcement", productionCritical: true, secret: false },
   { key: "ANTHROPIC_API_KEY", category: "reasoning", publicName: "Anthropic Claude", productionCritical: false, secret: true },
   { key: "ANTHROPIC_MODEL", category: "reasoning", publicName: "Anthropic model", productionCritical: false, secret: false },
@@ -281,7 +286,32 @@ export function validateEnvironment(env = process.env) {
     warnings.push({
       code: "AUTHENTICATION_PLACEHOLDER",
       severity: "high",
-      message: "Production access requires Microsoft Entra ID authentication before public exposure.",
+      message: "Production access requires server-enforced authentication before public exposure.",
+    });
+  }
+  if (isProduction && env.AUTHENTICATION_ENABLED === "true" && !hasValue(env.AUTHENTICATION_PROVIDER)) {
+    warnings.push({
+      code: "AUTHENTICATION_PROVIDER_REQUIRED",
+      severity: "high",
+      message: "AUTHENTICATION_PROVIDER must be set to azure-app-service-easy-auth or reverse-proxy-header.",
+    });
+  }
+  if (
+    isProduction
+    && hasValue(env.AUTHENTICATION_PROVIDER)
+    && !SUPPORTED_AUTHENTICATION_PROVIDERS.includes(env.AUTHENTICATION_PROVIDER)
+  ) {
+    warnings.push({
+      code: "AUTHENTICATION_PROVIDER_UNSUPPORTED",
+      severity: "high",
+      message: `AUTHENTICATION_PROVIDER must be one of: ${SUPPORTED_AUTHENTICATION_PROVIDERS.join(", ")}.`,
+    });
+  }
+  if (isProduction && !hasValue(env.ALFRED_ALLOWED_USERS)) {
+    warnings.push({
+      code: "ALFRED_ALLOWED_USERS_REQUIRED",
+      severity: "high",
+      message: "Production must set ALFRED_ALLOWED_USERS so authenticated access is restricted to approved users.",
     });
   }
   if (isProduction && !hasValue(env.ALFRED_DB_PATH)) {
@@ -313,8 +343,13 @@ export function validateEnvironment(env = process.env) {
       cookiesUsed: false,
       secretsInFrontend: false,
       apiKeysInLocalStorage: false,
-      authenticationProvider: "Microsoft Entra ID planned",
+      authenticationProvider: env.AUTHENTICATION_PROVIDER || "Microsoft Entra ID planned",
       authenticationEnabled: env.AUTHENTICATION_ENABLED === "true",
+      authenticationSupported: hasValue(env.AUTHENTICATION_PROVIDER)
+        ? SUPPORTED_AUTHENTICATION_PROVIDERS.includes(env.AUTHENTICATION_PROVIDER)
+        : false,
+      authenticatedUserHeader: env.AUTHENTICATED_USER_HEADER || "x-ms-client-principal",
+      allowedUsersConfigured: hasValue(env.ALFRED_ALLOWED_USERS),
       externalWritesEnabled: false,
       approvalSafeguardsRequired: true,
     },
@@ -331,6 +366,8 @@ export function buildProductionPreflight(env = process.env, {
   const minimumNode = minimumNodeVersion();
   const nodeOk = versionAtLeast(nodeVersion, minimumNode);
   const appBaseUrl = env.APP_BASE_URL || "";
+  const authenticationProviderSupported = hasValue(env.AUTHENTICATION_PROVIDER)
+    && SUPPORTED_AUTHENTICATION_PROVIDERS.includes(env.AUTHENTICATION_PROVIDER);
   const checks = [
     readinessCheck({
       id: "node_runtime",
@@ -349,9 +386,16 @@ export function buildProductionPreflight(env = process.env, {
     readinessCheck({
       id: "authentication_gate",
       label: "Authentication gate",
-      passed: env.AUTHENTICATION_ENABLED === "true",
-      message: "Production must be protected before any live URL is shared.",
-      action: "Enable Microsoft Entra ID authentication or an equivalent access gate.",
+      passed: env.AUTHENTICATION_ENABLED === "true" && authenticationProviderSupported,
+      message: "Production must be protected by a supported server-enforced authentication provider before any live URL is shared.",
+      action: "Set AUTHENTICATION_ENABLED=true and AUTHENTICATION_PROVIDER=azure-app-service-easy-auth after enabling Microsoft Entra ID access restrictions.",
+    }),
+    readinessCheck({
+      id: "authenticated_user_allowlist",
+      label: "Authenticated user allowlist",
+      passed: hasValue(env.ALFRED_ALLOWED_USERS),
+      message: "Alfred should restrict authenticated production access to Patrick or explicitly approved users.",
+      action: "Set ALFRED_ALLOWED_USERS to Patrick's approved sign-in email address(es), comma-separated.",
     }),
     readinessCheck({
       id: "persistent_database",

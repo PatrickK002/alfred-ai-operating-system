@@ -107,6 +107,7 @@ import {
   westbridgeBriefingForDaily,
 } from "./property.js";
 import { createVoiceCommandService } from "./voice.js";
+import { authenticateHeaders } from "./authentication.js";
 import {
   MEETING_READ_ONLY_BOUNDARY,
   createMeetingRecord,
@@ -208,6 +209,18 @@ function sendJson(response, statusCode, body) {
     ...securityHeaders(),
   });
   response.end(JSON.stringify(body));
+}
+
+function sendAuthenticationFailure(response, auth) {
+  return sendJson(response, auth.statusCode || 401, {
+    error: auth.message || "Authentication required",
+    authentication: {
+      required: Boolean(auth.required),
+      allowed: false,
+      provider: auth.config?.provider || "not_configured",
+      code: auth.code || "AUTHENTICATION_FAILED",
+    },
+  });
 }
 
 async function readJson(request) {
@@ -1746,6 +1759,12 @@ const server = createServer(async (request, response) => {
       response.end();
       return;
     }
+    const auth = authenticateHeaders(request.headers, process.env);
+    if (!auth.allowed) {
+      sendAuthenticationFailure(response, auth);
+      return;
+    }
+    request.alfredUser = auth.user;
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
       return;

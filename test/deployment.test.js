@@ -60,6 +60,8 @@ test("production configuration warnings do not expose raw secrets", () => {
       APP_ENV: "production",
       APP_BASE_URL: "https://alfred.example",
       AUTHENTICATION_ENABLED: "true",
+      AUTHENTICATION_PROVIDER: "azure-app-service-easy-auth",
+      ALFRED_ALLOWED_USERS: "patrick@example.com",
       ANTHROPIC_API_KEY: "super-secret-anthropic-key",
       VOYAGE_API_KEY: "super-secret-voyage-key",
     },
@@ -86,9 +88,28 @@ test("production preflight blocks live exposure without HTTPS auth and persisten
   assert.equal(preflight.goLiveReady, false);
   assert.ok(preflight.checks.some((check) => check.id === "https_public_url" && check.status === "block"));
   assert.ok(preflight.checks.some((check) => check.id === "authentication_gate" && check.status === "block"));
+  assert.ok(preflight.checks.some((check) => check.id === "authenticated_user_allowlist" && check.status === "block"));
   assert.ok(preflight.checks.some((check) => check.id === "persistent_database" && check.status === "block"));
   assert.equal(preflight.securityBoundary.externalWritesEnabled, false);
   assert.equal(preflight.securityBoundary.providerValuesRedacted, true);
+});
+
+test("production preflight blocks authentication without provider or allowed users", () => {
+  const preflight = buildProductionPreflight({
+    NODE_ENV: "production",
+    APP_ENV: "production",
+    APP_BASE_URL: "https://alfred.example",
+    AUTHENTICATION_ENABLED: "true",
+    ALFRED_DB_PATH: "/home/data/alfred.db",
+    ALFRED_BACKUP_STRATEGY: "azure-app-service-backup",
+    ENFORCE_HTTPS: "true",
+  }, { nodeVersion: "24.0.0" });
+
+  assert.equal(preflight.goLiveReady, false);
+  assert.ok(preflight.checks.some((check) => check.id === "authentication_gate" && check.status === "block"));
+  assert.ok(preflight.checks.some((check) => check.id === "authenticated_user_allowlist" && check.status === "block"));
+  assert.ok(preflight.environment.warnings.some((warning) => warning.code === "AUTHENTICATION_PROVIDER_REQUIRED"));
+  assert.ok(preflight.environment.warnings.some((warning) => warning.code === "ALFRED_ALLOWED_USERS_REQUIRED"));
 });
 
 test("API key assignment readiness reports status without exposing values", () => {
@@ -114,6 +135,8 @@ test("production preflight can pass blockers while warning for optional provider
     APP_ENV: "production",
     APP_BASE_URL: "https://alfred.example",
     AUTHENTICATION_ENABLED: "true",
+    AUTHENTICATION_PROVIDER: "azure-app-service-easy-auth",
+    ALFRED_ALLOWED_USERS: "patrick@example.com",
     ALFRED_DB_PATH: "/home/data/alfred.db",
     ALFRED_BACKUP_STRATEGY: "azure-app-service-backup",
     ENFORCE_HTTPS: "true",
