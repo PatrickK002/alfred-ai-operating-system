@@ -116,6 +116,21 @@ import {
   syncMeetingFollowupsToWorkItems,
   updateWorkItem,
 } from "./monday-operating-system.js";
+import {
+  ETHAN_READ_ONLY_BOUNDARY,
+  createTechnologyDecision,
+  createTechnologyRisk,
+  createTechnologyRoadmapItem,
+  ethanBriefingForDaily,
+  ethanExecutiveContext,
+  generateEthanAnalysis,
+  getEthanDashboard,
+  listEthanAudit,
+  listTechnologyDecisions,
+  listTechnologyRisks,
+  listTechnologyRoadmap,
+  searchEthanKnowledge,
+} from "./ethan.js";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 try {
@@ -405,6 +420,65 @@ async function handleApi(request, response, url) {
       await tryIndexSemanticMemory();
       return sendJson(response, 200, { ...record, boundary: MONDAY_OPERATING_BOUNDARY });
     }
+  }
+  if (url.pathname === "/api/ethan/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, getEthanDashboard(db));
+  }
+  if (url.pathname === "/api/ethan/search" && request.method === "GET") {
+    const result = searchEthanKnowledge(db, url.searchParams.get("q") || "");
+    const memory = await semanticMemory.search(url.searchParams.get("q") || "", {
+      limit: url.searchParams.get("limit") || 8,
+    }).catch(() => null);
+    return sendJson(response, 200, {
+      ...result,
+      semanticMemory: memory?.results || [],
+      boundary: ETHAN_READ_ONLY_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/ethan/audit" && request.method === "GET") {
+    return sendJson(response, 200, listEthanAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/ethan/risks") {
+    if (request.method === "GET") return sendJson(response, 200, listTechnologyRisks(db, url.searchParams.get("limit") || 50));
+    if (request.method === "POST") {
+      const record = createTechnologyRisk(db, {
+        ...(await readJson(request)),
+        userAction: "api:ethan:risk:create",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: ETHAN_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/ethan/decisions") {
+    if (request.method === "GET") return sendJson(response, 200, listTechnologyDecisions(db, url.searchParams.get("limit") || 50));
+    if (request.method === "POST") {
+      const record = createTechnologyDecision(db, {
+        ...(await readJson(request)),
+        userAction: "api:ethan:decision:create",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: ETHAN_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/ethan/roadmap") {
+    if (request.method === "GET") return sendJson(response, 200, listTechnologyRoadmap(db, url.searchParams.get("limit") || 50));
+    if (request.method === "POST") {
+      const record = createTechnologyRoadmapItem(db, {
+        ...(await readJson(request)),
+        userAction: "api:ethan:roadmap:create",
+      });
+      await tryIndexSemanticMemory();
+      return sendJson(response, 201, { ...record, boundary: ETHAN_READ_ONLY_BOUNDARY });
+    }
+  }
+  if (url.pathname === "/api/ai/ethan/analyse-technology" && request.method === "POST") {
+    const body = await readJson(request);
+    const result = generateEthanAnalysis(db, {
+      ...body,
+      userAction: body.userAction || "api:ethan:analyse-technology",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, result);
   }
   if (url.pathname === "/api/projects/search" && request.method === "GET") {
     const result = searchProjectKnowledge(db, url.searchParams.get("q") || "");
@@ -726,6 +800,7 @@ async function handleApi(request, response, url) {
         context.propertyBrief?.items?.length ? "westbridge_property" : "",
         context.meetingIntelligenceBrief?.items?.length ? "meeting_intelligence" : "",
         context.mondayOperatingBrief?.items?.length ? "monday_operating_system" : "",
+        context.ethanTechnologyBrief?.items?.length ? "ethan_technology" : "",
         context.projectIntelligence?.projectsNeedingAttention?.length ? "project_intelligence" : "",
         context.retrievedMemoryContext.records.length ? "semantic_memory" : "",
       ],
@@ -985,6 +1060,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.property = westbridgeBriefingForDaily(db);
   brief.meetingIntelligence = meetingBriefingForDaily(db);
   brief.mondayOperating = mondayOperatingBriefForDaily(db);
+  brief.ethan = ethanBriefingForDaily(db);
   brief.executivePriorities = [
     ...brief.mondayOperating.items.map((item, index) => ({
       ...item,
@@ -992,6 +1068,13 @@ async function generateExecutiveBrief({ save = true } = {}) {
       rank: index + 1,
       category: "monday-os",
       score: item.priority === "Critical" ? 90 : item.priority === "High" ? 86 : 60,
+    })),
+    ...brief.ethan.items.map((item, index) => ({
+      ...item,
+      id: `ethan-${index + 1}`,
+      rank: index + 1,
+      category: "ethan",
+      score: item.priority === "critical" ? 88 : item.priority === "high" ? 84 : 58,
     })),
     ...brief.meetingIntelligence.items.map((item, index) => ({
       ...item,
@@ -1046,6 +1129,10 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.summary.mondayOverdueWork = brief.mondayOperating.metrics.overdueItems;
   brief.summary.mondayDecisionsAwaitingApproval = brief.mondayOperating.metrics.decisionsAwaitingApproval;
   brief.summary.mondayMeetingFollowups = brief.mondayOperating.metrics.meetingFollowups;
+  brief.summary.ethanTechnologySignals = brief.ethan.items.length;
+  brief.summary.ethanOpenRisks = brief.ethan.metrics.openRisks;
+  brief.summary.ethanDecisionsRequired = brief.ethan.metrics.decisionsRequired;
+  brief.summary.ethanTechnologyDebt = brief.ethan.metrics.technologyDebt;
   brief.summary.propertySignals = brief.property.items.length;
   brief.summary.propertyActiveOpportunities = brief.property.metrics.activeOpportunities;
   brief.summary.propertyMonthlyCashflow = brief.property.metrics.monthlyCashflow;
@@ -1120,6 +1207,11 @@ function sourceReferencesFor(context) {
       label: record.title || "Monday Operating System signal",
       category: "monday_operating_system",
     })),
+    ...compactRecords(context.ethanTechnologyBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
+      reference: record.sourceReference || `ethan:${record.title}`,
+      label: record.title || "Ethan CTO signal",
+      category: "ethan_technology",
+    })),
     ...compactRecords(context.projectIntelligence?.projectsNeedingAttention || [], ["id", "title", "sourceId"]).map((record) => sourceReference("project", record)),
     ...compactRecords(context.sarahDigitalConstructionBrief?.items || [], ["title", "sourceReference"]).map((record) => ({
       reference: record.sourceReference || `sarah:${record.title}`,
@@ -1189,6 +1281,7 @@ function memoryQueryForBriefing(context) {
     ...(context.sarahDigitalConstructionBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.meetingIntelligenceBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.mondayOperatingBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""} ${item.ownerAgentName || ""}`),
+    ...(context.ethanTechnologyBrief?.items || []).map((item) => `${item.title || ""} ${item.detail || ""}`),
     ...(context.outlookSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
     ...(context.calendarSignals || []).map((item) => `${item.title || item.subject || ""} ${item.detail || ""}`),
   ].join(" ").slice(0, 2000);
@@ -1284,6 +1377,14 @@ function buildAiBriefingContext(briefing, body = {}) {
       topWorkloads: compactRecords(briefing.mondayOperating?.topWorkloads || [], ["agentId", "agentName", "activeItems", "blockedItems", "overdueItems", "deliverablesDue", "workloadScore", "healthStatus", "workloadStatus"], 8),
       items: compactRecords(briefing.mondayOperating?.items || [], ["type", "title", "detail", "ownerAgentName", "priority", "status", "sourceReference"], 10),
       boundary: briefing.mondayOperating?.boundary || MONDAY_OPERATING_BOUNDARY,
+    },
+    ethanTechnologyBrief: {
+      title: briefing.ethan?.title || "Ethan CTO Brief",
+      summary: briefing.ethan?.summary || "",
+      metrics: compactValue(briefing.ethan?.metrics || {}),
+      items: compactRecords(briefing.ethan?.items || [], ["title", "detail", "priority", "sourceReference"], 6),
+      context: compactValue(ethanExecutiveContext(db)),
+      boundary: briefing.ethan?.boundary || ETHAN_READ_ONLY_BOUNDARY,
     },
     sarahDigitalConstructionBrief: {
       title: briefing.sarah?.title || "Daily Digital Construction Brief",

@@ -659,6 +659,162 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS technology_domains (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'technology',
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_systems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_entity_id TEXT NOT NULL DEFAULT 'group' REFERENCES financial_business_entities(id),
+    company_id TEXT REFERENCES companies(id),
+    name TEXT NOT NULL,
+    system_type TEXT NOT NULL DEFAULT 'platform',
+    owner TEXT NOT NULL DEFAULT 'Alfred',
+    status TEXT NOT NULL DEFAULT 'Review',
+    hosting_model TEXT NOT NULL DEFAULT 'Local',
+    criticality TEXT NOT NULL DEFAULT 'Medium',
+    data_sensitivity TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    description TEXT NOT NULL DEFAULT '',
+    review_status TEXT NOT NULL DEFAULT 'Needs review',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_risks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    system_id INTEGER REFERENCES technology_systems(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Open',
+    business_impact TEXT NOT NULL DEFAULT '',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    decision_area TEXT NOT NULL DEFAULT 'Architecture',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Open',
+    approval_required INTEGER NOT NULL DEFAULT 1 CHECK(approval_required IN (0, 1)),
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_roadmap_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    roadmap_area TEXT NOT NULL DEFAULT 'Platform',
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Planned',
+    target_quarter TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_debt_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    impact_area TEXT NOT NULL DEFAULT 'Maintainability',
+    severity TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'Open',
+    recommended_action TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    source_id TEXT NOT NULL DEFAULT '',
+    source_reference TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS technology_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_type TEXT NOT NULL DEFAULT 'cto_analysis',
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '[]',
+    risks TEXT NOT NULL DEFAULT '[]',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT 'ethan-deterministic-v1',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS ethan_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    record_type TEXT NOT NULL DEFAULT '',
+    record_id TEXT NOT NULL DEFAULT '',
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT 'ethan-deterministic-v1',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS technology_systems_source_unique
+  ON technology_systems(source_type, source_id)
+  WHERE source_type <> '' AND source_id <> '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS technology_risks_source_unique
+  ON technology_risks(source_type, source_id)
+  WHERE source_type <> '' AND source_id <> '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS technology_decisions_source_unique
+  ON technology_decisions(source_type, source_id)
+  WHERE source_type <> '' AND source_id <> '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS technology_roadmap_source_unique
+  ON technology_roadmap_items(source_type, source_id)
+  WHERE source_type <> '' AND source_id <> '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS technology_debt_source_unique
+  ON technology_debt_items(source_type, source_id)
+  WHERE source_type <> '' AND source_id <> '';
+
+  CREATE INDEX IF NOT EXISTS technology_risks_status_severity
+  ON technology_risks(status, severity);
+
+  CREATE INDEX IF NOT EXISTS technology_roadmap_status_priority
+  ON technology_roadmap_items(status, priority);
+
+  CREATE INDEX IF NOT EXISTS ethan_audit_events_created
+  ON ethan_audit_events(created_at, event_type);
+
   CREATE INDEX IF NOT EXISTS work_items_owner_status
   ON work_items(owner_agent_id, status, priority);
 
@@ -1941,9 +2097,169 @@ const AGENT_SEEDS = [
   ["sentinel", "Sentinel", "Chief Information Security Officer", null, "Security", "Planned CISO foundation for cyber, data, identity, integration and AI-governance risk across Alfred, Digitize, Westbridge and connected systems. Advisory only; no monitoring, tenant administration or enforcement automation in this phase.", ["Cyber Security", "Microsoft 365 Security", "Azure Security", "Identity Management", "Access Control", "Threat Detection", "Data Protection", "AI Governance", "Prompt Injection Defence", "Secrets Management", "GitHub Security", "Dependency Risk", "Audit Integrity", "Compliance", "Incident Response"], "Planned"],
   ["maya", "Maya", "Media Director", "media", "Media", "Build content businesses with repeatable production and monetisation systems.", [], "Planned"],
   ["alex", "Alex", "Growth Director", null, "Growth", "Find and qualify revenue opportunities across the group.", [], "Planned"],
-  ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Future placeholder for platform architecture, engineering quality, cloud operations and technical risk.", [], "Planned"],
+  ["ethan", "Ethan", "Chief Technology Officer", null, "Technology", "Executive Specialist reporting to Alfred. Provides advisory-only platform architecture, engineering quality, cloud operations, release governance, technical debt and technology risk recommendations. No deployments, repo writes, cloud changes, configuration changes or autonomous execution.", ["Architecture", "Cloud Operations", "Engineering Quality", "Release Governance", "Technical Debt", "Technology Risk"], "Active"],
   ["liam", "Liam", "Power Platform Director", "digitize", "Power Platform", "Future placeholder for Power Platform advisory, app strategy and low-code delivery intelligence.", [], "Planned"],
   ["james", "James", "Product CEO", "product", "Product", "Validate, build and operate scalable SaaS products.", [], "Planned"],
+];
+
+const TECHNOLOGY_DOMAIN_SEEDS = [
+  ["architecture", "Platform Architecture", "technology", "System design, modularity, integration boundaries and technical strategy.", "Active"],
+  ["cloud", "Cloud Operations", "technology", "Hosting, deployment, backup, recovery and operational readiness.", "Active"],
+  ["devops", "DevOps and Release Governance", "technology", "CI, testing, deployment gates, release hygiene and rollback readiness.", "Active"],
+  ["security-implementation", "Security Implementation", "technology", "Technical safeguards, permission boundaries, secrets and write-action controls.", "Active"],
+  ["data-platform", "Data Platform", "technology", "SQLite, semantic memory, data retention, backup, source references and governance.", "Active"],
+  ["ai-platform", "AI Platform", "technology", "Claude, Voyage, voice providers and provider-neutral AI integration patterns.", "Active"],
+];
+
+const TECHNOLOGY_SYSTEM_SEEDS = [
+  {
+    sourceId: "alfred-core",
+    name: "Alfred AI Operating System",
+    systemType: "executive_platform",
+    owner: "Alfred / Ethan",
+    status: "Active",
+    hostingModel: "Local Node.js + PWA foundation",
+    criticality: "High",
+    dataSensitivity: "local_sensitive_business_data",
+    description: "Core executive operating system containing dashboards, approval safeguards, specialist intelligence, PWA assets and read-only integrations.",
+    reviewStatus: "Needs CTO review before production hardening",
+  },
+  {
+    sourceId: "sqlite-operating-db",
+    name: "SQLite Operating Database",
+    systemType: "data_store",
+    owner: "Alfred",
+    status: "Active",
+    hostingModel: "Local SQLite",
+    criticality: "High",
+    dataSensitivity: "local_sensitive_business_data",
+    description: "SQLite remains the source of truth for Alfred operating records, financial intelligence, projects, memory links and specialist dashboards.",
+    reviewStatus: "Backup and migration controls required before production use",
+  },
+  {
+    sourceId: "github-repository",
+    name: "GitHub Repository and CI",
+    systemType: "engineering_control",
+    owner: "Patrick King",
+    status: "Active",
+    hostingModel: "GitHub",
+    criticality: "High",
+    dataSensitivity: "source_code",
+    description: "Repository, pull requests and GitHub Actions checks for Alfred development and review.",
+    reviewStatus: "Release governance and branch protection should be formalised",
+  },
+  {
+    sourceId: "microsoft-readonly",
+    name: "Microsoft 365 Read-only Integration",
+    systemType: "integration",
+    owner: "Alfred",
+    status: "Planned / Read-only",
+    hostingModel: "Microsoft Graph delegated read scopes",
+    criticality: "Medium",
+    dataSensitivity: "client_business_data",
+    description: "Read-only Microsoft signals feed briefings, project intelligence and meeting intelligence without send, edit or calendar-write permissions.",
+    reviewStatus: "Scope and token storage should remain under Sentinel/Ethan review",
+  },
+];
+
+const TECHNOLOGY_RISK_SEEDS = [
+  {
+    sourceId: "production-auth-boundary",
+    systemSourceId: "alfred-core",
+    title: "Production authentication boundary",
+    detail: "Alfred has a strong local advisory foundation, but production access control and authentication must be explicit before wider deployment.",
+    severity: "High",
+    businessImpact: "Unauthorised access could expose sensitive executive, financial, project and property intelligence.",
+    recommendedAction: "Define production authentication, session handling and user roles before exposing Alfred beyond the local trusted environment.",
+  },
+  {
+    sourceId: "backup-restore-discipline",
+    systemSourceId: "sqlite-operating-db",
+    title: "Backup and restore discipline",
+    detail: "SQLite is the source of truth; backup, restore, migration and retention procedures need a written operating pattern before production reliance.",
+    severity: "High",
+    businessImpact: "Loss or corruption of the database could remove Alfred's operating memory and board-level records.",
+    recommendedAction: "Document local backup, restore drill, migration order and recovery ownership before production use.",
+  },
+  {
+    sourceId: "release-governance-drift",
+    systemSourceId: "github-repository",
+    title: "Release governance drift",
+    detail: "Fast feature delivery increases the risk of merging specialist branches without a repeatable stability gate.",
+    severity: "Medium",
+    businessImpact: "Regression risk rises as Alfred gains more executive dashboards and integrations.",
+    recommendedAction: "Keep branch order, CI, syntax checks, browser checks and security boundary review as a mandatory merge checklist.",
+  },
+];
+
+const TECHNOLOGY_DECISION_SEEDS = [
+  {
+    sourceId: "production-hosting-architecture",
+    title: "Approve Alfred production hosting architecture",
+    detail: "Choose the first production hosting model, authentication boundary, backup pattern and deployment flow before external access is enabled.",
+    decisionArea: "Cloud Operations",
+    priority: "High",
+    status: "Open",
+    approvalRequired: 1,
+  },
+  {
+    sourceId: "write-action-architecture",
+    title: "Approve future write-action architecture",
+    detail: "Before any agent can send, edit, deploy or update external systems, Patrick should approve execution services, preflight checks, audit trail and rollback boundaries.",
+    decisionArea: "Execution Safeguards",
+    priority: "High",
+    status: "Open",
+    approvalRequired: 1,
+  },
+];
+
+const TECHNOLOGY_ROADMAP_SEEDS = [
+  {
+    sourceId: "release-gates",
+    title: "Formalise release gates",
+    detail: "Turn the current CI, syntax, browser and security verification checklist into a repeatable release governance view.",
+    roadmapArea: "DevOps",
+    priority: "High",
+    status: "Planned",
+    targetQuarter: "Next",
+  },
+  {
+    sourceId: "backup-restore-runbook",
+    title: "Create backup and restore runbook",
+    detail: "Document database location, backup cadence, restore drill and ownership for Alfred's SQLite source of truth.",
+    roadmapArea: "Data Platform",
+    priority: "High",
+    status: "Planned",
+    targetQuarter: "Next",
+  },
+  {
+    sourceId: "provider-adapter-governance",
+    title: "Provider adapter governance",
+    detail: "Keep Anthropic, Voyage, Deepgram, ElevenLabs and future avatar providers behind explicit provider-neutral boundaries.",
+    roadmapArea: "AI Platform",
+    priority: "Medium",
+    status: "Planned",
+    targetQuarter: "Next",
+  },
+];
+
+const TECHNOLOGY_DEBT_SEEDS = [
+  {
+    sourceId: "frontend-module-growth",
+    title: "Frontend module growth",
+    detail: "The single dashboard script is carrying more specialist rendering logic as Alfred grows.",
+    impactArea: "Maintainability",
+    severity: "Medium",
+    recommendedAction: "Plan modular frontend extraction once current executive stack is stable.",
+  },
+  {
+    sourceId: "migration-surface-area",
+    title: "SQLite migration surface area",
+    detail: "Specialist features are adding many persisted records. Migration tests and source-reference conventions should stay disciplined.",
+    impactArea: "Data Platform",
+    severity: "Medium",
+    recommendedAction: "Keep table-specific migration and semantic-memory source reference tests for every specialist branch.",
+  },
 ];
 
 const SARAH_TEAM_PLACEHOLDER_SEEDS = [
@@ -2013,6 +2329,7 @@ export function createDatabase(dbPath = process.env.ALFRED_DB_PATH || DEFAULT_DB
   migrateProjectIntelligenceSchema(db);
   migrateMeetingIntelligenceSchema(db);
   migrateMondayOperatingSchema(db);
+  migrateEthanTechnologySchema(db);
   migratePropertySchema(db);
   seedDatabase(db);
   return db;
@@ -2216,6 +2533,39 @@ function migrateMondayOperatingSchema(db) {
   `);
 }
 
+function migrateEthanTechnologySchema(db) {
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS technology_systems_source_unique
+    ON technology_systems(source_type, source_id)
+    WHERE source_type <> '' AND source_id <> '';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS technology_risks_source_unique
+    ON technology_risks(source_type, source_id)
+    WHERE source_type <> '' AND source_id <> '';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS technology_decisions_source_unique
+    ON technology_decisions(source_type, source_id)
+    WHERE source_type <> '' AND source_id <> '';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS technology_roadmap_source_unique
+    ON technology_roadmap_items(source_type, source_id)
+    WHERE source_type <> '' AND source_id <> '';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS technology_debt_source_unique
+    ON technology_debt_items(source_type, source_id)
+    WHERE source_type <> '' AND source_id <> '';
+
+    CREATE INDEX IF NOT EXISTS technology_risks_status_severity
+    ON technology_risks(status, severity);
+
+    CREATE INDEX IF NOT EXISTS technology_roadmap_status_priority
+    ON technology_roadmap_items(status, priority);
+
+    CREATE INDEX IF NOT EXISTS ethan_audit_events_created
+    ON ethan_audit_events(created_at, event_type);
+  `);
+}
+
 function migratePropertySchema(db) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS property_opportunities_stage
@@ -2237,6 +2587,7 @@ export function seedDatabase(db) {
     updateAgentDefinitions(db);
     updateSarahTeamPlaceholders(db);
     updateIntegrationDefinitions(db);
+    updateEthanTechnologySeeds(db);
     updateWestbridgePropertySeeds(db);
     return;
   }
@@ -2289,6 +2640,7 @@ export function seedDatabase(db) {
       insertAgent.run(...agent.slice(0, 6), JSON.stringify(agent[6]), agent[7]);
     }
     updateSarahTeamPlaceholders(db);
+    updateEthanTechnologySeeds(db);
 
     const insertMemory = db.prepare(`
       INSERT INTO memories (type, title, detail, company_id, recorded_at)
@@ -2299,6 +2651,7 @@ export function seedDatabase(db) {
     insertMemory.run("idea", "Council Construction Assurance Platform", "Initial Product Studio SaaS concept focused on council construction assurance.", "product", "2026-06-05");
 
     updateIntegrationDefinitions(db);
+    updateEthanTechnologySeeds(db);
     updateWestbridgePropertySeeds(db);
 
     db.exec("COMMIT");
@@ -2355,6 +2708,148 @@ function updateSarahTeamPlaceholders(db) {
   for (const placeholder of SARAH_TEAM_PLACEHOLDER_SEEDS) {
     insertPlaceholder.run(placeholder[0], placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4]);
     updatePlaceholder.run(placeholder[1], placeholder[2], JSON.stringify(placeholder[3]), placeholder[4], placeholder[0]);
+  }
+}
+
+function updateEthanTechnologySeeds(db) {
+  const insertDomain = db.prepare(`
+    INSERT OR IGNORE INTO technology_domains (id, name, category, description, status)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const updateDomain = db.prepare(`
+    UPDATE technology_domains
+    SET name = ?, category = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  for (const domain of TECHNOLOGY_DOMAIN_SEEDS) {
+    insertDomain.run(...domain);
+    updateDomain.run(domain[1], domain[2], domain[3], domain[4], domain[0]);
+  }
+
+  const insertSystem = db.prepare(`
+    INSERT OR IGNORE INTO technology_systems (
+      business_entity_id, company_id, name, system_type, owner, status,
+      hosting_model, criticality, data_sensitivity, description, review_status,
+      source_type, source_id, source_reference
+    )
+    VALUES ('group', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?)
+  `);
+  const updateSystem = db.prepare(`
+    UPDATE technology_systems
+    SET company_id = ?, name = ?, system_type = ?, owner = ?, status = ?,
+        hosting_model = ?, criticality = ?, data_sensitivity = ?, description = ?,
+        review_status = ?, source_reference = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const system of TECHNOLOGY_SYSTEM_SEEDS) {
+    const sourceReference = `technology_system:${system.sourceId}`;
+    insertSystem.run(
+      system.companyId || null,
+      system.name,
+      system.systemType,
+      system.owner,
+      system.status,
+      system.hostingModel,
+      system.criticality,
+      system.dataSensitivity,
+      system.description,
+      system.reviewStatus,
+      system.sourceId,
+      sourceReference,
+    );
+    updateSystem.run(
+      system.companyId || null,
+      system.name,
+      system.systemType,
+      system.owner,
+      system.status,
+      system.hostingModel,
+      system.criticality,
+      system.dataSensitivity,
+      system.description,
+      system.reviewStatus,
+      sourceReference,
+      system.sourceId,
+    );
+  }
+
+  const findSystem = db.prepare("SELECT id FROM technology_systems WHERE source_type = 'seed' AND source_id = ?");
+  const insertRisk = db.prepare(`
+    INSERT OR IGNORE INTO technology_risks (
+      system_id, title, detail, severity, status, business_impact,
+      recommended_action, source_type, source_id, source_reference
+    )
+    VALUES (?, ?, ?, ?, 'Open', ?, ?, 'seed', ?, ?)
+  `);
+  const updateRisk = db.prepare(`
+    UPDATE technology_risks
+    SET system_id = ?, title = ?, detail = ?, severity = ?, status = 'Open',
+        business_impact = ?, recommended_action = ?, source_reference = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const risk of TECHNOLOGY_RISK_SEEDS) {
+    const system = findSystem.get(risk.systemSourceId);
+    const sourceReference = `technology_risk:${risk.sourceId}`;
+    insertRisk.run(system?.id || null, risk.title, risk.detail, risk.severity, risk.businessImpact, risk.recommendedAction, risk.sourceId, sourceReference);
+    updateRisk.run(system?.id || null, risk.title, risk.detail, risk.severity, risk.businessImpact, risk.recommendedAction, sourceReference, risk.sourceId);
+  }
+
+  const insertDecision = db.prepare(`
+    INSERT OR IGNORE INTO technology_decisions (
+      title, detail, decision_area, priority, status, approval_required,
+      source_type, source_id, source_reference
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'seed', ?, ?)
+  `);
+  const updateDecision = db.prepare(`
+    UPDATE technology_decisions
+    SET title = ?, detail = ?, decision_area = ?, priority = ?, status = ?,
+        approval_required = ?, source_reference = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const decision of TECHNOLOGY_DECISION_SEEDS) {
+    const sourceReference = `technology_decision:${decision.sourceId}`;
+    insertDecision.run(decision.title, decision.detail, decision.decisionArea, decision.priority, decision.status, decision.approvalRequired, decision.sourceId, sourceReference);
+    updateDecision.run(decision.title, decision.detail, decision.decisionArea, decision.priority, decision.status, decision.approvalRequired, sourceReference, decision.sourceId);
+  }
+
+  const insertRoadmap = db.prepare(`
+    INSERT OR IGNORE INTO technology_roadmap_items (
+      title, detail, roadmap_area, priority, status, target_quarter,
+      source_type, source_id, source_reference
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'seed', ?, ?)
+  `);
+  const updateRoadmap = db.prepare(`
+    UPDATE technology_roadmap_items
+    SET title = ?, detail = ?, roadmap_area = ?, priority = ?, status = ?,
+        target_quarter = ?, source_reference = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const item of TECHNOLOGY_ROADMAP_SEEDS) {
+    const sourceReference = `technology_roadmap:${item.sourceId}`;
+    insertRoadmap.run(item.title, item.detail, item.roadmapArea, item.priority, item.status, item.targetQuarter, item.sourceId, sourceReference);
+    updateRoadmap.run(item.title, item.detail, item.roadmapArea, item.priority, item.status, item.targetQuarter, sourceReference, item.sourceId);
+  }
+
+  const insertDebt = db.prepare(`
+    INSERT OR IGNORE INTO technology_debt_items (
+      title, detail, impact_area, severity, status, recommended_action,
+      source_type, source_id, source_reference
+    )
+    VALUES (?, ?, ?, ?, 'Open', ?, 'seed', ?, ?)
+  `);
+  const updateDebt = db.prepare(`
+    UPDATE technology_debt_items
+    SET title = ?, detail = ?, impact_area = ?, severity = ?, status = 'Open',
+        recommended_action = ?, source_reference = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = 'seed' AND source_id = ?
+  `);
+  for (const item of TECHNOLOGY_DEBT_SEEDS) {
+    const sourceReference = `technology_debt:${item.sourceId}`;
+    insertDebt.run(item.title, item.detail, item.impactArea, item.severity, item.recommendedAction, item.sourceId, sourceReference);
+    updateDebt.run(item.title, item.detail, item.impactArea, item.severity, item.recommendedAction, sourceReference, item.sourceId);
   }
 }
 
@@ -4025,6 +4520,131 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
       title: `${row.source_type}:${row.source_id}`,
       summary: row.summary,
       sensitivityCategory: row.sensitivity_category || "local_sensitive_business_data",
+    }));
+  }
+
+  const technologySystems = db.prepare(`
+    SELECT *
+    FROM technology_systems
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 300
+  `).all();
+  for (const row of technologySystems) {
+    records.push(semanticRecord({
+      sourceType: "technology_system",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.name,
+      summary: [
+        `Technology system: ${row.name}.`,
+        `Type: ${row.system_type}.`,
+        `Status: ${row.status}.`,
+        `Hosting model: ${row.hosting_model}.`,
+        `Criticality: ${row.criticality}.`,
+        `Data sensitivity: ${row.data_sensitivity}.`,
+        `Review status: ${row.review_status}.`,
+        row.description,
+        "Ethan CTO records are advisory only. No deployment, repo write, cloud change, configuration change or external action occurred.",
+      ].filter(Boolean).join(" "),
+      sensitivityCategory: "local_sensitive_business_data",
+    }));
+  }
+
+  const technologyRisks = db.prepare(`
+    SELECT r.*, s.name AS system_name
+    FROM technology_risks r
+    LEFT JOIN technology_systems s ON s.id = r.system_id
+    ORDER BY r.updated_at DESC, r.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of technologyRisks) {
+    records.push(semanticRecord({
+      sourceType: "technology_risk",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Technology risk: ${row.title}.`,
+        row.system_name ? `System: ${row.system_name}.` : "",
+        `Severity: ${row.severity}.`,
+        `Status: ${row.status}.`,
+        row.detail,
+        row.business_impact ? `Business impact: ${row.business_impact}.` : "",
+        row.recommended_action ? `Recommended action: ${row.recommended_action}.` : "",
+        "Recommendation only; no technical change was executed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const technologyDecisions = db.prepare(`
+    SELECT *
+    FROM technology_decisions
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of technologyDecisions) {
+    records.push(semanticRecord({
+      sourceType: "technology_decision",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Technology decision: ${row.title}.`,
+        `Area: ${row.decision_area}.`,
+        `Priority: ${row.priority}.`,
+        `Status: ${row.status}.`,
+        row.approval_required ? "Patrick approval is required." : "No approval requirement recorded.",
+        row.detail,
+        "Decision support only; no repo, deployment or cloud action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const technologyRoadmap = db.prepare(`
+    SELECT *
+    FROM technology_roadmap_items
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of technologyRoadmap) {
+    records.push(semanticRecord({
+      sourceType: "technology_roadmap",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Technology roadmap item: ${row.title}.`,
+        `Area: ${row.roadmap_area}.`,
+        `Priority: ${row.priority}.`,
+        `Status: ${row.status}.`,
+        row.target_quarter ? `Target: ${row.target_quarter}.` : "",
+        row.detail,
+        "Roadmap item only; no technical work was executed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const technologyDebt = db.prepare(`
+    SELECT *
+    FROM technology_debt_items
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+  for (const row of technologyDebt) {
+    records.push(semanticRecord({
+      sourceType: "technology_debt",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title,
+      summary: [
+        `Technology debt item: ${row.title}.`,
+        `Impact area: ${row.impact_area}.`,
+        `Severity: ${row.severity}.`,
+        `Status: ${row.status}.`,
+        row.detail,
+        row.recommended_action ? `Recommended action: ${row.recommended_action}.` : "",
+        "Advisory only; no code, deployment or infrastructure change occurred.",
+      ].filter(Boolean).join(" "),
     }));
   }
 

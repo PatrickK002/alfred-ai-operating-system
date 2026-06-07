@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan, Liam and James as planned future identities
+- Alfred, Olivia, Sarah, the Westbridge Property Director and Ethan as active advisory executive identities, plus Sentinel, Maya, Alex, Liam and James as planned future identities
 
 Database files are excluded from Git.
 
@@ -178,6 +178,16 @@ Health and aggregate workflows:
 | `GET` | `/api/monday-os/sync-status` | Planned Monday sync status; read and write remain disabled |
 | `GET` | `/api/monday-os/search?q=Westminster` | Search internal work records with source references |
 | `GET` | `/api/monday-os/audit` | Metadata-only Monday OS audit events |
+| `GET` | `/api/ethan/dashboard` | Ethan CTO dashboard with systems, risks, decisions, roadmap, technical debt and Monday OS workload links |
+| `GET` | `/api/ethan/search?q=architecture` | Search Ethan technology intelligence across systems, risks, decisions, roadmap, debt and semantic memory |
+| `GET` | `/api/ethan/audit` | Metadata-only Ethan CTO audit events |
+| `GET` | `/api/ethan/risks` | List local technology risk records |
+| `POST` | `/api/ethan/risks` | Create a local technology risk record only; no repo, deployment, cloud or external write action |
+| `GET` | `/api/ethan/decisions` | List local CTO decision records |
+| `POST` | `/api/ethan/decisions` | Create a local technology decision record only; no technical execution |
+| `GET` | `/api/ethan/roadmap` | List local technology roadmap records |
+| `POST` | `/api/ethan/roadmap` | Create a local technology roadmap item only |
+| `POST` | `/api/ai/ethan/analyse-technology` | Generate Ethan's advisory CTO analysis and recommendations without execution |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -406,6 +416,51 @@ The avatar layer is visual identity only. It does not add autonomous agents, wri
 
 Voice persona fields are placeholders for future multi-voice support across Alfred, Olivia, Sarah, Westbridge, Sentinel, Maya, Alex, Ethan, Liam and James. Alfred remains the only primary voice in the current voice phase.
 
+## Ethan CTO Director
+
+Ethan is Alfred's active advisory Chief Technology Officer.
+
+- Name: Ethan
+- Title: Chief Technology Officer
+- Reports to: Alfred
+- Status: Active advisory
+- Scope: platform architecture, engineering quality, cloud operations, release governance, technical debt, data platform and technology risk
+
+Ethan turns local Alfred technology records into practical CTO recommendations. The current implementation stores systems, technology risks, CTO decisions, roadmap items, technical debt, reviews and audit records in SQLite. Ethan links his work into the internal Monday Operating System, contributes to the executive briefing and creates compact semantic memory source records for Voyage indexing when enabled.
+
+Local data entities:
+
+- `technology_domains`
+- `technology_systems`
+- `technology_risks`
+- `technology_decisions`
+- `technology_roadmap_items`
+- `technology_debt_items`
+- `technology_reviews`
+- `ethan_audit_events`
+
+Ethan integrates with:
+
+- Executive Briefing through the Ethan CTO Brief
+- Monday Operating System through local work items, deliverables, risks and decisions
+- Meeting Intelligence through technology-related meeting signals
+- Voyage Memory through compact source records only
+- Agent Avatar metadata and workload health
+
+Security boundary:
+
+- No repository writes
+- No deployments
+- No cloud or infrastructure changes
+- No configuration edits
+- No secret writes
+- No Microsoft writes
+- No Monday writes
+- No external writes
+- No autonomous execution
+
+All Ethan analysis is advisory only. Ethan may recommend architecture priorities, production-readiness checks, release governance, backup/restore practices, data-platform controls and technical-debt sequencing, but Alfred does not deploy, change infrastructure, edit repositories, change configuration or execute technical actions in this phase.
+
 ## Sentinel CISO Foundation
 
 Sentinel is a planned executive agent and future Chief Information Security Officer.
@@ -553,7 +608,7 @@ Statuses are standardised as `New`, `Planned`, `In Progress`, `Waiting`, `Blocke
 
 Priorities are standardised as `Low`, `Medium`, `High` and `Critical`.
 
-Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Executive Briefing, Memory and future Monday IDs.
+Source references link work records back to Meeting Intelligence, Project Intelligence, Olivia CFO, Westbridge, Sarah, Ethan CTO, Executive Briefing, Memory and future Monday IDs.
 
 Workload metrics are calculated locally from open work, high-priority items, overdue work, blocked items and deliverables due. The result is a `workload_score` from 0 to 100 with a Green, Amber or Red health label for each executive agent workspace.
 
@@ -619,7 +674,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, Ethan CTO intelligence, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -637,6 +692,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
+- `ethan.js` - Ethan CTO profile, technology systems, risks, decisions, roadmap, technical debt, advisory analysis, Monday OS links and no-execution audit boundary
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback
