@@ -5,11 +5,11 @@ export const CURRENT_AGENT_IDS = Object.freeze([
   "olivia",
   "sarah",
   "westbridge-property-director",
+  "maya",
 ]);
 
 export const PLANNED_AGENT_IDS = Object.freeze([
   "sentinel",
-  "maya",
   "alex",
   "ethan",
   "liam",
@@ -139,13 +139,13 @@ export const AGENT_AVATAR_PROFILES = Object.freeze([
     fallbackInitials: "M",
     accentColor: "#e2b46b",
     voicePersonaPlaceholder: "maya-media-voice",
-    expertiseTags: ["Content strategy", "Channel systems", "Production", "Monetisation"],
-    status: "Planned",
-    statusCategory: "planned",
+    expertiseTags: ["LinkedIn", "YouTube", "TikTok", "Campaigns", "Thought leadership"],
+    status: "Active advisory",
+    statusCategory: "active",
     reportingLine: "Alfred",
-    mission: "Future placeholder for media business strategy and production operating systems.",
-    currentCapabilitySummary: "Future placeholder only. No runtime behaviour.",
-    plannedCapabilitySummary: "Future media strategy, content systems and monetisation intelligence.",
+    mission: "Provide advisory-only LinkedIn, YouTube, TikTok, content planning, campaign planning and marketing opportunity intelligence without posting or outbound messages.",
+    currentCapabilitySummary: "Read-only marketing dashboard, content calendar, campaign planning, feedback loops and Monday OS workload integration.",
+    plannedCapabilitySummary: "Future live marketing platform integrations require explicit approval, authentication, consent and posting safeguards.",
   },
   {
     id: "alex",

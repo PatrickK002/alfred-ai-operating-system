@@ -112,7 +112,7 @@ The database is seeded only when the company registry is empty. Seed data includ
 - Islington Council
 - Council Construction Assurance Platform
 - Project intelligence profiles for KSPF, Westminster, RBKC, Islington and Council Construction Assurance Platform
-- Alfred, Olivia, Sarah and the Westbridge Property Director as active advisory executive identities, plus Sentinel, Maya, Alex, Ethan, Liam and James as planned future identities
+- Alfred, Olivia, Sarah, the Westbridge Property Director and Maya as active advisory executive identities, plus Sentinel, Alex, Ethan, Liam and James as planned future identities
 
 Database files are excluded from Git.
 
@@ -178,6 +178,15 @@ Health and aggregate workflows:
 | `GET` | `/api/monday-os/sync-status` | Planned Monday sync status; read and write remain disabled |
 | `GET` | `/api/monday-os/search?q=Westminster` | Search internal work records with source references |
 | `GET` | `/api/monday-os/audit` | Metadata-only Monday OS audit events |
+| `GET` | `/api/maya/dashboard` | Maya Marketing Director dashboard with channels, content calendar, campaigns, opportunities, feedback and Monday OS workload links |
+| `GET` | `/api/maya/search?q=LinkedIn` | Search Maya marketing knowledge across content, campaigns, opportunities and feedback |
+| `GET` | `/api/maya/audit` | Metadata-only Maya marketing audit events |
+| `GET` | `/api/maya/content` | List local marketing content calendar items |
+| `POST` | `/api/maya/content` | Create a local content planning record only; no posting, scheduling or external publishing |
+| `GET` | `/api/maya/campaigns` | List local campaign planning records |
+| `POST` | `/api/maya/campaigns` | Create a local campaign planning record only; no campaign launch or external publishing |
+| `POST` | `/api/maya/feedback` | Capture marketing feedback and lessons learned |
+| `POST` | `/api/ai/maya/analyse-marketing` | Generate Maya's advisory marketing analysis and recommendations without execution |
 | `GET` | `/api/property/dashboard` | Westbridge portfolio metrics, acquisition pipeline, due diligence, risks, decisions and property memory |
 | `GET` | `/api/property/briefing` | Westbridge property signals for Alfred's executive briefing |
 | `GET` | `/api/property/search?q=garage` | Property-aware search across opportunities, analyses, due diligence and memory |
@@ -406,6 +415,49 @@ The avatar layer is visual identity only. It does not add autonomous agents, wri
 
 Voice persona fields are placeholders for future multi-voice support across Alfred, Olivia, Sarah, Westbridge, Sentinel, Maya, Alex, Ethan, Liam and James. Alfred remains the only primary voice in the current voice phase.
 
+## Maya Marketing Director
+
+Maya is Alfred's active advisory Marketing Director.
+
+- Name: Maya
+- Title: Marketing Director
+- Reports to: Alfred
+- Status: Active advisory
+- Scope: LinkedIn strategy, YouTube strategy, TikTok strategy, content planning, campaign planning, thought leadership, marketing opportunities, content calendar and marketing feedback
+
+Maya turns internal Alfred context into practical board-level marketing recommendations. The current implementation stores local marketing records in SQLite, links Maya work into the internal Monday Operating System, contributes to the executive briefing, and creates compact semantic memory source records for Voyage indexing when enabled.
+
+Local data entities:
+
+- `marketing_channels`
+- `marketing_campaigns`
+- `marketing_content_items`
+- `marketing_opportunities`
+- `marketing_feedback`
+- `maya_audit_events`
+
+Maya integrates with:
+
+- Executive Briefing through the Maya Marketing Brief
+- Monday Operating System through local work items, deliverables, opportunities and feedback
+- Meeting Intelligence through marketing-related meeting signals
+- Voyage Memory through compact source records only
+- Agent Avatar metadata and workload health
+
+Security boundary:
+
+- No social posting
+- No scheduled publishing
+- No outbound messages
+- No email sending
+- No calendar updates
+- No Microsoft writes
+- No Monday writes
+- No paid campaign launch
+- No autonomous execution
+
+All Maya analysis is advisory only. Maya may recommend content angles, campaign priorities and marketing follow-ups, but Alfred does not post, publish, message, schedule, launch campaigns or update external systems in this phase.
+
 ## Sentinel CISO Foundation
 
 Sentinel is a planned executive agent and future Chief Information Security Officer.
@@ -619,7 +671,7 @@ External calls are limited to verified read-only Microsoft 365 reads, explicit A
 npm test
 ```
 
-Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, the Agent Avatar System and roadmap governance documentation.
+Tests create temporary SQLite databases and cover seeding, CRUD persistence, dashboard aggregation, morning brief generation, approval state transitions, Anthropic reasoning boundaries, Voyage semantic memory retrieval, Olivia CFO financial intelligence, project intelligence, Sarah, Westbridge property intelligence, the Voice Command Centre, Teams Meeting Intelligence, the Monday Operating System, Maya Marketing Director, the Agent Avatar System and roadmap governance documentation.
 
 ## Architecture
 
@@ -637,6 +689,7 @@ Tests create temporary SQLite databases and cover seeding, CRUD persistence, das
 - `voice.js` - Deepgram/ElevenLabs adapters, voice command routing, transcript persistence, audit logging and advisory-only voice boundaries
 - `meeting-intelligence.js` - read-only calendar metadata import, transcript summary extraction, meeting follow-ups, agent reviews, feedback and memory links
 - `monday-operating-system.js` - internal Monday OS work model, workload calculations, meeting follow-up sync, future board mappings and no-write audit boundary
+- `maya.js` - Maya Marketing Director profile, advisory analysis, content calendar, campaign planning, feedback, Monday OS links and no-posting audit boundary
 - `excel-orderbook.js` - dependency-free XLSX/CSV order book reader
 - `monday-finance.js` - read-only Monday.com financial summary connector
 - `app.js` - dashboard rendering, API client and localStorage fallback

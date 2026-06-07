@@ -99,7 +99,7 @@ test("stores memories and generates the brief from database state", () => {
 
     assert.equal(listResource(db, "memories").length, 5);
     assert.equal(brief.summary.risks, 3);
-    assert.equal(brief.summary.agentsPlanned, 6);
+    assert.equal(brief.summary.agentsPlanned, 5);
     assert.equal(brief.meetings.available, false);
     assert.match(brief.meetings.message, /not connected/i);
     assert.equal(brief.source, "backend");
