@@ -444,6 +444,12 @@ const seedData = {
         rawAudioStored: false,
         localSensitiveBusinessData: true,
       },
+      costControls: {
+        voiceReasoningMode: "deterministic",
+        claudeVoiceAnalysisDefault: false,
+        browserSpeechFallbackEnabled: true,
+        shortGreetingFastPath: true,
+      },
       microphone: { rawAudioStored: false },
       boundary: { readOnly: true, voiceExecutionEnabled: false },
     },
@@ -902,7 +908,7 @@ function renderVoiceCommandCentre() {
         <div class="voice-answer-text">${renderVoiceResponseText(last.response || last.message || "")}</div>
         <div class="voice-answer-actions">
           <button class="secondary-button" id="voice-play-response" type="button">
-            ${last.audio?.audioBase64 ? "Play Alfred audio" : "ElevenLabs audio unavailable"}
+            ${last.audio?.audioBase64 ? "Play Alfred audio" : "Speak with backup voice"}
           </button>
         </div>
         <small>
@@ -3797,6 +3803,23 @@ function speakWithBrowserFallback(text, rate = 1) {
   });
 }
 
+function browserVoiceFallbackEnabled() {
+  return state.voice?.status?.costControls?.browserSpeechFallbackEnabled !== false;
+}
+
+async function playBackupVoice(text, rate = 1) {
+  if (!browserVoiceFallbackEnabled()) {
+    setVoiceUiState("Ready", "No audio available. Local backup voice is disabled.");
+    return false;
+  }
+  setVoiceUiState("Speaking", "ElevenLabs unavailable. Using local backup voice.");
+  const spoke = await speakWithBrowserFallback(text, rate);
+  setVoiceUiState("Ready", spoke
+    ? "Local backup voice used. Check ElevenLabs setup for premium voice."
+    : "No audio available. Check ElevenLabs setup.");
+  return spoke;
+}
+
 function primeVoicePlayback() {
   if (voicePlaybackPrimed) return;
   try {
@@ -3858,8 +3881,11 @@ async function replayLastVoiceResponse() {
     showToast("ElevenLabs audio was blocked by Safari. Click Play Alfred audio.");
     return;
   }
-  setVoiceUiState("Ready", "ElevenLabs audio unavailable. Check Voice provider setup.");
-  showToast("ElevenLabs audio unavailable. Browser speech fallback is disabled for voice quality.");
+  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
+  const spoke = await playBackupVoice(result.spokenResponse || result.response || result.message || "", settings.speechSpeed);
+  showToast(spoke
+    ? "ElevenLabs unavailable; Alfred used local backup voice."
+    : "ElevenLabs audio unavailable. Check Voice provider setup.");
 }
 
 async function playVoiceResult(result) {
@@ -3874,8 +3900,11 @@ async function playVoiceResult(result) {
     showToast("Safari blocked automatic audio. Click Play Alfred audio.");
     return;
   }
-  setVoiceUiState("Ready", "ElevenLabs audio unavailable. Check Voice provider setup.");
-  showToast("ElevenLabs audio unavailable. Browser speech fallback is disabled for voice quality.");
+  const settings = state.voice?.status?.settings || seedData.voice.status.settings;
+  const spoke = await playBackupVoice(result.spokenResponse || result.response || result.message || "", settings.speechSpeed);
+  showToast(spoke
+    ? "ElevenLabs unavailable; Alfred used local backup voice."
+    : "ElevenLabs audio unavailable. Check Voice provider setup.");
 }
 
 async function submitVoiceCommand(payload) {

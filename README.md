@@ -441,12 +441,16 @@ ELEVENLABS_MODEL="eleven_turbo_v2_5"
 VOICE_ENABLED=true
 VOICE_TRANSCRIPT_LOGGING_ENABLED=true
 VOICE_TRANSCRIPT_RETENTION_DAYS=30
-VOICE_AI_TIMEOUT_MS=12000
+VOICE_REASONING_MODE=deterministic
+VOICE_AI_TIMEOUT_MS=6000
+VOICE_BROWSER_FALLBACK_ENABLED=true
 ```
 
 `VOICE_ENABLED` controls the local voice interface. `VOICE_TRANSCRIPT_LOGGING_ENABLED=false` prevents transcript content from being persisted in `voice_conversation_turns`.
 `VOICE_TRANSCRIPT_RETENTION_DAYS` sets the local purge threshold for stored transcript turns. The Voice Command Centre includes a setup checklist, a local diagnostics button and a purge control for old local voice turns.
+`VOICE_REASONING_MODE=deterministic` keeps voice commands on Alfred's local read-only router by default, which reduces latency and avoids unnecessary Claude spend. Set it to `auto` or `claude` only when you deliberately want Claude reasoning on voice commands.
 `VOICE_AI_TIMEOUT_MS` caps how long voice commands wait for Claude before using deterministic local fallback. Short greetings such as "hi" use a fast local route and skip the executive context/Claude path.
+`VOICE_BROWSER_FALLBACK_ENABLED=true` lets Alfred speak with the local browser voice if ElevenLabs does not return playable audio. That backup is less natural than ElevenLabs, but it prevents silent voice responses while provider settings are tuned.
 
 ### Supported Commands
 

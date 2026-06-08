@@ -162,6 +162,9 @@ Optional model/version settings:
 - `MONDAY_API_VERSION=2025-04`
 - `DEEPGRAM_MODEL=nova-3`
 - `ELEVENLABS_MODEL=eleven_turbo_v2_5`
+- `VOICE_REASONING_MODE=deterministic`
+- `VOICE_AI_TIMEOUT_MS=6000`
+- `VOICE_BROWSER_FALLBACK_ENABLED=true`
 
 ## 6. Verification
 

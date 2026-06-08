@@ -70,3 +70,9 @@ services:
         value: "true"
       - key: VOICE_TRANSCRIPT_RETENTION_DAYS
         value: "30"
+      - key: VOICE_REASONING_MODE
+        value: deterministic
+      - key: VOICE_AI_TIMEOUT_MS
+        value: "6000"
+      - key: VOICE_BROWSER_FALLBACK_ENABLED
+        value: "true"

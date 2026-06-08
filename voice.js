@@ -140,6 +140,32 @@ function isFastVoiceIntent(intent = {}, transcript = "") {
   return intent.intent === "greeting" || (intent.intent === "unknown" && wordCount <= 4);
 }
 
+function voiceReasoningMode() {
+  const mode = String(process.env.VOICE_REASONING_MODE || "deterministic").toLowerCase().trim();
+  return ["deterministic", "auto", "claude"].includes(mode) ? mode : "deterministic";
+}
+
+function browserSpeechFallbackEnabled() {
+  return String(process.env.VOICE_BROWSER_FALLBACK_ENABLED || "true").toLowerCase() !== "false";
+}
+
+function shouldUseClaudeForVoice(intent = {}, transcript = "") {
+  const mode = voiceReasoningMode();
+  if (mode === "claude") return true;
+  if (mode === "auto") {
+    return /\b(analy[sz]e|recommend|decision support|think through|strategy|prioriti[sz]e|board view|deep review)\b/i.test(transcript)
+      || [
+        "sarah_project_review",
+        "olivia_revenue_forecast",
+        "liam_power_platform_review",
+        "westbridge_property_pipeline",
+        "westbridge_cashflow",
+        "james_product_review",
+      ].includes(intent.intent);
+  }
+  return false;
+}
+
 function fastVoiceContext(transcript = "") {
   return {
     transcript,
@@ -850,6 +876,12 @@ export function createVoiceCommandService({
         rawAudioStored: false,
         localSensitiveBusinessData: true,
       },
+      costControls: {
+        voiceReasoningMode: voiceReasoningMode(),
+        claudeVoiceAnalysisDefault: voiceReasoningMode() !== "deterministic",
+        browserSpeechFallbackEnabled: browserSpeechFallbackEnabled(),
+        shortGreetingFastPath: true,
+      },
       microphone: {
         required: true,
         rawAudioStored: false,
@@ -958,7 +990,7 @@ export function createVoiceCommandService({
 
   async function runClaude(intent, context, fallback, userAction) {
     if (!aiReasoning?.analyzeVoiceCommand) return null;
-    const timeoutMs = Math.min(Math.max(Number(process.env.VOICE_AI_TIMEOUT_MS) || 12_000, 1_000), 30_000);
+    const timeoutMs = Math.min(Math.max(Number(process.env.VOICE_AI_TIMEOUT_MS) || 6_000, 1_000), 30_000);
     const analysisPromise = aiReasoning.analyzeVoiceCommand(voiceAnalysisInput(intent, context, fallback), {
         userAction,
         dataCategories: [
@@ -1050,7 +1082,9 @@ export function createVoiceCommandService({
     const fastPath = isFastVoiceIntent(intent, transcript);
     const context = fastPath ? fastVoiceContext(transcript) : await buildContext(transcript, intent);
     const fallback = deterministicVoiceAnalysis(intent, context);
-    const ai = fastPath ? null : await runClaude(intent, context, fallback, userAction);
+    const reasoningMode = voiceReasoningMode();
+    const useClaude = !fastPath && shouldUseClaudeForVoice(intent, transcript);
+    const ai = useClaude ? await runClaude(intent, context, fallback, userAction) : null;
     const aiFailed = ai?.fallbackErrorCode;
     const voiceAnalysis = aiFailed ? normalizeClaudeVoiceResult(null, fallback) : normalizeClaudeVoiceResult(ai, fallback);
     const displayResponse = voiceAnalysis.displayResponse || voiceAnalysis.spokenResponse;
@@ -1084,6 +1118,7 @@ export function createVoiceCommandService({
         rawAudioStored: false,
         usedClaude: voiceAnalysis.usedClaude,
         fastPath,
+        voiceReasoningMode: reasoningMode,
       },
     });
     const turn = recordVoiceConversationTurn(db, {
@@ -1120,6 +1155,7 @@ export function createVoiceCommandService({
       assumptions: [
         ...voiceAnalysis.assumptions,
         aiFailed ? `Claude voice analysis fallback used: ${aiFailed}.` : "",
+        !useClaude && !fastPath ? `Voice used deterministic routing because VOICE_REASONING_MODE=${reasoningMode}.` : "",
         audio.errorCode ? `Voice audio fallback used: ${audio.errorCode}.` : "",
       ].filter(Boolean),
       confidenceLevel: voiceAnalysis.confidenceLevel,

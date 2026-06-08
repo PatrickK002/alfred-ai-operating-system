@@ -97,6 +97,9 @@ export const ENVIRONMENT_VARIABLES = [
   { key: "VOICE_ENABLED", category: "voice", publicName: "Voice interface", productionCritical: false, secret: false },
   { key: "VOICE_TRANSCRIPT_LOGGING_ENABLED", category: "voice", publicName: "Voice transcript logging", productionCritical: false, secret: false },
   { key: "VOICE_TRANSCRIPT_RETENTION_DAYS", category: "voice", publicName: "Voice transcript retention", productionCritical: false, secret: false },
+  { key: "VOICE_REASONING_MODE", category: "voice", publicName: "Voice reasoning mode", productionCritical: false, secret: false },
+  { key: "VOICE_AI_TIMEOUT_MS", category: "voice", publicName: "Voice AI timeout", productionCritical: false, secret: false },
+  { key: "VOICE_BROWSER_FALLBACK_ENABLED", category: "voice", publicName: "Browser backup voice", productionCritical: false, secret: false },
 ];
 
 export const API_KEY_ASSIGNMENT_GROUPS = [
@@ -145,7 +148,7 @@ export const API_KEY_ASSIGNMENT_GROUPS = [
     label: "ElevenLabs",
     purpose: "Text-to-speech for Alfred's spoken responses.",
     required: ["ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID"],
-    optional: ["ELEVENLABS_MODEL"],
+    optional: ["ELEVENLABS_MODEL", "VOICE_REASONING_MODE", "VOICE_AI_TIMEOUT_MS", "VOICE_BROWSER_FALLBACK_ENABLED"],
     boundary: "Spoken output only. No voice-triggered execution.",
   },
 ];

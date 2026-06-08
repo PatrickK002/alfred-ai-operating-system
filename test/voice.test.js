@@ -276,6 +276,8 @@ test("voice routing reaches Sarah, Olivia, Liam, James and Westbridge advisory s
 
 test("Claude voice analysis receives structured read-only context when available", async () => {
   await withDatabase(async (db) => {
+    const previousMode = process.env.VOICE_REASONING_MODE;
+    process.env.VOICE_REASONING_MODE = "claude";
     let receivedInput;
     let synthesizedText = "";
     const service = serviceFor(db, {
@@ -313,16 +315,45 @@ test("Claude voice analysis receives structured read-only context when available
       },
     });
 
+    try {
+      const result = await service.handleCommand({ transcript: "What requires my attention today?" });
+
+      assert.equal(receivedInput.boundaries.voiceExecutionEnabled, false);
+      assert.equal(receivedInput.boundaries.externalWritesEnabled, false);
+      assert.equal(result.spokenResponse, "Patrick, Westminster needs your attention today. No action has been taken.");
+      assert.match(result.response, /### Today/);
+      assert.match(result.response, /Westminster needs your attention/);
+      assert.equal(synthesizedText, result.spokenResponse);
+      assert.equal(result.audit.model, "fake-claude");
+      assert.equal(result.audit.metadata.voiceReasoningMode, "claude");
+      assert.equal(result.executedActions.length, 0);
+    } finally {
+      if (previousMode === undefined) delete process.env.VOICE_REASONING_MODE;
+      else process.env.VOICE_REASONING_MODE = previousMode;
+    }
+  });
+});
+
+test("voice defaults to deterministic routing to protect latency and Claude credits", async () => {
+  await withDatabase(async (db) => {
+    let claudeCalled = false;
+    const service = serviceFor(db, {
+      aiReasoning: {
+        analyzeVoiceCommand: async () => {
+          claudeCalled = true;
+          throw new Error("default voice mode should not call Claude");
+        },
+      },
+    });
+
     const result = await service.handleCommand({ transcript: "What requires my attention today?" });
 
-    assert.equal(receivedInput.boundaries.voiceExecutionEnabled, false);
-    assert.equal(receivedInput.boundaries.externalWritesEnabled, false);
-    assert.equal(result.spokenResponse, "Patrick, Westminster needs your attention today. No action has been taken.");
-    assert.match(result.response, /### Today/);
-    assert.match(result.response, /Westminster needs your attention/);
-    assert.equal(synthesizedText, result.spokenResponse);
-    assert.equal(result.audit.model, "fake-claude");
-    assert.equal(result.executedActions.length, 0);
+    assert.equal(claudeCalled, false);
+    assert.equal(result.audit.model, "deterministic-voice-router");
+    assert.equal(result.audit.metadata.voiceReasoningMode, "deterministic");
+    assert.equal(result.audit.metadata.usedClaude, false);
+    assert.match(result.assumptions.join(" "), /VOICE_REASONING_MODE=deterministic/);
+    assert.equal(result.executionAttempted, false);
   });
 });
 
@@ -385,9 +416,11 @@ test("frontend voice playback exposes manual replay when autoplay is blocked", (
   assert.match(app, /function playAudioData/);
   assert.match(app, /function replayLastVoiceResponse/);
   assert.match(app, /id="voice-play-response"/);
+  assert.match(app, /function playBackupVoice/);
+  assert.match(app, /Speak with backup voice/);
   assert.match(app, /ElevenLabs audio unavailable/);
   assert.match(app, /Safari blocked automatic audio/);
-  assert.match(app, /Browser speech fallback is disabled for voice quality/);
+  assert.match(app, /Local backup voice used/);
   assert.match(css, /voice-answer-actions/);
   assert.match(css, /voice-answer-text/);
   assert.match(css, /voice-history-response/);
