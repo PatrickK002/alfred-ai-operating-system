@@ -228,6 +228,25 @@ const seedData = {
     missingInformation: [],
     boundary: { readOnly: true },
   },
+  documentIntelligence: {
+    metrics: {
+      totalDocuments: 0,
+      extractedDocuments: 0,
+      totalChunks: 0,
+      needsAttention: 0,
+    },
+    documents: [],
+    recentAudit: [],
+    boundary: {
+      readOnly: true,
+      documentUploadEnabled: true,
+      documentContentStoredLocally: true,
+      embeddingsStoredServerSideOnly: true,
+      fileEditingEnabled: false,
+      fileDeletionEnabled: false,
+      autonomousExecutionEnabled: false,
+    },
+  },
   meetingIntelligence: {
     metrics: {
       totalMeetings: 0,
@@ -546,6 +565,7 @@ let currentBoardReportMarkdown = "";
 let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
 let currentMeetingDetail = null;
+let currentDocumentQuestionResult = null;
 let sarahCurrentProjectId = null;
 let currentClientResponseDraftMarkdown = "";
 let currentPropertyOpportunityId = null;
@@ -608,6 +628,7 @@ async function loadDashboard() {
     state.financial = await apiRequest("/api/financial/dashboard").catch(() => seedData.financial);
     state.property = await apiRequest("/api/property/dashboard").catch(() => seedData.property);
     state.projectIntelligence = await apiRequest("/api/project-intelligence/dashboard").catch(() => seedData.projectIntelligence);
+    state.documentIntelligence = await apiRequest("/api/document-intelligence/dashboard").catch(() => seedData.documentIntelligence);
     state.meetingIntelligence = await apiRequest("/api/meeting-intelligence/dashboard").catch(() => seedData.meetingIntelligence);
     state.mondayOperating = await apiRequest("/api/monday-os/dashboard").catch(() => seedData.mondayOperating);
     state.liam = await apiRequest("/api/liam/dashboard").catch(() => seedData.liam);
@@ -1805,6 +1826,143 @@ function renderProjectIntelligence() {
   renderProjectDetail(currentProjectDetail);
 }
 
+function documentProjectOptions() {
+  const projects = state.projectIntelligence?.projects || [];
+  return [
+    '<option value="">No project / group document</option>',
+    ...projects.map((project) => `
+      <option value="${project.profile.id}">
+        ${escapeHTML(project.profile.projectName)} (${escapeHTML(project.profile.clientName || "Internal")})
+      </option>
+    `),
+  ].join("");
+}
+
+function documentQuestionOptions(documents = []) {
+  return [
+    '<option value="">All indexed documents</option>',
+    ...documents.map((document) => `
+      <option value="${document.id}">
+        ${escapeHTML(document.title || document.fileName || `Document ${document.id}`)}
+      </option>
+    `),
+  ].join("");
+}
+
+function documentStatusClass(document = {}) {
+  if (document.extractionStatus === "extracted") return "green";
+  if (document.extractionStatus === "metadata_only" || document.extractionStatus === "partial") return "amber";
+  return "red";
+}
+
+function renderDocumentPreview(chunks = [], title = "Retrieved sections") {
+  $("#document-preview-panel").innerHTML = chunks?.length
+    ? `
+      <div class="document-preview-heading">
+        <strong>${escapeHTML(title)}</strong>
+        <small>${chunks.length} section(s)</small>
+      </div>
+      <div class="document-section-list">
+        ${chunks.slice(0, 8).map((chunk) => `
+          <article>
+            <small>${escapeHTML(chunk.sourceReference || `document_chunk:${chunk.id}`)} · relevance ${escapeHTML(chunk.relevanceScore ?? "n/a")}</small>
+            <strong>${escapeHTML(chunk.documentTitle || chunk.fileName || "Document")} · chunk ${Number(chunk.chunkIndex || 0) + 1}</strong>
+            <p>${escapeHTML(chunk.excerpt || chunk.shortSummary || chunk.chunkText || "")}</p>
+          </article>
+        `).join("")}
+      </div>
+    `
+    : '<div class="empty-state">Search results and answers will show retrieved sections here.</div>';
+}
+
+function renderDocumentQuestionResult(result = null) {
+  if (!result) {
+    $("#document-question-output").innerHTML = '<div class="empty-state">Ask a question to get a grounded answer with document chunk citations.</div>';
+    return;
+  }
+  const analysis = result.analysis || {};
+  $("#document-question-output").innerHTML = `
+    <div class="ai-boundary">Alfred answered from indexed document chunks only. No file, email, SharePoint, OneDrive or external system was changed.</div>
+    <section class="ai-summary document-answer-card">
+      <h3>Answer</h3>
+      <div class="document-answer-readable">${renderVoiceResponseText(analysis.answer || analysis.directAnswer || "No answer returned.")}</div>
+      <div class="document-answer-meta">
+        <span>Confidence: ${escapeHTML(analysis.confidenceLevel || "low")}</span>
+        <span>Retrieval: ${result.semantic ? "Voyage semantic + local chunks" : "Keyword fallback"}</span>
+        <span>${escapeHTML(result.model || "local")}</span>
+      </div>
+    </section>
+    ${renderList("Evidence", analysis.evidence || [], (item) => `
+      <strong>${escapeHTML(item.quote)}</strong>
+      <span>${escapeHTML(item.explanation || "")}</span>
+      <small>${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${analysis.notAnsweredReason ? `<div class="empty-state">${escapeHTML(analysis.notAnsweredReason)}</div>` : ""}
+    ${renderList("Assumptions", analysis.assumptions || [], (item) => `<span>${escapeHTML(item)}</span>`)}
+  `;
+  renderDocumentPreview(analysis.retrievedSections || result.retrievedChunks || [], "Sections used in answer");
+}
+
+function renderDocumentSearchResults(result = null) {
+  if (!result) {
+    $("#document-search-results").innerHTML = '<div class="empty-state">Search extracted document chunks. Voyage will be used when available; keyword search is the fallback.</div>';
+    return;
+  }
+  const records = result.results || [];
+  $("#document-search-results").innerHTML = records.length
+    ? `<div class="document-search-result-list">
+        ${records.map((chunk) => `
+          <article class="document-result-card">
+            <div>
+              <span class="project-health green">${escapeHTML(chunk.documentType || "Document")}</span>
+              <h3>${escapeHTML(chunk.documentTitle || chunk.fileName || "Document")}</h3>
+              <p>${escapeHTML(chunk.projectName || "No linked project")} · ${escapeHTML(chunk.clientName || "No client linked")}</p>
+            </div>
+            <small>${escapeHTML(chunk.sourceReference || "")} · relevance ${escapeHTML(chunk.relevanceScore ?? "n/a")}</small>
+            <p>${escapeHTML(chunk.shortSummary || chunk.chunkText || "")}</p>
+          </article>
+        `).join("")}
+      </div>`
+    : '<div class="empty-state">No matching document chunks found. Upload or paste the relevant file content first.</div>';
+  renderDocumentPreview(records, "Search result sections");
+}
+
+function renderDocumentIntelligence() {
+  const docState = state.documentIntelligence || seedData.documentIntelligence;
+  const metrics = docState.metrics || {};
+  const documents = docState.documents || [];
+  $("#document-intelligence-metrics").innerHTML = [
+    ["DOCUMENTS", metrics.totalDocuments],
+    ["EXTRACTED", metrics.extractedDocuments],
+    ["CHUNKS", metrics.totalChunks],
+    ["NEEDS ATTENTION", metrics.needsAttention],
+  ].map(([label, value]) => `
+    <article>
+      <small>${label}</small>
+      <strong>${value || 0}</strong>
+    </article>
+  `).join("");
+  $("#document-intelligence-project").innerHTML = documentProjectOptions();
+  $("#document-question-document").innerHTML = documentQuestionOptions(documents);
+  $("#document-library").innerHTML = documents.length
+    ? `<div class="project-list document-library-list">
+        ${documents.map((document) => `
+          <article class="project-card document-card">
+            <div>
+              <span class="project-health ${documentStatusClass(document)}">${escapeHTML(document.extractionStatus || "unknown")}</span>
+              <h3>${escapeHTML(document.title || document.fileName || "Document")}</h3>
+              <p>${escapeHTML(document.projectName || "No project linked")} · ${escapeHTML(document.clientName || "No client linked")}</p>
+            </div>
+            <small>${escapeHTML(document.documentType || "Unknown")} · ${document.chunkCount || 0} chunk(s) · ${escapeHTML(document.fileType || "file")}</small>
+            <span class="project-card-domains">${escapeHTML(document.extractionMessage || "No extraction message")}</span>
+            <span class="project-card-quality">${(document.tags || []).map((tag) => escapeHTML(tag)).join(" · ") || escapeHTML(document.sourceUrl || "Local upload")}</span>
+          </article>
+        `).join("")}
+      </div>`
+    : '<div class="empty-state project-empty">No indexed documents yet. Upload a PDF, DOCX, TXT or MD file to begin.</div>';
+  renderDocumentQuestionResult(currentDocumentQuestionResult);
+}
+
 function meetingList(records, empty, formatter) {
   return records?.length
     ? `<div class="project-record-list">${records.slice(0, 10).map((record) => `<article>${formatter(record)}</article>`).join("")}</div>`
@@ -2413,6 +2571,7 @@ function renderAll() {
   renderCompanies();
   renderProperty();
   renderProjectIntelligence();
+  renderDocumentIntelligence();
   renderMeetingIntelligence();
   renderMondayOperating();
   renderLiam();
@@ -2433,6 +2592,7 @@ function navigate(view) {
     companies: "Companies",
     property: "Property",
     projects: "Project Intelligence",
+    documents: "Document Intelligence",
     meetings: "Meeting Intelligence",
     monday: "Monday Operating System",
     liam: "Liam",
@@ -2993,6 +3153,109 @@ function readFileAsBase64(file) {
     reader.onload = () => resolve(String(reader.result).split(",").pop());
     reader.readAsDataURL(file);
   });
+}
+
+async function refreshDocumentIntelligence() {
+  if (!backendAvailable) {
+    showToast("Document intelligence requires the backend");
+    return;
+  }
+  state.documentIntelligence = await apiRequest("/api/document-intelligence/dashboard");
+  persist();
+  renderDocumentIntelligence();
+}
+
+async function submitDocumentIntelligenceUpload(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Document upload requires the backend");
+    return;
+  }
+  const file = $("#document-intelligence-file").files?.[0] || null;
+  const textContent = $("#document-intelligence-text").value.trim();
+  const sourceUrl = $("#document-intelligence-url").value.trim();
+  const title = $("#document-intelligence-title").value.trim() || file?.name || sourceUrl || "Document";
+  if (!file && !textContent && !sourceUrl) {
+    showToast("Upload a file, paste text, or add an exact file URL");
+    return;
+  }
+  try {
+    showToast("Processing document content...");
+    const body = {
+      projectProfileId: $("#document-intelligence-project").value || null,
+      title,
+      documentType: $("#document-intelligence-type").value,
+      sourceUrl,
+      sourceType: file ? "upload" : textContent ? "pasted_text" : "link",
+      fileName: file?.name || "",
+      fileType: file?.name?.split(".").pop() || "",
+      mimeType: file?.type || "",
+      fileSize: file?.size || 0,
+      textContent,
+      contentBase64: file ? await readFileAsBase64(file) : "",
+      tags: $("#document-intelligence-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean),
+      userAction: "ui:document-intelligence:process-document",
+    };
+    const result = await apiRequest("/api/document-intelligence/documents", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    await refreshDocumentIntelligence();
+    currentDocumentQuestionResult = null;
+    $("#document-question-document").value = String(result.document?.id || "");
+    $("#document-intelligence-upload-form").reset();
+    showToast(`${result.document?.chunkCount || 0} document chunk(s) indexed`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function searchDocuments(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Document search requires the backend");
+    return;
+  }
+  const query = $("#document-search-query").value.trim();
+  if (!query) {
+    showToast("Enter a document search topic");
+    return;
+  }
+  $("#document-search-results").innerHTML = '<div class="ai-loading">Searching indexed document chunks...</div>';
+  try {
+    const result = await apiRequest(`/api/document-intelligence/search?q=${encodeURIComponent(query)}&limit=10`);
+    renderDocumentSearchResults(result);
+  } catch (error) {
+    $("#document-search-results").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
+}
+
+async function askDocumentQuestion(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Document QA requires the backend");
+    return;
+  }
+  const question = $("#document-question-input").value.trim();
+  if (!question) {
+    showToast("Enter a document question");
+    return;
+  }
+  $("#document-question-output").innerHTML = '<div class="ai-loading">Alfred is reading the retrieved document chunks...</div>';
+  try {
+    const result = await apiRequest("/api/ai/document-question", {
+      method: "POST",
+      body: JSON.stringify({
+        question,
+        documentId: $("#document-question-document").value || null,
+        userAction: "ui:document-intelligence:ask-document-question",
+      }),
+    });
+    currentDocumentQuestionResult = result;
+    renderDocumentQuestionResult(result);
+  } catch (error) {
+    $("#document-question-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+  }
 }
 
 async function importOrderBookFile(event) {
@@ -4383,7 +4646,7 @@ function runCommand(command) {
   } else if (normalized.includes("opportun")) {
     navigate("companies");
     showToast(`${openItems().filter((item) => item.type === "opportunity").length} active opportunity record(s)`);
-  } else if (normalized.includes("monday") || normalized.includes("workload") || normalized.includes("blocked work") || normalized.includes("work queue") || normalized.includes("deliverable")) {
+  } else if ((normalized.includes("monday") || normalized.includes("workload") || normalized.includes("blocked work") || normalized.includes("work queue") || normalized.includes("deliverable")) && !(normalized.includes("bim") || normalized.includes("document") || normalized.includes("eir") || normalized.includes("bep") || normalized.includes("midp") || normalized.includes("tidp") || normalized.includes("cobie"))) {
     navigate("monday");
     if (backendAvailable) refreshMondayOperating();
   } else if (normalized.includes("meeting") || normalized.includes("teams") || normalized.includes("transcript") || normalized.includes("follow up")) {
@@ -4399,6 +4662,26 @@ function runCommand(command) {
               ? "financial concerns"
               : "risk";
       $("#meeting-search-form").requestSubmit();
+    }
+  } else if (normalized.includes("document") || normalized.includes("eir") || normalized.includes("bep") || normalized.includes("midp") || normalized.includes("tidp") || normalized.includes("cobie") || normalized.includes("deliverable") || normalized.includes("naming convention")) {
+    navigate("documents");
+    if (backendAvailable) {
+      $("#document-search-query").value = normalized.includes("naming")
+        ? "naming convention"
+        : normalized.includes("deliverable")
+          ? "BIM deliverables"
+          : normalized.includes("cobie")
+            ? "COBie"
+            : normalized.includes("eir")
+              ? "EIR"
+              : normalized.includes("bep")
+                ? "BEP"
+                : normalized.includes("midp")
+                  ? "MIDP"
+                  : normalized.includes("tidp")
+                    ? "TIDP"
+                    : command;
+      $("#document-search-form").requestSubmit();
     }
   } else if (normalized.includes("project") || normalized.includes("westminster") || normalized.includes("rbkc") || normalized.includes("islington") || normalized.includes("kspf")) {
     navigate("projects");
@@ -4447,6 +4730,9 @@ $("#analyse-property-opportunity").addEventListener("click", analyseSelectedProp
 $("#property-search-form").addEventListener("submit", searchProperty);
 $("#discover-projects").addEventListener("click", discoverProjectMetadata);
 $("#project-search-form").addEventListener("submit", searchProjects);
+$("#document-intelligence-upload-form").addEventListener("submit", submitDocumentIntelligenceUpload);
+$("#document-search-form").addEventListener("submit", searchDocuments);
+$("#document-question-form").addEventListener("submit", askDocumentQuestion);
 $("#import-meetings").addEventListener("click", importMeetingMetadata);
 $("#meeting-feedback-form").addEventListener("submit", submitMeetingFeedback);
 $("#meeting-search-form").addEventListener("submit", searchMeetings);

@@ -90,6 +90,19 @@ import {
   saveDocumentReview,
 } from "./document-review.js";
 import {
+  DOCUMENT_INTELLIGENCE_BOUNDARY,
+  buildDocumentQaInput,
+  createDocumentIntelligenceDocument,
+  deterministicDocumentAnswer,
+  documentIntelligenceBriefingForDaily,
+  getDocumentChunksByIds,
+  getDocumentIntelligenceDocument,
+  listDocumentIntelligenceAudit,
+  listDocumentIntelligenceDashboard,
+  recordDocumentIntelligenceAudit,
+  searchDocumentChunks,
+} from "./document-intelligence.js";
+import {
   LIAM_READ_ONLY_BOUNDARY,
   buildLiamAnalysisInput,
   createPowerPlatformDecision,
@@ -328,6 +341,30 @@ async function handleApi(request, response, url) {
       limit: url.searchParams.get("limit") || 8,
     });
     return sendJson(response, 200, result);
+  }
+  if (url.pathname === "/api/search" && request.method === "GET") {
+    const query = url.searchParams.get("q") || "";
+    const limit = url.searchParams.get("limit") || 8;
+    const [memory, documents] = await Promise.all([
+      semanticMemory.search(query, { limit }).catch(() => ({ results: [] })),
+      retrieveDocumentQuestionContext(query, { limit }).catch(() => ({ chunks: [], semantic: false })),
+    ]);
+    return sendJson(response, 200, {
+      query,
+      documents: documents.chunks || [],
+      meetings: searchMeetingKnowledge(db, query),
+      memory: memory.results || [],
+      projects: searchProjectKnowledge(db, query),
+      property: searchPropertyKnowledge(db, query),
+      agents: listResource(db, "agents")
+        .filter((agent) => `${agent.name} ${agent.role} ${agent.department} ${agent.mission}`.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, Number(limit) || 8),
+      boundary: {
+        readOnly: true,
+        externalWritesEnabled: false,
+        sourceSystemsModified: [],
+      },
+    });
   }
   if (url.pathname === "/api/voice/status" && request.method === "GET") {
     return sendJson(response, 200, syncVoiceStatus());
@@ -765,6 +802,146 @@ async function handleApi(request, response, url) {
       userAction: body.userAction || "api:document-review:create-source",
     });
     return sendJson(response, 201, { source, boundary: DOCUMENT_REVIEW_BOUNDARY });
+  }
+  if (url.pathname === "/api/document-intelligence/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, listDocumentIntelligenceDashboard(db));
+  }
+  if (url.pathname === "/api/document-intelligence/audit" && request.method === "GET") {
+    return sendJson(response, 200, listDocumentIntelligenceAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/document-intelligence/documents" && request.method === "POST") {
+    const body = await readJson(request);
+    const document = createDocumentIntelligenceDocument(db, {
+      ...body,
+      userAction: body.userAction || "api:document-intelligence:upload",
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 201, { document, boundary: DOCUMENT_INTELLIGENCE_BOUNDARY });
+  }
+  const documentIntelligenceDetailMatch = url.pathname.match(/^\/api\/document-intelligence\/documents\/(\d+)$/);
+  if (documentIntelligenceDetailMatch && request.method === "GET") {
+    const document = getDocumentIntelligenceDocument(db, Number(documentIntelligenceDetailMatch[1]), {
+      includeChunks: true,
+      includeText: url.searchParams.get("includeText") === "true",
+    });
+    if (!document) return sendJson(response, 404, { error: "Document not found" });
+    recordDocumentIntelligenceAudit(db, {
+      eventType: "document_viewed",
+      userAction: "api:document-intelligence:view-document",
+      documentId: document.id,
+      projectProfileId: document.projectProfileId,
+      dataCategories: ["document_metadata", "document_chunks"],
+      model: "local-document-view",
+      metadata: { includeText: url.searchParams.get("includeText") === "true" },
+    });
+    return sendJson(response, 200, { document, boundary: DOCUMENT_INTELLIGENCE_BOUNDARY });
+  }
+  if (url.pathname === "/api/document-intelligence/search" && request.method === "GET") {
+    const query = url.searchParams.get("q") || "";
+    const projectProfileId = url.searchParams.get("projectProfileId") || null;
+    const documentId = url.searchParams.get("documentId") || null;
+    const context = await retrieveDocumentQuestionContext(query, {
+      projectProfileId,
+      documentId,
+      limit: url.searchParams.get("limit") || 10,
+    });
+    recordDocumentIntelligenceAudit(db, {
+      eventType: "document_search",
+      userAction: "api:document-intelligence:search",
+      documentId,
+      projectProfileId,
+      dataCategories: ["document_chunks", context.semantic ? "semantic_memory" : "keyword_fallback"],
+      model: context.semantic ? semanticMemory.status().model : "keyword-document-search-v1",
+      metadata: { resultCount: context.chunks.length, semantic: context.semantic, query },
+    });
+    return sendJson(response, 200, {
+      query,
+      semantic: context.semantic,
+      fallback: context.semantic ? "" : "keyword",
+      results: context.chunks,
+      semanticMemory: context.semanticResult?.results || [],
+      boundary: DOCUMENT_INTELLIGENCE_BOUNDARY,
+    });
+  }
+  if (url.pathname === "/api/ai/document-question" && request.method === "POST") {
+    const body = await readJson(request);
+    const question = String(body.question || "").trim();
+    if (!question) return sendJson(response, 400, { error: "question is required" });
+    const documentId = body.documentId ? Number(body.documentId) : null;
+    const projectProfileId = body.projectProfileId ? Number(body.projectProfileId) : null;
+    const context = await retrieveDocumentQuestionContext(question, {
+      documentId,
+      projectProfileId,
+      limit: body.limit || 8,
+    });
+    const input = buildDocumentQaInput(db, {
+      question,
+      documentId,
+      projectProfileId,
+      retrievedChunks: context.chunks,
+      semanticMemory: context.semanticResult?.results || [],
+    });
+    let analysis;
+    let model = context.semantic ? semanticMemory.status().model : "keyword-document-search-v1";
+    let aiFallbackUsed = false;
+    let fallbackReason = "";
+    try {
+      const result = await aiReasoning.answerDocumentQuestion(input, {
+        userAction: body.userAction || "api:ai-document-question",
+        dataCategories: compactCategories([
+          "document_chunks",
+          context.semantic ? "semantic_memory" : "keyword_fallback",
+          projectProfileId ? "project_profile" : "",
+        ]),
+      });
+      analysis = result.analysis;
+      model = result.model;
+    } catch (error) {
+      aiFallbackUsed = true;
+      fallbackReason = error.code || "AI_DOCUMENT_QA_UNAVAILABLE";
+      analysis = deterministicDocumentAnswer({
+        question,
+        chunks: context.chunks,
+        semantic: context.semantic,
+      });
+      recordDocumentIntelligenceAudit(db, {
+        eventType: "ai_document_question_fallback",
+        userAction: body.userAction || "api:ai-document-question",
+        documentId,
+        projectProfileId,
+        dataCategories: ["document_chunks", context.semantic ? "semantic_memory" : "keyword_fallback"],
+        model: anthropic.model,
+        status: "error",
+        errorCode: fallbackReason,
+        metadata: { message: error.message },
+      });
+    }
+    recordDocumentIntelligenceAudit(db, {
+      eventType: "document_question_answered",
+      userAction: body.userAction || "api:ai-document-question",
+      documentId,
+      projectProfileId,
+      dataCategories: ["document_chunks", context.semantic ? "semantic_memory" : "keyword_fallback"],
+      outputSaved: false,
+      model,
+      metadata: {
+        chunkCount: context.chunks.length,
+        semantic: context.semantic,
+        aiFallbackUsed,
+        fallbackReason,
+        externalWriteAttempted: false,
+      },
+    });
+    return sendJson(response, 200, {
+      analysis,
+      model,
+      retrievedChunks: context.chunks,
+      semantic: context.semantic,
+      aiFallbackUsed,
+      fallbackReason,
+      boundary: DOCUMENT_INTELLIGENCE_BOUNDARY,
+      executionAttempted: false,
+    });
   }
   if (url.pathname === "/api/ai/sarah/project-health-review" && request.method === "POST") {
     const body = await readJson(request);
@@ -1365,6 +1542,7 @@ async function generateExecutiveBrief({ save = true } = {}) {
   brief.decisionPrompts = analysis.decisionPrompts;
   brief.executivePriorities = analysis.executivePriorities;
   brief.projectIntelligence = projectAttentionForBriefing(db);
+  brief.documentIntelligence = documentIntelligenceBriefingForDaily(db);
   brief.sarah = sarahBriefingForDaily(db);
   brief.liam = liamBriefingForDaily(db);
   brief.property = westbridgeBriefingForDaily(db);
@@ -1681,6 +1859,13 @@ function buildAiBriefingContext(briefing, body = {}) {
       projectsWithFinancialRisk: compactRecords(briefing.projectIntelligence?.projectsWithFinancialRisk || [], ["projectProfileId", "projectName", "financialSummary"], 6),
       projectsWithInformationQualityRisk: compactRecords(briefing.projectIntelligence?.projectsWithInformationQualityRisk || [], ["projectProfileId", "projectName", "informationQuality"], 6),
     },
+    documentIntelligenceBrief: {
+      title: briefing.documentIntelligence?.title || "Document Intelligence Brief",
+      summary: briefing.documentIntelligence?.summary || "",
+      metrics: compactValue(briefing.documentIntelligence?.metrics || {}),
+      items: compactRecords(briefing.documentIntelligence?.items || [], ["title", "detail", "priority", "sourceReference"], 8),
+      boundary: briefing.documentIntelligence?.boundary || DOCUMENT_INTELLIGENCE_BOUNDARY,
+    },
     propertyBrief: {
       title: briefing.property?.title || "Westbridge Property Brief",
       summary: briefing.property?.summary || "",
@@ -1928,6 +2113,44 @@ async function liveBetaStatus() {
     microsoftStatus,
     uptimeSeconds: Math.round((Date.now() - SERVER_STARTED_AT) / 1000),
   });
+}
+
+async function retrieveDocumentQuestionContext(question, { documentId = null, projectProfileId = null, limit = 8 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 8, 1), 12);
+  let semanticResult = null;
+  let semanticChunks = [];
+  try {
+    semanticResult = await semanticMemory.search(question, { limit: Math.max(safeLimit * 3, 12) });
+    const semanticMatches = (semanticResult.results || [])
+      .filter((record) => record.sourceType === "document_chunk")
+      .slice(0, safeLimit * 2);
+    const relevanceById = Object.fromEntries(semanticMatches.map((record) => [
+      String(record.sourceId),
+      Number(record.relevanceScore || 0),
+    ]));
+    semanticChunks = getDocumentChunksByIds(db, semanticMatches.map((record) => record.sourceId), relevanceById)
+      .filter((chunk) => !documentId || Number(chunk.documentId) === Number(documentId))
+      .filter((chunk) => !projectProfileId || Number(chunk.projectProfileId) === Number(projectProfileId));
+  } catch (error) {
+    semanticResult = {
+      semantic: false,
+      errorCode: error.code || "SEMANTIC_DOCUMENT_SEARCH_UNAVAILABLE",
+      message: error.message,
+      results: [],
+    };
+  }
+
+  const keyword = searchDocumentChunks(db, question, { documentId, projectProfileId, limit: safeLimit });
+  const byReference = new Map();
+  for (const chunk of [...semanticChunks, ...keyword.results]) {
+    if (!byReference.has(chunk.sourceReference)) byReference.set(chunk.sourceReference, chunk);
+  }
+  return {
+    chunks: [...byReference.values()].slice(0, safeLimit),
+    semantic: Boolean(semanticResult?.semantic && semanticChunks.length),
+    semanticResult,
+    keyword,
+  };
 }
 
 async function tryIndexSemanticMemory() {

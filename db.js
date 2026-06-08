@@ -770,6 +770,67 @@ const SCHEMA = `
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS document_intelligence_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    company_id TEXT REFERENCES companies(id) ON DELETE SET NULL,
+    business_entity_id TEXT NOT NULL DEFAULT '',
+    client_name TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    file_name TEXT NOT NULL DEFAULT '',
+    file_type TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'upload' CHECK(source_type IN ('upload', 'link', 'microsoft', 'pasted_text')),
+    source_url TEXT NOT NULL DEFAULT '',
+    source_system TEXT NOT NULL DEFAULT 'alfred',
+    author TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
+    document_type TEXT NOT NULL DEFAULT 'Unknown',
+    text_content TEXT NOT NULL DEFAULT '',
+    text_sha256 TEXT NOT NULL DEFAULT '',
+    extraction_status TEXT NOT NULL DEFAULT 'metadata_only' CHECK(extraction_status IN ('extracted', 'partial', 'metadata_only', 'failed')),
+    extraction_message TEXT NOT NULL DEFAULT '',
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    sensitivity_label TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS document_intelligence_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL REFERENCES document_intelligence_documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    chunk_text TEXT NOT NULL DEFAULT '',
+    heading TEXT NOT NULL DEFAULT '',
+    page_number INTEGER,
+    token_estimate INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL DEFAULT '',
+    embedding_status TEXT NOT NULL DEFAULT 'pending' CHECK(embedding_status IN ('pending', 'indexed', 'unavailable', 'failed')),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(document_id, chunk_index)
+  );
+
+  CREATE TABLE IF NOT EXISTS document_intelligence_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    document_id INTEGER REFERENCES document_intelligence_documents(id) ON DELETE SET NULL,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS project_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -1205,6 +1266,18 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS client_response_drafts_project
   ON client_response_drafts(project_profile_id, created_at);
+
+  CREATE INDEX IF NOT EXISTS document_intelligence_documents_project
+  ON document_intelligence_documents(project_profile_id, document_type, updated_at);
+
+  CREATE INDEX IF NOT EXISTS document_intelligence_documents_hash
+  ON document_intelligence_documents(text_sha256);
+
+  CREATE INDEX IF NOT EXISTS document_intelligence_chunks_document
+  ON document_intelligence_chunks(document_id, chunk_index);
+
+  CREATE INDEX IF NOT EXISTS document_intelligence_audit_created
+  ON document_intelligence_audit_events(created_at);
 
   CREATE INDEX IF NOT EXISTS project_tags_profile
   ON project_tags(project_profile_id, domain_id);
@@ -4669,6 +4742,72 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.client_name ? `Client: ${row.client_name}.` : "",
         String(row.draft_body_markdown || "").slice(0, 1000),
         "No email was sent. Draft requires Patrick approval before external use.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const documentIntelligenceDocuments = db.prepare(`
+    SELECT d.*, p.project_name, p.client_name AS project_client_name
+    FROM document_intelligence_documents d
+    LEFT JOIN project_profiles p ON p.id = d.project_profile_id
+    ORDER BY d.updated_at DESC, d.id DESC
+    LIMIT 300
+  `).all();
+  for (const row of documentIntelligenceDocuments) {
+    const tags = safeJsonParse(row.tags, []);
+    records.push(semanticRecord({
+      sourceType: "document",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: row.title || row.file_name || "Document",
+      sensitivityCategory: row.sensitivity_label || "local_sensitive_business_data",
+      summary: [
+        `Document intelligence record: ${row.title || row.file_name || "Untitled document"}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name || row.project_client_name ? `Client: ${row.client_name || row.project_client_name}.` : "",
+        `Type: ${row.document_type || "Unknown"}.`,
+        `Source: ${row.source_type || "upload"}.`,
+        row.source_url ? `Exact file link: ${row.source_url}.` : "",
+        `Extraction status: ${row.extraction_status}.`,
+        `Chunks indexed: ${row.chunk_count || 0}.`,
+        tags.length ? `Tags: ${tags.join(", ")}.` : "",
+        row.extraction_status === "extracted"
+          ? `Text preview: ${String(row.text_content || "").slice(0, 900)}.`
+          : row.extraction_message,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const documentIntelligenceChunks = db.prepare(`
+    SELECT
+      c.*,
+      d.title AS document_title,
+      d.file_name,
+      d.document_type,
+      d.sensitivity_label,
+      p.project_name,
+      p.client_name
+    FROM document_intelligence_chunks c
+    JOIN document_intelligence_documents d ON d.id = c.document_id
+    LEFT JOIN project_profiles p ON p.id = d.project_profile_id
+    ORDER BY d.updated_at DESC, c.document_id DESC, c.chunk_index ASC
+    LIMIT 900
+  `).all();
+  for (const row of documentIntelligenceChunks) {
+    records.push(semanticRecord({
+      sourceType: "document_chunk",
+      sourceId: row.id,
+      sourceCreatedAt: row.updated_at || row.created_at,
+      title: `${row.document_title || row.file_name || "Document"} chunk ${Number(row.chunk_index || 0) + 1}`,
+      sensitivityCategory: row.sensitivity_label || "local_sensitive_business_data",
+      summary: [
+        `Document content chunk ${Number(row.chunk_index || 0) + 1}.`,
+        `Document: ${row.document_title || row.file_name || "Untitled document"}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        `Type: ${row.document_type || "Unknown"}.`,
+        row.heading ? `Heading/context: ${row.heading}.` : "",
+        String(row.chunk_text || "").slice(0, 1600),
       ].filter(Boolean).join(" "),
     }));
   }

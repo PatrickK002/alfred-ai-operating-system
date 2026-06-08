@@ -1392,3 +1392,60 @@ An optional feedback note can be stored with the rating.
 | `POST` | `/api/briefings/{id}/feedback` | Store a useful/not-useful rating and optional note |
 
 Briefing snapshots can contain email previews, meeting context and other business information. The SQLite database must therefore be treated as sensitive local data and should use encrypted storage and formal retention controls before production deployment.
+
+## Document Intelligence and RAG
+
+Alfred now has a first-class document intelligence layer for grounded question answering from document contents, not metadata alone.
+
+Phase 1 supports:
+
+- PDF text extraction for text-based PDFs
+- DOCX extraction from Word document XML
+- TXT and Markdown extraction
+- Local SQLite document and chunk storage
+- Voyage semantic retrieval when configured
+- Keyword retrieval fallback when Voyage is unavailable
+- Claude document QA when configured, with deterministic local fallback
+- Source citations using `document:{id}` and `document_chunk:{id}`
+
+Scanned PDFs, images, PPTX and XLSX content extraction remain future placeholders. Exact file links can be stored now, but Alfred does not scrape or download private links unless a future read-only connector explicitly supports that.
+
+### Document Workflow
+
+```text
+Document Upload / Exact Link / Pasted Text
+  -> local text extraction
+  -> chunk generation
+  -> SQLite source-of-truth records
+  -> optional Voyage semantic indexing
+  -> document chunk retrieval
+  -> grounded answer generation with citations
+```
+
+Embeddings are never stored in the frontend. Full extracted text and chunks live in SQLite as sensitive local business data.
+
+### Document Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/document-intelligence/dashboard` | Document metrics, indexed library and recent audit events |
+| `POST` | `/api/document-intelligence/documents` | Process PDF/DOCX/TXT/MD, exact link or pasted text into SQLite chunks |
+| `GET` | `/api/document-intelligence/documents/{id}` | Read document metadata and chunks |
+| `GET` | `/api/document-intelligence/search?q=...` | Search document chunks using Voyage when available, keyword fallback otherwise |
+| `POST` | `/api/ai/document-question` | Ask Alfred a question answered only from retrieved document chunks |
+| `GET` | `/api/document-intelligence/audit` | Metadata-only audit trail for document access and QA |
+| `GET` | `/api/search?q=...` | Global read-only search across documents, meetings, memory, projects, property and agents |
+
+### Security Boundary
+
+Document Intelligence is read-only:
+
+- No document editing
+- No document deletion
+- No SharePoint or OneDrive writes
+- No email sending
+- No external system modification
+- No autonomous execution
+- All document ingestion, search and QA access is audited
+
+Claude is instructed to answer only from retrieved document chunks. If the evidence is missing, Alfred must say so rather than infer from file names or metadata.

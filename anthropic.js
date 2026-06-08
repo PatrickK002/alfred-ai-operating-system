@@ -461,6 +461,59 @@ export const DOCUMENT_REVIEW_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+export const DOCUMENT_QA_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    answer: { type: "string" },
+    directAnswer: { type: "string" },
+    evidence: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          explanation: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["quote", "explanation", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    retrievedSections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          documentId: { type: "number" },
+          chunkId: { type: "number" },
+          chunkIndex: { type: "number" },
+          documentTitle: { type: "string" },
+          sourceReference: { type: "string" },
+          relevanceScore: { type: "number" },
+          excerpt: { type: "string" },
+        },
+        required: ["documentId", "chunkId", "chunkIndex", "documentTitle", "sourceReference", "relevanceScore", "excerpt"],
+        additionalProperties: false,
+      },
+    },
+    confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+    assumptions: { type: "array", items: { type: "string" } },
+    sourceRecordReferences: { type: "array", items: sourceReferenceSchema },
+    notAnsweredReason: { type: "string" },
+  },
+  required: [
+    "answer",
+    "directAnswer",
+    "evidence",
+    "retrievedSections",
+    "confidenceLevel",
+    "assumptions",
+    "sourceRecordReferences",
+    "notAnsweredReason",
+  ],
+  additionalProperties: false,
+};
+
 export const VOICE_COMMAND_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -597,6 +650,16 @@ export class AnthropicClient {
       input,
       schema: DOCUMENT_REVIEW_OUTPUT_SCHEMA,
       maxTokens: 3000,
+    });
+  }
+
+  async answerDocumentQuestion(input) {
+    return this.requestStructured({
+      analysisType: "document_question_answering",
+      instruction: "Answer Patrick's question using only the retrieved document chunks supplied in the input. Cite document_chunk source references for every material answer. If the chunks do not answer the question, say that clearly in notAnsweredReason and do not infer from metadata. Never claim to have read full documents beyond the supplied chunks. Do not execute or propose any external write action.",
+      input,
+      schema: DOCUMENT_QA_OUTPUT_SCHEMA,
+      maxTokens: 2200,
     });
   }
 

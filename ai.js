@@ -90,6 +90,15 @@ export function createAiReasoningService({ db, client, onConnected = () => {} })
         analyze: () => client.analyzeDocumentReview(input),
       });
     },
+    answerDocumentQuestion(input, metadata = {}) {
+      return run({
+        analysisType: "document_question_answering",
+        userAction: metadata.userAction || "api:ai-document-question",
+        dataCategories: metadata.dataCategories,
+        outputSaved: metadata.outputSaved ?? false,
+        analyze: () => client.answerDocumentQuestion(input),
+      });
+    },
     analyzeVoiceCommand(input, metadata = {}) {
       return run({
         analysisType: "voice_command",

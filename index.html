@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.16" />
+    <link rel="stylesheet" href="styles.css?v=0.4.17" />
   </head>
   <body>
     <div class="shell">
@@ -45,6 +45,9 @@
           </button>
           <button class="nav-item" data-view="projects">
             <span class="nav-icon">▣</span> Projects
+          </button>
+          <button class="nav-item" data-view="documents">
+            <span class="nav-icon">D</span> Documents
           </button>
           <button class="nav-item" data-view="meetings">
             <span class="nav-icon">T</span> Meetings
@@ -489,6 +492,133 @@
               <div class="empty-state">Search project records, document metadata, risks, actions, decisions and memory links.</div>
             </div>
           </section>
+        </section>
+
+        <section class="view" id="documents-view">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">DOCUMENT INTELLIGENCE</p>
+              <h2>Grounded document search</h2>
+              <p>Upload PDF, DOCX, TXT or MD files, index their contents, and ask Alfred questions with source citations.</p>
+            </div>
+            <div class="project-actions">
+              <span class="live-label"><i></i> READ ONLY</span>
+            </div>
+          </div>
+          <div class="approval-boundary project-boundary">
+            <strong>Read-only document intelligence</strong>
+            <span>Alfred may extract, chunk, search and answer from local document contents. It cannot edit, delete, send, publish or modify Microsoft 365, SharePoint, OneDrive or client systems.</span>
+          </div>
+          <div class="project-metrics" id="document-intelligence-metrics"></div>
+          <div class="document-intelligence-layout">
+            <section class="panel document-intelligence-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">INTAKE</p>
+                  <h3>Add document content</h3>
+                </div>
+              </div>
+              <form id="document-intelligence-upload-form" class="document-intelligence-form">
+                <label>
+                  Project
+                  <select id="document-intelligence-project"></select>
+                </label>
+                <label>
+                  Title
+                  <input id="document-intelligence-title" placeholder="KSPF EIR, Westminster BEP, meeting minutes..." />
+                </label>
+                <label>
+                  Document type
+                  <select id="document-intelligence-type">
+                    <option>EIR</option>
+                    <option>AIR</option>
+                    <option>BEP</option>
+                    <option>MIDP</option>
+                    <option>TIDP</option>
+                    <option>COBie</option>
+                    <option>Meeting minutes</option>
+                    <option>Reports</option>
+                    <option>Proposals</option>
+                    <option>Contracts</option>
+                    <option>Commercial</option>
+                    <option selected>Unknown</option>
+                  </select>
+                </label>
+                <label>
+                  Exact file URL
+                  <input id="document-intelligence-url" type="url" placeholder="OneDrive, SharePoint or client portal link" />
+                </label>
+                <label>
+                  Upload file
+                  <input id="document-intelligence-file" type="file" accept=".pdf,.docx,.txt,.md,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                </label>
+                <label class="wide">
+                  Paste text fallback
+                  <textarea id="document-intelligence-text" rows="6" placeholder="Paste relevant text if the file is scanned or extraction is unavailable."></textarea>
+                </label>
+                <label class="wide">
+                  Tags
+                  <input id="document-intelligence-tags" placeholder="BIM, GIS, COBie, Digital Twin, Westminster..." />
+                </label>
+                <button class="primary-button" type="submit">Process document</button>
+              </form>
+            </section>
+            <section class="panel document-intelligence-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">ASK</p>
+                  <h3>Ask Alfred about documents</h3>
+                </div>
+              </div>
+              <form id="document-question-form" class="document-question-form">
+                <select id="document-question-document">
+                  <option value="">All indexed documents</option>
+                </select>
+                <textarea id="document-question-input" rows="4" placeholder='Ask “What are the BIM deliverables?” or “What naming convention is required?”'></textarea>
+                <button class="secondary-button" type="submit">Ask from document content</button>
+              </form>
+              <div id="document-question-output" class="document-answer-output">
+                <div class="empty-state">Ask a question to get a grounded answer with document chunk citations.</div>
+              </div>
+            </section>
+          </div>
+          <section class="panel document-intelligence-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SEARCH</p>
+                <h3>Search indexed document content</h3>
+              </div>
+            </div>
+            <form id="document-search-form" class="project-search-form">
+              <input id="document-search-query" placeholder='Try “naming convention”, “BIM deliverables”, “COBie risk” or “meeting actions”' />
+              <button class="secondary-button" type="submit">Search Documents</button>
+            </form>
+            <div id="document-search-results" class="project-search-results">
+              <div class="empty-state">Search extracted document chunks. Voyage will be used when available; keyword search is the fallback.</div>
+            </div>
+          </section>
+          <div class="document-intelligence-layout">
+            <section class="panel document-intelligence-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">LIBRARY</p>
+                  <h3>Indexed documents</h3>
+                </div>
+              </div>
+              <div id="document-library"></div>
+            </section>
+            <section class="panel document-intelligence-panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">PREVIEW</p>
+                  <h3>Retrieved sections</h3>
+                </div>
+              </div>
+              <div id="document-preview-panel">
+                <div class="empty-state">Search results and answers will show retrieved sections here.</div>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="meetings-view">
@@ -1418,6 +1548,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.16"></script>
+    <script type="module" src="app.js?v=0.4.17"></script>
   </body>
 </html>
