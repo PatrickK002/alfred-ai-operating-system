@@ -2356,6 +2356,71 @@ h3 {
   gap: 12px;
 }
 
+.document-review-form {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.document-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.document-review-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.document-review-form input,
+.document-review-form textarea {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.document-review-form textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.document-review-disciplines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.document-review-disciplines label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.document-review-draft {
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.22);
+  line-height: 1.55;
+}
+
 .project-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

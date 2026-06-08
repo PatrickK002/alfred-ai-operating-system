@@ -699,6 +699,77 @@ const SCHEMA = `
   CREATE VIEW IF NOT EXISTS project_emails AS
     SELECT * FROM project_email_signals;
 
+  CREATE TABLE IF NOT EXISTS document_review_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    source_type TEXT NOT NULL DEFAULT 'link' CHECK(source_type IN ('link', 'upload', 'pasted_text', 'email')),
+    title TEXT NOT NULL DEFAULT '',
+    file_name TEXT NOT NULL DEFAULT '',
+    file_type TEXT NOT NULL DEFAULT '',
+    source_url TEXT NOT NULL DEFAULT '',
+    source_system TEXT NOT NULL DEFAULT 'alfred',
+    text_content TEXT NOT NULL DEFAULT '',
+    content_extracted INTEGER NOT NULL DEFAULT 0 CHECK(content_extracted IN (0, 1)),
+    content_sha256 TEXT NOT NULL DEFAULT '',
+    sensitivity_label TEXT NOT NULL DEFAULT 'local_sensitive_business_data',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS document_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    title TEXT NOT NULL DEFAULT '',
+    review_type TEXT NOT NULL DEFAULT 'client_requirement_review',
+    disciplines TEXT NOT NULL DEFAULT '[]',
+    client_requirements TEXT NOT NULL DEFAULT '',
+    incoming_email TEXT NOT NULL DEFAULT '',
+    source_ids TEXT NOT NULL DEFAULT '[]',
+    review_output TEXT NOT NULL DEFAULT '{}',
+    model TEXT NOT NULL DEFAULT 'deterministic-document-review-v1',
+    status TEXT NOT NULL DEFAULT 'draft_internal' CHECK(status IN ('draft_internal', 'superseded')),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS client_response_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    document_review_id INTEGER REFERENCES document_reviews(id) ON DELETE SET NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    recipient TEXT NOT NULL DEFAULT '',
+    incoming_email TEXT NOT NULL DEFAULT '',
+    draft_body_markdown TEXT NOT NULL DEFAULT '',
+    draft_format TEXT NOT NULL DEFAULT 'digitize_progress_response',
+    source_references TEXT NOT NULL DEFAULT '[]',
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    model TEXT NOT NULL DEFAULT 'deterministic-client-response-v1',
+    status TEXT NOT NULL DEFAULT 'draft_only' CHECK(status IN ('draft_only', 'superseded')),
+    send_enabled INTEGER NOT NULL DEFAULT 0 CHECK(send_enabled IN (0, 1)),
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS document_review_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    user_action TEXT NOT NULL DEFAULT '',
+    project_profile_id INTEGER REFERENCES project_profiles(id) ON DELETE SET NULL,
+    data_categories TEXT NOT NULL DEFAULT '[]',
+    output_saved INTEGER NOT NULL DEFAULT 1 CHECK(output_saved IN (0, 1)),
+    model TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'error')),
+    error_code TEXT NOT NULL DEFAULT '',
+    execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK(execution_attempted IN (0, 1)),
+    external_write_attempted INTEGER NOT NULL DEFAULT 0 CHECK(external_write_attempted IN (0, 1)),
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS project_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_profile_id INTEGER NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -1125,6 +1196,15 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS project_email_signals_profile
   ON project_email_signals(project_profile_id, received_datetime);
+
+  CREATE INDEX IF NOT EXISTS document_review_sources_project
+  ON document_review_sources(project_profile_id, created_at);
+
+  CREATE INDEX IF NOT EXISTS document_reviews_project
+  ON document_reviews(project_profile_id, created_at);
+
+  CREATE INDEX IF NOT EXISTS client_response_drafts_project
+  ON client_response_drafts(project_profile_id, created_at);
 
   CREATE INDEX IF NOT EXISTS project_tags_profile
   ON project_tags(project_profile_id, domain_id);
@@ -4516,6 +4596,79 @@ export function listSemanticSourceRecords(db, { briefingLimit = 10, includeMicro
         row.body_preview,
         `Association: ${row.association_reason || "metadata match"}.`,
         "Raw full email content was not indexed.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const documentReviewSources = db.prepare(`
+    SELECT s.*, p.project_name, p.client_name
+    FROM document_review_sources s
+    LEFT JOIN project_profiles p ON p.id = s.project_profile_id
+    ORDER BY s.created_at DESC, s.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of documentReviewSources) {
+    records.push(semanticRecord({
+      sourceType: "document_review_source",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: row.title || row.file_name || "Document review source",
+      summary: [
+        `Document review source: ${row.title || row.file_name || "Untitled source"}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        row.source_url ? `Exact file link captured: ${row.source_url}.` : "",
+        row.content_extracted ? `Extracted text summary: ${String(row.text_content || "").slice(0, 900)}.` : "Full document content was not extracted.",
+        `Sensitivity: ${row.sensitivity_label}.`,
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const documentReviews = db.prepare(`
+    SELECT r.*, p.project_name, p.client_name
+    FROM document_reviews r
+    LEFT JOIN project_profiles p ON p.id = r.project_profile_id
+    ORDER BY r.created_at DESC, r.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of documentReviews) {
+    const output = safeJsonParse(row.review_output, {});
+    records.push(semanticRecord({
+      sourceType: "document_review",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: row.title || "Document review",
+      summary: [
+        `Sarah document review: ${row.title || "Untitled review"}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        output.executiveSummary,
+        output.requirementChecks?.length ? `Requirements checked: ${output.requirementChecks.length}.` : "",
+        output.riskIssueLog?.length ? `Risk issues: ${output.riskIssueLog.map((risk) => risk.issue).slice(0, 5).join("; ")}.` : "",
+        "Review is advisory and draft-only; no external write action occurred.",
+      ].filter(Boolean).join(" "),
+    }));
+  }
+
+  const clientResponseDrafts = db.prepare(`
+    SELECT d.*, p.project_name, p.client_name
+    FROM client_response_drafts d
+    LEFT JOIN project_profiles p ON p.id = d.project_profile_id
+    ORDER BY d.created_at DESC, d.id DESC
+    LIMIT 200
+  `).all();
+  for (const row of clientResponseDrafts) {
+    records.push(semanticRecord({
+      sourceType: "client_response_draft",
+      sourceId: row.id,
+      sourceCreatedAt: row.created_at,
+      title: row.subject || "Client response draft",
+      summary: [
+        `Draft-only client response: ${row.subject || "Untitled draft"}.`,
+        row.project_name ? `Project: ${row.project_name}.` : "",
+        row.client_name ? `Client: ${row.client_name}.` : "",
+        String(row.draft_body_markdown || "").slice(0, 1000),
+        "No email was sent. Draft requires Patrick approval before external use.",
       ].filter(Boolean).join(" "),
     }));
   }

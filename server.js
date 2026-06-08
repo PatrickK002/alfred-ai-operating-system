@@ -77,6 +77,19 @@ import {
   sarahBriefingForDaily,
 } from "./sarah.js";
 import {
+  DOCUMENT_REVIEW_BOUNDARY,
+  buildDocumentReviewInput,
+  createDocumentReviewSource,
+  deterministicDocumentReview,
+  formatClientResponseMarkdown,
+  getDocumentReview,
+  listDocumentReviewAudit,
+  listDocumentReviewDashboard,
+  recordDocumentReviewAudit,
+  saveClientResponseDraft,
+  saveDocumentReview,
+} from "./document-review.js";
+import {
   LIAM_READ_ONLY_BOUNDARY,
   buildLiamAnalysisInput,
   createPowerPlatformDecision,
@@ -737,6 +750,22 @@ async function handleApi(request, response, url) {
   if (url.pathname === "/api/sarah/audit" && request.method === "GET") {
     return sendJson(response, 200, listSarahAudit(db, url.searchParams.get("limit") || 50));
   }
+  if (url.pathname === "/api/document-review/dashboard" && request.method === "GET") {
+    return sendJson(response, 200, listDocumentReviewDashboard(db, {
+      projectProfileId: url.searchParams.get("projectProfileId") || null,
+    }));
+  }
+  if (url.pathname === "/api/document-review/audit" && request.method === "GET") {
+    return sendJson(response, 200, listDocumentReviewAudit(db, url.searchParams.get("limit") || 50));
+  }
+  if (url.pathname === "/api/document-review/sources" && request.method === "POST") {
+    const body = await readJson(request);
+    const source = createDocumentReviewSource(db, {
+      ...body,
+      userAction: body.userAction || "api:document-review:create-source",
+    });
+    return sendJson(response, 201, { source, boundary: DOCUMENT_REVIEW_BOUNDARY });
+  }
   if (url.pathname === "/api/ai/sarah/project-health-review" && request.method === "POST") {
     const body = await readJson(request);
     if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
@@ -752,6 +781,161 @@ async function handleApi(request, response, url) {
       deliverableType: body.deliverableType,
       userAction: body.userAction || "sarah:draft-deliverable",
     }));
+  }
+  if (url.pathname === "/api/ai/document-review-client-response" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.projectProfileId) return sendJson(response, 400, { error: "projectProfileId is required" });
+    const createdSources = [];
+    for (const source of body.sources || []) {
+      createdSources.push(createDocumentReviewSource(db, {
+        ...source,
+        projectProfileId: body.projectProfileId,
+        userAction: body.userAction || "api:document-review:create-source",
+      }));
+    }
+    const sourceIds = [
+      ...(body.sourceIds || []),
+      ...createdSources.map((source) => source.id),
+    ];
+    const input = buildDocumentReviewInput(db, {
+      projectProfileId: Number(body.projectProfileId),
+      sourceIds,
+      clientRequirements: body.clientRequirements || "",
+      incomingEmail: body.incomingEmail || "",
+      disciplines: body.disciplines || [],
+    });
+    let analysis;
+    let model = "deterministic-document-review-v1";
+    let aiFallbackUsed = false;
+    let fallbackReason = "";
+    try {
+      const result = await aiReasoning.analyzeDocumentReview(input, {
+        userAction: body.userAction || "api:document-review-client-response",
+        dataCategories: compactCategories([
+          "document_review_source",
+          input.sources.some((source) => source.contentExtracted) ? "document_text" : "document_metadata",
+          input.clientRequirements ? "client_requirements" : "",
+          input.incomingEmail ? "incoming_email" : "",
+          "sarah_consultant_review",
+          "client_response_draft",
+        ]),
+      });
+      analysis = result.analysis;
+      model = result.model;
+    } catch (error) {
+      aiFallbackUsed = true;
+      fallbackReason = error.code || "AI_DOCUMENT_REVIEW_UNAVAILABLE";
+      analysis = deterministicDocumentReview(input);
+      recordDocumentReviewAudit(db, {
+        eventType: "ai_document_review_fallback",
+        userAction: body.userAction || "api:document-review-client-response",
+        projectProfileId: Number(body.projectProfileId),
+        dataCategories: ["document_review_source", "client_requirements", "incoming_email"],
+        model: anthropic.model,
+        status: "error",
+        errorCode: fallbackReason,
+        metadata: { message: error.message },
+      });
+    }
+    const review = saveDocumentReview(db, {
+      projectProfileId: Number(body.projectProfileId),
+      title: `${input.projectProfile?.projectName || "Project"} client requirement review`,
+      disciplines: input.disciplines,
+      clientRequirements: input.clientRequirements,
+      incomingEmail: input.incomingEmail,
+      sourceIds,
+      reviewOutput: analysis,
+      model,
+    });
+    const draftBodyMarkdown = formatClientResponseMarkdown({
+      analysis,
+      projectName: input.projectProfile?.projectName,
+      clientName: input.clientName,
+      incomingEmail: input.incomingEmail,
+    });
+    const draft = saveClientResponseDraft(db, {
+      projectProfileId: Number(body.projectProfileId),
+      documentReviewId: review.id,
+      subject: body.subject || "",
+      recipient: body.recipient || "",
+      incomingEmail: input.incomingEmail,
+      draftBodyMarkdown,
+      sourceReferences: analysis.sourceRecordReferences || input.sourceRecordReferences,
+      assumptions: analysis.assumptions || [],
+      model,
+    });
+    recordDocumentReviewAudit(db, {
+      eventType: "review_and_draft_created",
+      userAction: body.userAction || "api:document-review-client-response",
+      projectProfileId: Number(body.projectProfileId),
+      dataCategories: compactCategories([
+        "document_review_source",
+        input.sources.some((source) => source.contentExtracted) ? "document_text" : "document_metadata",
+        input.clientRequirements ? "client_requirements" : "",
+        input.incomingEmail ? "incoming_email" : "",
+        "client_response_draft",
+      ]),
+      model,
+      metadata: {
+        reviewId: review.id,
+        draftId: draft.id,
+        sourceIds,
+        aiFallbackUsed,
+        fallbackReason,
+        sendEnabled: false,
+        externalWriteAttempted: false,
+      },
+    });
+    await tryIndexSemanticMemory();
+    return sendJson(response, 200, {
+      analysis,
+      review,
+      draft,
+      sources: input.sources,
+      boundary: DOCUMENT_REVIEW_BOUNDARY,
+      aiFallbackUsed,
+      fallbackReason,
+      executionAttempted: false,
+      externalWriteAttempted: false,
+    });
+  }
+  if (url.pathname === "/api/ai/client-response-draft" && request.method === "POST") {
+    const body = await readJson(request);
+    if (!body.documentReviewId) return sendJson(response, 400, { error: "documentReviewId is required" });
+    const review = getDocumentReview(db, Number(body.documentReviewId));
+    if (!review) return sendJson(response, 404, { error: "Document review not found" });
+    const project = review.projectProfileId ? getProjectDetail(db, Number(review.projectProfileId), { calculateHealth: false }) : null;
+    const draftBodyMarkdown = formatClientResponseMarkdown({
+      analysis: review.reviewOutput,
+      projectName: project?.profile?.projectName,
+      clientName: project?.profile?.clientName,
+      incomingEmail: body.incomingEmail || review.incomingEmail,
+    });
+    const draft = saveClientResponseDraft(db, {
+      projectProfileId: review.projectProfileId,
+      documentReviewId: review.id,
+      subject: body.subject || "",
+      recipient: body.recipient || "",
+      incomingEmail: body.incomingEmail || review.incomingEmail,
+      draftBodyMarkdown,
+      sourceReferences: review.reviewOutput?.sourceRecordReferences || [],
+      assumptions: review.reviewOutput?.assumptions || [],
+      model: review.model || "deterministic-client-response-v1",
+    });
+    recordDocumentReviewAudit(db, {
+      eventType: "client_response_draft_created",
+      userAction: body.userAction || "api:client-response-draft",
+      projectProfileId: review.projectProfileId,
+      dataCategories: ["document_review", "incoming_email", "client_response_draft"],
+      model: draft.model,
+      metadata: { reviewId: review.id, draftId: draft.id, sendEnabled: false },
+    });
+    return sendJson(response, 200, {
+      draft,
+      boundary: DOCUMENT_REVIEW_BOUNDARY,
+      executionAttempted: false,
+      externalWriteAttempted: false,
+    });
   }
   if (url.pathname === "/api/ai/sarah/analyse-project" && request.method === "POST") {
     const body = await readJson(request);

@@ -81,6 +81,15 @@ export function createAiReasoningService({ db, client, onConnected = () => {} })
         analyze: () => client.analyzeSarahClient(input),
       });
     },
+    analyzeDocumentReview(input, metadata = {}) {
+      return run({
+        analysisType: "document_review_client_response",
+        userAction: metadata.userAction || "api:ai-document-review-client-response",
+        dataCategories: metadata.dataCategories,
+        outputSaved: true,
+        analyze: () => client.analyzeDocumentReview(input),
+      });
+    },
     analyzeVoiceCommand(input, metadata = {}) {
       return run({
         analysisType: "voice_command",

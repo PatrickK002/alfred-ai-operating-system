@@ -1,13 +1,13 @@
-const CACHE_NAME = "alfred-pwa-v0.4.15";
+const CACHE_NAME = "alfred-pwa-v0.4.16";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
-  "/styles.css?v=0.4.15",
+  "/styles.css?v=0.4.16",
   "/app.js",
-  "/app.js?v=0.4.15",
+  "/app.js?v=0.4.16",
   "/agent-avatars.js",
-  "/agent-avatars.js?v=0.4.15",
+  "/agent-avatars.js?v=0.4.16",
   "/manifest.json",
   "/offline.html",
   "/icons/alfred-icon.svg",

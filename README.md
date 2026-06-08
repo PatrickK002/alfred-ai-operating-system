@@ -306,6 +306,11 @@ Health and aggregate workflows:
 | `POST` | `/api/ai/sarah/project-health-review` | Deterministic Sarah project health, BIM maturity and digital readiness review |
 | `POST` | `/api/ai/sarah/client-review` | Claude-powered Sarah client portfolio review |
 | `POST` | `/api/ai/sarah/draft-deliverable` | Draft an internal outline only; no document is created or edited |
+| `GET` | `/api/document-review/dashboard` | Recent document review sources, reviews and draft client responses |
+| `POST` | `/api/document-review/sources` | Store an exact file link, uploaded text or pasted extract for review |
+| `GET` | `/api/document-review/audit` | Document review and client response draft audit events |
+| `POST` | `/api/ai/document-review-client-response` | Sarah/Alfred consultant review against client requirements with draft-only email response |
+| `POST` | `/api/ai/client-response-draft` | Re-draft a stored document review as a client email draft only |
 | `GET` | `/api/liam/dashboard` | Liam's Power Platform dashboard with solutions, components, risks, opportunities, decisions and internal Monday OS workload links |
 | `GET` | `/api/liam/search?q=Dataverse` | Search local Power Platform records and semantic memory references |
 | `GET` | `/api/liam/audit` | Metadata-only Liam advisory audit events |
@@ -1119,6 +1124,10 @@ Sarah uses the Project Intelligence Platform, Digital Construction Knowledge Lay
 - `POST /api/ai/sarah/project-health-review`
 - `POST /api/ai/sarah/client-review`
 - `POST /api/ai/sarah/draft-deliverable`
+- `GET /api/document-review/dashboard`
+- `POST /api/document-review/sources`
+- `POST /api/ai/document-review-client-response`
+- `POST /api/ai/client-response-draft`
 
 Sarah project analysis returns an executive summary, BIM observations, information management observations, digital construction opportunities, risks, missing information, recommendations, confidence level, assumptions and source references.
 
@@ -1127,6 +1136,31 @@ Sarah project health review returns project score, information quality score, BI
 Sarah client review answers what projects exist for a client, what risks and actions remain, what information is missing, what opportunities exist and what Patrick should discuss next.
 
 Sarah deliverable support is draft-outline only for BIM Strategy, EIR, AIR, BEP, Information Management Plan, Digital Twin Strategy and GIS Strategy outlines. No file is created, edited, saved, uploaded or published.
+
+### Sarah Document Review & Client Response Drafting
+
+Sarah can now coordinate advisory BIM, GIS, Digital Twin, COBie, Asset Information, ISO 19650 and Information Management consultant review against supplied client requirements.
+
+Supported inputs:
+
+- Exact OneDrive, SharePoint or client portal file links.
+- Text-readable uploads such as `.txt`, `.md`, `.csv`, `.json`, `.html`.
+- Pasted document extracts from PDFs, Word files, Excel sheets or client portals.
+- Incoming client email text and client requirements.
+
+Outputs:
+
+- Consultant observations by discipline.
+- Requirement checks with evidence, response position and source references.
+- Risk and issue log.
+- Draft-only client email response formatted with Objective, Activities, Outcome, Risk & Issue Log and Next Steps sections.
+
+Security boundary:
+
+- No email is sent.
+- No file is edited, saved, uploaded or published.
+- No SharePoint, OneDrive, Microsoft, Monday.com or external system write action is available.
+- Binary PDFs/DOCX/XLSX are recorded as source metadata unless text is pasted or extracted separately. Alfred must not claim full content was reviewed unless extracted text is present.
 
 ## Liam Power Platform Director
 

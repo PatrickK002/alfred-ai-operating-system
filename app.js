@@ -547,6 +547,7 @@ let financeScope = { type: "group", id: "group" };
 let currentProjectDetail = null;
 let currentMeetingDetail = null;
 let sarahCurrentProjectId = null;
+let currentClientResponseDraftMarkdown = "";
 let currentPropertyOpportunityId = null;
 let voiceMediaRecorder = null;
 let voiceAudioChunks = [];
@@ -3679,6 +3680,139 @@ async function draftSarahOutline() {
   }
 }
 
+function isTextReadableUpload(file) {
+  if (!file) return false;
+  const extension = (file.name.split(".").pop() || "").toLowerCase();
+  return file.type.startsWith("text/")
+    || ["txt", "md", "csv", "json", "html", "htm", "xml"].includes(extension);
+}
+
+function readUploadAsText(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !isTextReadableUpload(file)) return resolve("");
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read uploaded file"));
+    reader.readAsText(file);
+  });
+}
+
+function selectedDocumentReviewDisciplines() {
+  return $$('input[name="document-review-discipline"]:checked')
+    .map((input) => input.value)
+    .filter(Boolean);
+}
+
+function renderDocumentReviewResult(result = {}) {
+  const analysis = result.analysis || {};
+  const draft = result.draft || {};
+  currentClientResponseDraftMarkdown = draft.draftBodyMarkdown || "";
+  return `
+    <div class="ai-boundary">Sarah and Alfred reviewed supplied local document content, exact links and client context only. No email was sent, no file was edited, and no SharePoint/OneDrive/Microsoft write action occurred.</div>
+    <section class="ai-summary">
+      <h3>Consultant review</h3>
+      <p>${escapeHTML(analysis.executiveSummary || "No review summary returned.")}</p>
+      <small>${result.aiFallbackUsed ? `Deterministic fallback used: ${escapeHTML(result.fallbackReason || "AI unavailable")}` : `Model: ${escapeHTML(result.review?.model || "Claude")}`} · Draft only</small>
+    </section>
+    ${renderList("Consultant observations", analysis.consultantReviews || [], (item) => `
+      <strong>${escapeHTML(item.consultant || item.discipline || "Consultant")}</strong>
+      <span>${escapeHTML(item.assessment || "")}</span>
+      <small>${escapeHTML(item.confidence || "medium")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Client requirement checks", analysis.requirementChecks || [], (item) => `
+      <strong>${escapeHTML(item.requirement || "Requirement")}</strong>
+      <span>${escapeHTML((item.status || "").replaceAll("_", " "))} · ${escapeHTML(item.evidence || "")}</span>
+      <small>${escapeHTML(item.responsePosition || "")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Risk & issue log", analysis.riskIssueLog || [], (item) => `
+      <strong>${escapeHTML(item.ref || "R")} · ${escapeHTML(item.issue || "")}</strong>
+      <span>${escapeHTML(item.impact || "")} · ${escapeHTML(item.mitigation || "")}</span>
+      <small>${escapeHTML(item.severity || "")} · ${escapeHTML(item.sourceReference || "")}</small>
+    `)}
+    ${renderList("Assumptions", analysis.assumptions || [], (item) => `<strong>${escapeHTML(item)}</strong>`)}
+    <section class="ai-section">
+      <h4>Draft email response</h4>
+      <div class="document-review-draft">${escapeHTML(currentClientResponseDraftMarkdown || "No draft returned.")}</div>
+      <button class="secondary-button" id="copy-client-response-draft" type="button">Copy draft response</button>
+    </section>
+  `;
+}
+
+async function submitSarahDocumentReview(event) {
+  event.preventDefault();
+  if (!backendAvailable) {
+    showToast("Document review requires the backend");
+    return;
+  }
+  const projectId = Number($("#sarah-project-select").value || sarahCurrentProjectId);
+  if (!projectId) {
+    showToast("Select a project for Sarah");
+    return;
+  }
+  const file = $("#document-review-file").files?.[0] || null;
+  const link = $("#document-review-link").value.trim();
+  const pastedText = $("#document-review-text").value.trim();
+  const clientRequirements = $("#document-review-requirements").value.trim();
+  const incomingEmail = $("#document-review-email").value.trim();
+  if (!link && !file && !pastedText) {
+    showToast("Add an exact file link, upload, or pasted document text");
+    return;
+  }
+  if (!clientRequirements && !incomingEmail) {
+    showToast("Paste the client requirements or incoming email");
+    return;
+  }
+
+  $("#document-review-output").innerHTML = '<div class="ai-loading">Sarah is coordinating BIM, GIS and Digital Twin review...</div>';
+  try {
+    const uploadText = file ? await readUploadAsText(file) : "";
+    const sources = [];
+    if (link) {
+      sources.push({
+        sourceType: "link",
+        sourceUrl: link,
+        title: file?.name || "Exact client file link",
+        textContent: pastedText,
+        notes: "Exact link supplied by Patrick for document review.",
+      });
+    }
+    if (file) {
+      sources.push({
+        sourceType: "upload",
+        fileName: file.name,
+        title: file.name,
+        fileType: file.type || file.name.split(".").pop() || "",
+        fileSize: file.size,
+        textContent: uploadText || (!link ? pastedText : ""),
+        notes: uploadText ? "Text-readable upload reviewed." : "Binary upload metadata captured; paste extracted text for full review.",
+      });
+    }
+    if (!link && !file && pastedText) {
+      sources.push({
+        sourceType: "pasted_text",
+        title: "Pasted document extract",
+        textContent: pastedText,
+      });
+    }
+    const result = await apiRequest("/api/ai/document-review-client-response", {
+      method: "POST",
+      body: JSON.stringify({
+        projectProfileId: projectId,
+        sources,
+        clientRequirements,
+        incomingEmail,
+        disciplines: selectedDocumentReviewDisciplines(),
+        userAction: "ui:sarah:document-review-client-response",
+      }),
+    });
+    $("#document-review-output").innerHTML = renderDocumentReviewResult(result);
+    showToast("Sarah review and draft response generated");
+  } catch (error) {
+    $("#document-review-output").innerHTML = `<div class="empty-state">${escapeHTML(error.message)}</div>`;
+    showToast(error.message);
+  }
+}
+
 async function reviewSarahClient(event) {
   event.preventDefault();
   if (!backendAvailable) {
@@ -4329,6 +4463,7 @@ $("#sarah-project-select").addEventListener("change", (event) => {
 });
 $("#sarah-review-project").addEventListener("click", askSarahProjectReview);
 $("#sarah-draft-deliverable").addEventListener("click", draftSarahOutline);
+$("#sarah-document-review-form").addEventListener("submit", submitSarahDocumentReview);
 $("#sarah-client-form").addEventListener("submit", reviewSarahClient);
 $("#import-order-book").addEventListener("click", () => $("#order-book-file").click());
 $("#order-book-file").addEventListener("change", importOrderBookFile);
@@ -4342,6 +4477,15 @@ $("#copy-board-report").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(currentBoardReportMarkdown || $("#board-report-output").textContent);
     showToast("Board report copied");
+  } catch {
+    showToast("Clipboard access is unavailable");
+  }
+});
+document.addEventListener("click", async (event) => {
+  if (!event.target.closest("#copy-client-response-draft")) return;
+  try {
+    await navigator.clipboard.writeText(currentClientResponseDraftMarkdown || $("#document-review-output").textContent);
+    showToast("Client response draft copied");
   } catch {
     showToast("Clipboard access is unavailable");
   }

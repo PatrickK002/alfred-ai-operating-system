@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=0.4.15" />
+    <link rel="stylesheet" href="styles.css?v=0.4.16" />
   </head>
   <body>
     <div class="shell">
@@ -967,6 +967,50 @@
               <div class="empty-state">Select a project and ask Sarah to review it. Outputs are recommendations only.</div>
             </div>
           </section>
+          <section class="panel sarah-panel document-review-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">DOCUMENT REVIEW</p>
+                <h3>Client requirements & draft response</h3>
+              </div>
+            </div>
+            <form id="sarah-document-review-form" class="document-review-form">
+              <div class="document-review-grid">
+                <label>
+                  Exact file link
+                  <input id="document-review-link" type="url" placeholder="Paste OneDrive, SharePoint or client portal URL" />
+                </label>
+                <label>
+                  Upload document
+                  <input id="document-review-file" type="file" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,.doc,.docx,.xlsx" />
+                </label>
+              </div>
+              <label>
+                Document text / extracted section
+                <textarea id="document-review-text" rows="6" placeholder="Paste the relevant document extract here. Text-readable uploads are reviewed directly; binary PDFs/DOCX are stored as metadata unless text is pasted."></textarea>
+              </label>
+              <label>
+                Client requirements / question
+                <textarea id="document-review-requirements" rows="6" placeholder="Paste the client requirements, EIR/AIR/BEP question, GIS request, COBie concern or Digital Twin requirement."></textarea>
+              </label>
+              <label>
+                Incoming email to respond to
+                <textarea id="document-review-email" rows="6" placeholder="Paste the incoming client email. Alfred will draft a response only; no email will be sent."></textarea>
+              </label>
+              <div class="document-review-disciplines" aria-label="Consultants to include">
+                <label><input type="checkbox" name="document-review-discipline" value="BIM" checked /> BIM</label>
+                <label><input type="checkbox" name="document-review-discipline" value="GIS" checked /> GIS</label>
+                <label><input type="checkbox" name="document-review-discipline" value="Digital Twin" checked /> Digital Twin</label>
+                <label><input type="checkbox" name="document-review-discipline" value="COBie" checked /> COBie</label>
+                <label><input type="checkbox" name="document-review-discipline" value="Asset Information" checked /> Asset Information</label>
+                <label><input type="checkbox" name="document-review-discipline" value="ISO 19650" checked /> ISO 19650</label>
+              </div>
+              <button class="secondary-button" type="submit">Review & draft response</button>
+            </form>
+            <div id="document-review-output" class="sarah-analysis-output">
+              <div class="empty-state">Add an exact file link, upload/paste document text, and paste the client question. Sarah will produce a consultant review and draft response for Patrick to approve.</div>
+            </div>
+          </section>
           <section class="panel sarah-panel">
             <div class="panel-heading compact">
               <div>
@@ -1374,6 +1418,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="app.js?v=0.4.15"></script>
+    <script type="module" src="app.js?v=0.4.16"></script>
   </body>
 </html>

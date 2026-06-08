@@ -390,6 +390,77 @@ export const SARAH_CLIENT_REVIEW_SCHEMA = {
   additionalProperties: false,
 };
 
+export const DOCUMENT_REVIEW_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    executiveSummary: { type: "string" },
+    consultantReviews: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          consultant: { type: "string" },
+          discipline: { type: "string" },
+          assessment: { type: "string" },
+          keyFindings: { type: "array", items: { type: "string" } },
+          concerns: { type: "array", items: { type: "string" } },
+          recommendedActions: { type: "array", items: { type: "string" } },
+          confidence: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["consultant", "discipline", "assessment", "keyFindings", "concerns", "recommendedActions", "confidence", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    requirementChecks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          requirement: { type: "string" },
+          status: { type: "string", enum: ["met", "partially_met", "not_evidenced", "conflict", "not_applicable"] },
+          evidence: { type: "string" },
+          responsePosition: { type: "string" },
+          sourceReference: { type: "string" },
+        },
+        required: ["requirement", "status", "evidence", "responsePosition", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    riskIssueLog: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          ref: { type: "string" },
+          issue: { type: "string" },
+          impact: { type: "string" },
+          mitigation: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+          sourceReference: { type: "string" },
+        },
+        required: ["ref", "issue", "impact", "mitigation", "severity", "sourceReference"],
+        additionalProperties: false,
+      },
+    },
+    recommendedNextSteps: { type: "array", items: { type: "string" } },
+    confidenceLevel: { type: "string", enum: ["low", "medium", "high"] },
+    assumptions: { type: "array", items: { type: "string" } },
+    sourceRecordReferences: { type: "array", items: sourceReferenceSchema },
+  },
+  required: [
+    "executiveSummary",
+    "consultantReviews",
+    "requirementChecks",
+    "riskIssueLog",
+    "recommendedNextSteps",
+    "confidenceLevel",
+    "assumptions",
+    "sourceRecordReferences",
+  ],
+  additionalProperties: false,
+};
+
 export const VOICE_COMMAND_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -516,6 +587,16 @@ export class AnthropicClient {
       input,
       schema: SARAH_CLIENT_REVIEW_SCHEMA,
       maxTokens: 2200,
+    });
+  }
+
+  async analyzeDocumentReview(input) {
+    return this.requestStructured({
+      analysisType: "document_review_client_response",
+      instruction: "Act as Alfred coordinating Sarah and specialist BIM, GIS, Digital Twin, COBie and Asset Information consultants. Review the supplied document text, exact file links, client requirements and incoming email. Distinguish confirmed evidence, assumptions and missing information. Never claim to have read a document unless extracted text is present for that source. Produce practical consultant findings and a risk/issue log suitable for Patrick to review before responding to the client. Do not send email, edit files, update SharePoint/OneDrive or execute any action.",
+      input,
+      schema: DOCUMENT_REVIEW_OUTPUT_SCHEMA,
+      maxTokens: 3000,
     });
   }
 
