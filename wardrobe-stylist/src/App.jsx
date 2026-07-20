@@ -72,6 +72,7 @@ const KEY = "wardrobe_items_v1";
 const LOOKS_KEY = "wardrobe_looks_v1";
 const INSPO_KEY = "wardrobe_inspo_v1";   // outfits the user has worn ("My Style")
 const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to (inspiration)
+const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist must never suggest again
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -215,6 +216,7 @@ export default function App() {
   const [looks, setLooks] = useState([]);
   const [inspo, setInspo] = useState([]); // outfits worn
   const [liked, setLiked] = useState([]); // outfits liked (inspiration)
+  const [disliked, setDisliked] = useState([]); // combinations never to suggest again
   const [ready, setReady] = useState(false); // true once data has loaded from storage
   const [view, setView] = useState("today"); // today | looks | mystyle | closet | add
   const [weather, setWeather] = useState(null);
@@ -240,11 +242,11 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li] = await Promise.all([
-        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY),
+      const [it, lk, ip, li, di] = await Promise.all([
+        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setReady(true);
+      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setReady(true);
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
@@ -253,11 +255,19 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("looks", LOOKS_KEY, looks); }, [looks, ready]);
   useEffect(() => { if (ready) saveStore("inspo", INSPO_KEY, inspo); }, [inspo, ready]);
   useEffect(() => { if (ready) saveStore("liked", LIKED_KEY, liked); }, [liked, ready]);
+  useEffect(() => { if (ready) saveStore("disliked", DISLIKED_KEY, disliked); }, [disliked, ready]);
+
+  // Record an outfit combination the stylist must never suggest again.
+  function dislikeCombo(pieces) {
+    if (!pieces || !pieces.length) return;
+    const key = pieces.map(p => p.id).sort().join(",");
+    setDisliked(prev => prev.some(d => d.key === key) ? prev : [{ key, names: pieces.map(p => p.name) }, ...prev]);
+  }
 
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -273,6 +283,7 @@ export default function App() {
       if (Array.isArray(data.looks)) setLooks(data.looks);
       if (Array.isArray(data.inspo)) setInspo(data.inspo);
       if (Array.isArray(data.liked)) setLiked(data.liked);
+      if (Array.isArray(data.disliked)) setDisliked(data.disliked);
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -545,7 +556,8 @@ export default function App() {
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} getWeather={getWeather}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} items={items} setView={setView}
-            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} onSaveLook={saveLookPieces} />
+            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} onSaveLook={saveLookPieces}
+            disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView} />
@@ -584,7 +596,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked, onSaveLook }) {
+function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked, onSaveLook, disliked, onDislike }) {
   return (
     <div>
       {/* Weather strip */}
@@ -650,13 +662,15 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
       )}
 
       {/* AI stylist chat */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} />
     </div>
   );
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike }) {
+  const dislikedKeys = new Set((disliked || []).map(d => d.key));
+  const comboKey = (pcs) => pcs.map(p => p.id).sort().join(",");
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
   const [style, setStyle] = useState("");
   const [styleOther, setStyleOther] = useState("");
@@ -692,7 +706,8 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       `- The app's weather-based suggestion: ${suggestion}\n` +
       `- Their closet:\n${closet}\n` +
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
-      (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "");
+      (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "") +
+      ((disliked && disliked.length) ? `\n\nNEVER suggest these exact combinations again — the user disliked them:\n${disliked.map(d => `- ${d.names.join(" + ")}`).join("\n")}` : "");
   }
 
   async function send(userText, chosenStyle, withImages, piecesTextValue) {
@@ -808,6 +823,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   const outfitCard = (title, pcs, i) => {
     const key = "ai|" + occasion + "|" + pcs.map(p => p.id).sort().join(",");
     const saved = savedKeys.has(key);
+    const isDisliked = dislikedKeys.has(comboKey(pcs));
     return (
       <div key={"o" + i} style={{ background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 12, padding: 14, margin: "0 0 14px" }}>
         <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
@@ -827,6 +843,14 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
           <button className="btn btn-primary" style={{ padding: "8px 14px" }} disabled={saved}
             onClick={() => { const k = onSaveLook(pcs); if (k) setSavedKeys(s => new Set(s).add(k)); }}>
             {saved ? "Saved ✓" : "♥ Save look"}
+          </button>
+          <button className="btn btn-ghost" style={{ padding: "8px 14px" }} disabled={busy || isDisliked}
+            onClick={() => {
+              onDislike(pcs);
+              const names = pcs.map(p => p.name).join(", ");
+              send(`I don't like this combination — never suggest it again (${names}). Please style a different outfit from my closet.`, style, false, piecesUsed);
+            }}>
+            {isDisliked ? "Won't suggest again ✓" : "👎 Don't suggest again"}
           </button>
           <button className="btn btn-ghost" style={{ padding: "8px 14px" }} disabled={busy} onClick={regenerate}>Suggest another</button>
         </div>
