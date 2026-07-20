@@ -73,6 +73,7 @@ const LOOKS_KEY = "wardrobe_looks_v1";
 const INSPO_KEY = "wardrobe_inspo_v1";   // outfits the user has worn ("My Style")
 const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to (inspiration)
 const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist must never suggest again
+const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for the personal shopper)
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -217,8 +218,9 @@ export default function App() {
   const [inspo, setInspo] = useState([]); // outfits worn
   const [liked, setLiked] = useState([]); // outfits liked (inspiration)
   const [disliked, setDisliked] = useState([]); // combinations never to suggest again
+  const [brands, setBrands] = useState([]); // saved stores/brands for the personal shopper
   const [ready, setReady] = useState(false); // true once data has loaded from storage
-  const [view, setView] = useState("today"); // today | looks | mystyle | closet | add
+  const [view, setView] = useState("today"); // today | looks | mystyle | closet | add | shop
   const [weather, setWeather] = useState(null);
   const [weatherErr, setWeatherErr] = useState(null);
   const [loadingW, setLoadingW] = useState(false);
@@ -242,11 +244,11 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di] = await Promise.all([
-        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY),
+      const [it, lk, ip, li, di, br] = await Promise.all([
+        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setReady(true);
+      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setReady(true);
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
@@ -256,6 +258,23 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("inspo", INSPO_KEY, inspo); }, [inspo, ready]);
   useEffect(() => { if (ready) saveStore("liked", LIKED_KEY, liked); }, [liked, ready]);
   useEffect(() => { if (ready) saveStore("disliked", DISLIKED_KEY, disliked); }, [disliked, ready]);
+  useEffect(() => { if (ready) saveStore("brands", BRANDS_KEY, brands); }, [brands, ready]);
+
+  // ----- Saved stores/brands (personal shopper) -----
+  function addBrand(b) {
+    const name = (b.name || "").trim();
+    let url = (b.url || "").trim();
+    if (!name && !url) return false;
+    if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+    const norm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+    const dup = brands.some(x =>
+      (url && norm(x.url) === norm(url)) ||
+      (name && (x.name || "").toLowerCase() === name.toLowerCase()));
+    if (dup) { flash("That store is already saved"); return false; }
+    setBrands(prev => [{ id: crypto.randomUUID(), name: name || url, url, note: (b.note || "").trim() }, ...prev]);
+    return true;
+  }
+  function removeBrand(id) { setBrands(prev => prev.filter(b => b.id !== id)); }
 
   // Record an outfit combination the stylist must never suggest again.
   function dislikeCombo(pieces) {
@@ -268,7 +287,7 @@ export default function App() {
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -285,6 +304,7 @@ export default function App() {
       if (Array.isArray(data.inspo)) setInspo(data.inspo);
       if (Array.isArray(data.liked)) setLiked(data.liked);
       if (Array.isArray(data.disliked)) setDisliked(data.disliked);
+      if (Array.isArray(data.brands)) setBrands(data.brands);
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -548,6 +568,7 @@ export default function App() {
             <button className={`navbtn ${view==="looks"?"active":""}`} onClick={()=>setView("looks")}>Saved Looks ({looks.length})</button>
             <button className={`navbtn ${view==="mystyle"?"active":""}`} onClick={()=>setView("mystyle")}>My Style ({inspo.length + liked.length})</button>
             <button className={`navbtn ${view==="closet"?"active":""}`} onClick={()=>setView("closet")}>Closet ({items.length})</button>
+            <button className={`navbtn ${view==="shop"?"active":""}`} onClick={()=>setView("shop")}>Personal Shopper</button>
             <button className={`navbtn ${view==="add"?"active":""}`} onClick={()=>setView("add")}>Add Pieces</button>
           </nav>
         </div>
@@ -571,6 +592,10 @@ export default function App() {
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
             exportData={exportData} importData={importData} />
+        )}
+        {view === "shop" && (
+          <Shopper items={items} brands={brands} addBrand={addBrand} removeBrand={removeBrand}
+            inspo={inspo} liked={liked} setView={setView} />
         )}
         {view === "add" && (
           <Add fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
@@ -1016,6 +1041,261 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Personal Shopper ----------
+// Saved stores + an AI shopper that can search the live web (via /api/shop) to
+// suggest new pieces for the closet, find current sales at the saved stores, and
+// discover new brands the user can save.
+const SALE_STALE_MS = 20 * 60 * 60 * 1000; // treat a sale check older than ~20h as stale
+
+// Turn bare URLs in a string into clickable links (for shopper replies).
+function linkify(text) {
+  const parts = (text || "").split(/(https?:\/\/[^\s)]+)/g);
+  return parts.map((p, i) =>
+    /^https?:\/\//.test(p)
+      ? <a key={i} href={p} target="_blank" rel="noopener noreferrer" style={{ color: S.clay, wordBreak: "break-word" }}>{p.replace(/^https?:\/\//, "").replace(/\/$/, "")}</a>
+      : <React.Fragment key={i}>{p}</React.Fragment>
+  );
+}
+
+// Pull "Brand: name | url | reason" lines out of a reply so the app can offer to
+// save them; return the remaining prose plus the parsed brand suggestions.
+function splitBrandLines(text) {
+  const found = [];
+  const kept = [];
+  for (const line of (text || "").split("\n")) {
+    const m = line.match(/^\s*brand\s*:\s*(.+)$/i);
+    if (m) {
+      const [name, url, ...rest] = m[1].split("|").map(s => s.trim());
+      if (name) found.push({ name, url: url || "", reason: rest.join(" | ") });
+    } else kept.push(line);
+  }
+  return { text: kept.join("\n").trim(), brands: found };
+}
+
+function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView }) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [chat, setChat] = useState([]); // {role, content}
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [news, setNews] = useState(null); // { at, text } — last sale check, persisted
+  const endRef = useRef(null);
+
+  useEffect(() => { idbGet("shopnews").then(v => { if (v && v.text) setNews(v); }).catch(() => {}); }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
+
+  const saleStale = !news || (Date.now() - Date.parse(news.at || 0)) > SALE_STALE_MS;
+  const brandNorm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+  const isSaved = (b) => brands.some(x =>
+    (b.url && brandNorm(x.url) === brandNorm(b.url)) ||
+    (b.name && (x.name || "").toLowerCase() === b.name.toLowerCase()));
+
+  function systemPrompt() {
+    const closet = items.length
+      ? items.map(i => `- ${i.name} (${i.category}, ${i.color}, ${i.tone} tone, for ${(i.formality || []).join("/") || "any"})`).join("\n")
+      : "(the closet is empty)";
+    const stores = brands.length
+      ? brands.map(b => `- ${b.name}${b.url ? ` (${b.url})` : ""}${b.note ? ` — ${b.note}` : ""}`).join("\n")
+      : "(no stores saved yet)";
+    return `You are a sharp, friendly personal shopper working inside the user's own wardrobe app. ` +
+      `You help them buy new pieces that complement the closet they already own and match their taste. ` +
+      `You can search the live web — use it to find specific items, real current prices, and genuine current sales; never invent a sale or a link. ` +
+      `Be concise and concrete: name specific brands and items, give an approximate price, and include a real product or store link when you have one. ` +
+      `Prefer the user's saved stores when suggesting where to buy, but you may recommend others too.\n\n` +
+      `When you recommend a brand or shop that is NOT already in their saved list, put it on its OWN line in EXACTLY this format so the app can offer to save it:\n` +
+      `Brand: <name> | <homepage url> | <short reason it suits them>\n\n` +
+      `Their saved stores:\n${stores}\n\n` +
+      `Their closet:\n${closet}\n` +
+      (inspo.length || liked.length ? `\nThey've shared photos of their style in the app (worn + aspirational looks) — assume a taste consistent with the closet above.` : "");
+  }
+
+  async function ask(userText, opts = {}) {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    const nextChat = [...chat, { role: "user", content: userText }];
+    setChat(nextChat);
+    try {
+      const res = await fetch("/api/shop", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: systemPrompt(), messages: nextChat.map(m => ({ role: m.role, content: m.content })), max_tokens: 1500 }),
+      });
+      if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
+      const data = await res.json();
+      const text = data.text || "(no reply)";
+      setChat(c => [...c, { role: "assistant", content: text }]);
+      if (opts.recordSale) {
+        const rec = { at: new Date().toISOString(), text };
+        setNews(rec); idbSet("shopnews", rec).catch(() => {});
+      }
+    } catch (e) {
+      setErr(e.message === "needs-key"
+        ? "The personal shopper needs the hosted app that holds your API key (your Render deployment). Saving stores works everywhere."
+        : "Couldn't reach the shopper just now — please try again in a moment.");
+    }
+    setBusy(false);
+  }
+
+  const suggestPieces = () => ask(
+    "Look at my closet and suggest 3–5 specific new pieces I should buy to fill gaps and get more outfits out of what I own. " +
+    "Prefer my saved stores, name specific items with an approximate price, and include a link for each. Explain briefly how each works with pieces I already have.");
+  const findSales = () => ask(
+    "Check each of my saved stores for any sales, discounts, or promotions happening right now. " +
+    "For each store, tell me whether there's a sale on, what's discounted, and include a link. If a store has nothing on, say so briefly.",
+    { recordSale: true });
+  const discoverBrands = () => ask(
+    "Search the web for a few brands or shops I don't already have saved that fit my taste and closet. " +
+    "Give each as a 'Brand:' line so I can save it, with a short reason it suits me.");
+
+  function submit() {
+    const t = input.trim();
+    if (!t || busy) return;
+    setInput("");
+    ask(t);
+  }
+  function addStore() {
+    if (addBrand({ name, url, note })) { setName(""); setUrl(""); setNote(""); }
+  }
+
+  const bubble = (who, children, key) => (
+    <div key={key} style={{ display: "flex", justifyContent: who === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
+      <div style={{
+        maxWidth: "88%", whiteSpace: "pre-wrap", fontFamily: "system-ui,sans-serif", fontSize: 13.5, lineHeight: 1.5,
+        padding: "9px 13px", borderRadius: 14,
+        background: who === "user" ? S.aubergine : "#fff",
+        color: who === "user" ? S.blush : S.ink,
+        border: who === "user" ? "none" : `1px solid ${S.aubergine}22`,
+        borderBottomRightRadius: who === "user" ? 4 : 14,
+        borderBottomLeftRadius: who === "user" ? 14 : 4,
+      }}>{children}</div>
+    </div>
+  );
+
+  // A saveable brand suggestion the shopper surfaced in a reply.
+  const brandCard = (b, key) => {
+    const saved = isSaved(b);
+    return (
+      <div key={key} style={{ background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 10, padding: "10px 13px", margin: "0 0 8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 15 }}>{b.name}</div>
+          {b.url && <a href={b.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: S.clay, wordBreak: "break-word" }}>{brandNorm(b.url)}</a>}
+        </div>
+        {b.reason && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66", margin: "4px 0 8px" }}>{b.reason}</div>}
+        <button className="btn btn-ghost" style={{ padding: "6px 12px" }} disabled={saved}
+          onClick={() => addBrand({ name: b.name, url: b.url, note: b.reason })}>
+          {saved ? "Saved ✓" : "+ Save brand"}
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", maxWidth: 600, margin: "0 0 22px" }}>
+        Save the stores and brands you love, and your personal shopper will suggest new pieces that fit your closet, watch for sales, and hunt down brands you might like. It searches the live web, so it needs your hosted app (Render).
+      </p>
+
+      {/* Saved stores */}
+      <div className="card" style={{ padding: 18, marginBottom: 22 }}>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 4 }}>Your stores</div>
+        <div style={{ fontSize: 19, marginBottom: 12 }}>Saved brands & shops ({brands.length})</div>
+
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", marginBottom: 8 }}>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Store name (e.g. Aritzia)" style={{ minWidth: 0 }} />
+          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Link (e.g. aritzia.com)" onKeyDown={e => { if (e.key === "Enter") addStore(); }} style={{ minWidth: 0 }} />
+        </div>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional — what you buy there)" onKeyDown={e => { if (e.key === "Enter") addStore(); }} style={{ width: "100%", marginBottom: 10 }} />
+        <button className="btn btn-primary" onClick={addStore} disabled={!name.trim() && !url.trim()}>Add store</button>
+
+        {brands.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10, marginTop: 16 }}>
+            {brands.map(b => (
+              <div key={b.id} style={{ border: `1px solid ${S.aubergine}18`, borderRadius: 8, padding: "10px 12px", position: "relative" }}>
+                <div style={{ fontSize: 15, paddingRight: 20 }}>{b.name}</div>
+                {b.url && <a href={/^https?:\/\//i.test(b.url) ? b.url : "https://" + b.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: S.clay, wordBreak: "break-word" }}>{brandNorm(b.url)}</a>}
+                {b.note && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 4 }}>{b.note}</div>}
+                <button onClick={() => removeBrand(b.id)} title="Remove" style={{ position: "absolute", top: 6, right: 6, border: "none", background: "transparent", color: "#8a6a76", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {brands.length === 0 && (
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginTop: 12 }}>
+            Add a store or two above — then ask your shopper to find pieces or check them for sales.
+          </div>
+        )}
+      </div>
+
+      {/* Sale watch */}
+      <div className="card" style={{ padding: 18, marginBottom: 22 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>Sale watch</div>
+            <div style={{ fontSize: 19 }}>Sales at your stores</div>
+          </div>
+          <button className="btn btn-primary" onClick={findSales} disabled={busy || !brands.length}>Check for sales now</button>
+        </div>
+        {news && (
+          <div style={{ marginTop: 14, background: S.blushSoft, borderLeft: `3px solid ${S.gold}`, padding: "12px 16px", fontFamily: "system-ui,sans-serif", fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+            <div style={{ fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>
+              Last checked {new Date(news.at).toLocaleString()}{saleStale ? " · check again for the latest" : ""}
+            </div>
+            {linkify(news.text)}
+          </div>
+        )}
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 12 }}>
+          Tip: I can't send background alerts on their own — open this page and tap <em>Check for sales</em> whenever you want the latest; your last check stays here.
+        </div>
+      </div>
+
+      {/* Shopper conversation */}
+      <div className="card" style={{ padding: 18 }}>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>Ask your shopper</div>
+        <div style={{ fontSize: 19, marginBottom: 14 }}>Personal Shopper</div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={suggestPieces} disabled={busy}>Suggest pieces for my closet</button>
+          <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={discoverBrands} disabled={busy}>Discover new brands</button>
+          {chat.length > 0 && <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={() => { setChat([]); setErr(null); }} disabled={busy}>Clear chat</button>}
+        </div>
+
+        {chat.length === 0 && !busy && (
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", background: S.blushSoft, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+            Hi — I'm your personal shopper. Tap a button above, or ask me anything: “find me a camel coat under £150”, “what shoes go with my green dress?”, or “which of my stores has the best knitwear?”
+          </div>
+        )}
+
+        <div style={{ maxHeight: 460, overflowY: "auto", paddingRight: 4 }}>
+          {chat.map((m, i) => {
+            if (m.role === "user") return <React.Fragment key={i}>{bubble("user", m.content, "b" + i)}</React.Fragment>;
+            const { text, brands: found } = splitBrandLines(m.content);
+            return (
+              <React.Fragment key={i}>
+                {text && bubble("assistant", linkify(text), "b" + i)}
+                {found.map((b, j) => brandCard(b, "br" + i + "-" + j))}
+              </React.Fragment>
+            );
+          })}
+          {busy && bubble("assistant", "Searching…", "busy")}
+          {err && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a4a3a", background: S.blushSoft, borderLeft: `3px solid ${S.clay}`, padding: "10px 12px", borderRadius: 4, marginBottom: 8 }}>
+              {err}
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask for a piece, a brand, or a price…"
+            onKeyDown={e => { if (e.key === "Enter") submit(); }} disabled={busy} style={{ flex: 1 }} />
+          <button className="btn btn-primary" style={{ padding: "10px 16px" }} onClick={submit} disabled={busy || !input.trim()}>Send</button>
+        </div>
+      </div>
     </div>
   );
 }

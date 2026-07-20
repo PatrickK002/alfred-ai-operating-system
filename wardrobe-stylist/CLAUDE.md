@@ -42,6 +42,18 @@ into modules is explicitly requested.
   `disliked`, persisted; every request's system prompt lists disliked combos so that
   exact set is never suggested again). The Saved Looks view (`DislikedList`) shows
   blocked combinations with an "Allow again" button (`removeDislike`).
+- **Personal Shopper**: the `Shopper` component (its own "Personal Shopper" view)
+  lets the user save stores/brands they like (`brands`, key `wardrobe_brands_v1`,
+  each `{ id, name, url, note }`; `addBrand` dedupes by host/name, included in
+  backup). It POSTs to `/api/shop`, which is like `/api/chat` but enables the
+  Anthropic **web-search** server tool so the shopper can look up real items,
+  prices, and current sales. Quick actions send templated prompts: *Suggest pieces
+  for my closet* (gap-fill from saved stores), *Discover new brands*, and *Check for
+  sales now* (persists the last report to IDB key `shopnews` with a timestamp, shown
+  under "Sale watch" — there's no background push, so it's an on-demand check). The
+  model is asked to emit `Brand: name | url | reason` lines; `splitBrandLines` pulls
+  them out and renders saveable brand cards (`+ Save brand` → `addBrand`), and
+  `linkify` makes URLs in replies clickable.
 - **Closet editing**: tapping a piece (or its "Edit tags" button) opens `EditPanel`,
   a right-side drawer (`position:fixed`, z-index 55 — above the lightbox) showing the
   item's large photo and every attribute as `TagButtons` groups, plus a Delete

@@ -175,6 +175,48 @@ function handleChat(req, res) {
   });
 }
 
+// Personal shopper. Like /api/chat, but with the Anthropic web-search server tool
+// enabled so the shopper can look up brands, specific items, and current sales on
+// the live web. The search runs server-side inside the same request; we return the
+// model's final assistant text (which includes any links it cites).
+function handleShop(req, res) {
+  if (!API_KEY) {
+    return send(res, 503, { error: "ANTHROPIC_API_KEY is not set. The personal shopper is unavailable." });
+  }
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", async () => {
+    try {
+      const { system, messages, max_tokens } = JSON.parse(raw);
+      if (!Array.isArray(messages) || !messages.length) return send(res, 400, { error: "messages required" });
+
+      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: Math.min(Math.max(Number(max_tokens) || 1200, 1), 2000),
+          system: typeof system === "string" ? system : undefined,
+          messages,
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
+        }),
+      });
+
+      const data = await anthropicRes.json();
+      if (!anthropicRes.ok) return send(res, anthropicRes.status, { error: data?.error?.message || "Anthropic API error" });
+
+      const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+      send(res, 200, { text });
+    } catch (err) {
+      send(res, 500, { error: String(err?.message || err) });
+    }
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
   if (req.url === "/api/tag") {
@@ -184,6 +226,10 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/chat") {
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
     return handleChat(req, res);
+  }
+  if (req.url === "/api/shop") {
+    if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
+    return handleShop(req, res);
   }
   if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
   return send(res, 404, { error: "Not found" });
