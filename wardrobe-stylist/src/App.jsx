@@ -225,7 +225,16 @@ export default function App() {
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
   const [autoTagging, setAutoTagging] = useState(false);
   const [lightbox, setLightbox] = useState(null); // src of enlarged photo
+  const [notice, setNotice] = useState(null); // transient toast message
+  const noticeTimer = useRef();
   const fileRef = useRef();
+
+  // Brief bottom toast (e.g. "Skipped 2 duplicate photos").
+  function flash(msg) {
+    setNotice(msg);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2600);
+  }
 
   // Load everything from durable storage on first mount, then keep it saved.
   useEffect(() => {
@@ -288,20 +297,26 @@ export default function App() {
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
 
   // ----- My Style photos (worn outfits + liked/inspiration outfits) -----
-  async function addPhotos(setter, e) {
+  // Skips any photo already in the set (identical downscaled image data).
+  async function addPhotos(setter, current, e) {
     const files = Array.from(e.target.files || []);
     if (files.length) {
+      const seen = new Set(current.map(p => p.img));
       const added = [];
+      let dup = 0;
       for (const f of files) {
         const img = await downscaleImage(f);
+        if (seen.has(img)) { dup++; continue; }
+        seen.add(img);
         added.push({ id: crypto.randomUUID(), img });
       }
-      setter(prev => [...added, ...prev]);
+      if (added.length) setter(prev => [...added, ...prev]);
+      if (dup) flash(`Skipped ${dup} photo${dup > 1 ? "s" : ""} already added`);
     }
     e.target.value = ""; // allow re-selecting the same file
   }
-  const addInspo = (e) => addPhotos(setInspo, e);
-  const addLiked = (e) => addPhotos(setLiked, e);
+  const addInspo = (e) => addPhotos(setInspo, inspo, e);
+  const addLiked = (e) => addPhotos(setLiked, liked, e);
   const deleteInspo = (id) => setInspo(prev => prev.filter(p => p.id !== id));
   const deleteLiked = (id) => setLiked(prev => prev.filter(p => p.id !== id));
 
@@ -329,16 +344,24 @@ export default function App() {
   async function handleFiles(e) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    // Skip photos already in the closet or the pending queue, and dupes within
+    // this batch (identical image data).
+    const seen = new Set([...items.map(i => i.img).filter(Boolean), ...queue.map(q => q.img)]);
     const newQueue = [];
+    let dup = 0;
     for (const f of files) {
       const dataUrl = await readFileAsDataURL(f);
+      if (seen.has(dataUrl)) { dup++; continue; }
+      seen.add(dataUrl);
       newQueue.push({
         id: crypto.randomUUID(), img: dataUrl, mediaType: f.type, status: "manual",
         tags: { category: "", color: "", tone: "Classic", warmth: "Medium", formality: ["Casual"], name: "" },
       });
     }
-    setQueue(q => [...q, ...newQueue]);
     e.target.value = "";
+    if (dup) flash(`Skipped ${dup} photo${dup > 1 ? "s" : ""} already added`);
+    if (!newQueue.length) return;
+    setQueue(q => [...q, ...newQueue]);
 
     // Try AI auto-tagging in the background. Anything that fails just stays
     // as a manual card — nothing is lost, no fake defaults are invented.
@@ -531,6 +554,12 @@ export default function App() {
           <img src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 6, boxShadow: "0 10px 40px #0008" }} />
           <button onClick={() => setLightbox(null)} aria-label="Close"
             style={{ position: "absolute", top: 16, right: 16, width: 40, height: 40, borderRadius: "50%", border: "none", background: "#0006", color: "#fff", fontSize: 20, cursor: "pointer" }}>×</button>
+        </div>
+      )}
+
+      {notice && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 24, display: "flex", justifyContent: "center", zIndex: 60, pointerEvents: "none", padding: "0 16px" }}>
+          <div style={{ background: S.aubergine, color: S.blush, fontFamily: "system-ui,sans-serif", fontSize: 13, padding: "10px 16px", borderRadius: 22, boxShadow: "0 6px 20px #0004" }}>{notice}</div>
         </div>
       )}
     </div>
