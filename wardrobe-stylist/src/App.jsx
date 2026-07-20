@@ -539,7 +539,9 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
   const [style, setStyle] = useState("");
   const [styleOther, setStyleOther] = useState("");
-  const [pieces, setPieces] = useState("");
+  const [pieces, setPieces] = useState("");       // free-text pieces in mind
+  const [picked, setPicked] = useState([]);       // ids of closet pieces tapped in Q2
+  const [piecesUsed, setPiecesUsed] = useState(""); // combined pieces text used this conversation
   const [chat, setChat] = useState([]); // {role:'user'|'assistant', content:string}
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -548,7 +550,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
 
-  function systemPrompt(chosenStyle) {
+  function systemPrompt(chosenStyle, piecesTextValue) {
     const closet = items.length
       ? items.map(i => `- ${i.name} (${i.category}, ${i.color}, ${i.tone} tone, warmth ${i.warmth}, for ${(i.formality||[]).join("/") || "any"})`).join("\n")
       : "(the closet is empty)";
@@ -563,13 +565,13 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       `- Weather: ${w}\n` +
       `- Occasion: ${occasion}\n` +
       `- Style they want: ${chosenStyle || "unspecified"}\n` +
-      `- Pieces they'd like to include: ${pieces || "none specified"}\n` +
+      `- Pieces they'd like to include: ${piecesTextValue || "none specified"}\n` +
       `- The app's weather-based suggestion: ${suggestion}\n` +
       `- Their closet:\n${closet}\n` +
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've worn and liked — use them to match their taste.` : "");
   }
 
-  async function send(userText, chosenStyle, withImages) {
+  async function send(userText, chosenStyle, withImages, piecesTextValue) {
     setBusy(true); setErr(null);
     const nextChat = [...chat, { role: "user", content: userText }];
     setChat(nextChat);
@@ -591,7 +593,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       }
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: systemPrompt(chosenStyle), messages: apiMessages, max_tokens: 700 }),
+        body: JSON.stringify({ system: systemPrompt(chosenStyle, piecesTextValue), messages: apiMessages, max_tokens: 700 }),
       });
       if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
       const data = await res.json();
@@ -610,21 +612,30 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
     if (!s) return;
     setStyle(s); setStep("q2");
   }
-  function startChat() {
+  function togglePiece(id) {
+    setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  }
+  // Tapped closet pieces + any free text, as one phrase for the stylist.
+  function combinedPieces() {
+    const names = items.filter(i => picked.includes(i.id)).map(i => i.name);
+    return [names.join(", "), pieces.trim()].filter(Boolean).join("; ");
+  }
+  function begin(piecesTextValue) {
     setStep("chat");
+    setPiecesUsed(piecesTextValue);
     const opener = `I'm dressing for ${occasion.toLowerCase()}. The style I'm after is "${style}". ` +
-      (pieces.trim() ? `I'd like to build it around: ${pieces.trim()}. ` : `I don't have specific pieces in mind. `) +
+      (piecesTextValue ? `I'd like to build it around: ${piecesTextValue}. ` : `I don't have specific pieces in mind. `) +
       `Please style a full outfit from my closet and tell me why it works.`;
-    send(opener, style, true);
+    send(opener, style, true, piecesTextValue);
   }
   function submitFollowup() {
     const t = input.trim();
     if (!t || busy) return;
     setInput("");
-    send(t, style, false);
+    send(t, style, false, piecesUsed);
   }
   function reset() {
-    setStep("q1"); setStyle(""); setStyleOther(""); setPieces(""); setChat([]); setInput(""); setErr(null);
+    setStep("q1"); setStyle(""); setStyleOther(""); setPieces(""); setPicked([]); setPiecesUsed(""); setChat([]); setInput(""); setErr(null);
   }
 
   const bubble = (who, text, key) => (
@@ -677,13 +688,35 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       {step === "q2" && (
         <div>
           {bubble("user", style, "q1a")}
-          {bubble("assistant", "Lovely. Do you have any pieces in mind you already want to wear? (optional)", "q2")}
+          {bubble("assistant", "Lovely. Tap any pieces you'd like to build the look around — or describe them below. (optional)", "q2")}
+          {items.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "10px 0" }}>
+              {items.map(i => {
+                const on = picked.includes(i.id);
+                return (
+                  <button key={i.id} type="button" onClick={() => togglePiece(i.id)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                      fontFamily: "system-ui,sans-serif", fontSize: 12.5, padding: "5px 11px 5px 6px",
+                      borderRadius: 18, touchAction: "manipulation",
+                      border: `1px solid ${on ? S.aubergine : S.aubergine + "33"}`,
+                      background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink,
+                    }}>
+                    {i.img
+                      ? <img src={i.img} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: "50%", pointerEvents: "none" }} />
+                      : <span style={{ width: 24, height: 24, borderRadius: "50%", background: on ? "#ffffff33" : S.blushSoft, display: "inline-block", pointerEvents: "none" }} />}
+                    {i.name}{on ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <textarea value={pieces} onChange={e => setPieces(e.target.value)} rows={2}
-            placeholder="e.g. my grey check coat, or the blue loafers — or leave blank"
-            style={{ width: "100%", marginTop: 10, resize: "vertical" }} />
+            placeholder="…or describe pieces in your own words — or leave blank"
+            style={{ width: "100%", marginTop: 4, resize: "vertical" }} />
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={startChat}>Style me</button>
-            <button className="btn btn-ghost" onClick={() => { setPieces(""); startChat(); }}>Nothing specific</button>
+            <button className="btn btn-primary" onClick={() => begin(combinedPieces())}>Style me</button>
+            <button className="btn btn-ghost" onClick={() => begin("")}>Nothing specific</button>
             <button className="btn btn-ghost" onClick={() => setStep("q1")}>Back</button>
           </div>
         </div>
