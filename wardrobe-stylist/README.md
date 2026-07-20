@@ -9,6 +9,17 @@ Tag the clothes and accessories you already own, and get outfit suggestions base
 - **Today's look** — pulls current weather, you pick the occasion, and it styles a full outfit (favouring one bold statement piece and avoiding clashing colours).
 - **Saved looks** — keep any outfit you love with one tap; it's stored (with the weather it was styled for) so you can pull it up again later.
 
+## Install as an app (iPad / iPhone / Android)
+
+The Wardrobe is an installable web app. Once it's hosted at a URL, open that URL
+in the browser and add it to your home screen — it then gets its own icon and
+opens full-screen with no browser chrome, like a native app:
+
+- **iPad / iPhone (Safari):** Share button → **Add to Home Screen**.
+- **Android (Chrome):** menu (⋮) → **Install app** / **Add to Home screen**.
+
+Your closet and saved looks live in the app's local storage on that device.
+
 ## Requirements
 
 - Node.js 18 or newer (needs the built-in `fetch`).
@@ -66,3 +77,28 @@ npm run preview    # preview the build
 ```
 
 Note: the auto-tagging proxy is a dev convenience. For a deployed site, host `server/index.js` (or an equivalent serverless function) somewhere your frontend can reach at `/api/tag`, and keep the API key server-side.
+
+## Deploy on Render (hosted app **with** auto-tagging)
+
+`server/index.js` serves the built app *and* the `/api/tag` proxy, so a single
+Render **Web Service** gives you a hosted, installable app whose API key stays
+private (held as a Render environment variable, never in the code).
+
+1. In the Render dashboard: **New → Web Service**, and connect this repository.
+2. Configure:
+   - **Root Directory:** `wardrobe-stylist`
+   - **Runtime:** Node
+   - **Build Command:** `npm install && npm run build -- --base=/`
+   - **Start Command:** `node server/index.js`
+   - **Instance Type:** Free is fine.
+3. Under **Environment**, add:
+   - `ANTHROPIC_API_KEY` = your key (`sk-ant-…`). Optionally `ANTHROPIC_MODEL`.
+   - Render sets `PORT` automatically; the server reads it.
+4. Deploy. Render gives you a URL like `https://the-wardrobe.onrender.com` — open
+   it in Safari and **Add to Home Screen**.
+
+The key lives only in Render's environment settings. If it's missing or wrong,
+`/api/tag` returns 503 and the app quietly falls back to manual tagging.
+
+> On Render's free tier the service sleeps after inactivity, so the first request
+> after a while takes ~30–60 s to wake. Paid instances stay always-on.
