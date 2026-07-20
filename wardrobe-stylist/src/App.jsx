@@ -70,7 +70,8 @@ function colorsClash(a, b) {
 //   - inspo:  "My Style" photos of past outfits (key `wardrobe_inspo_v1`)
 const KEY = "wardrobe_items_v1";
 const LOOKS_KEY = "wardrobe_looks_v1";
-const INSPO_KEY = "wardrobe_inspo_v1";
+const INSPO_KEY = "wardrobe_inspo_v1";   // outfits the user has worn ("My Style")
+const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to (inspiration)
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -212,7 +213,8 @@ const S = {
 export default function App() {
   const [items, setItems] = useState([]);
   const [looks, setLooks] = useState([]);
-  const [inspo, setInspo] = useState([]);
+  const [inspo, setInspo] = useState([]); // outfits worn
+  const [liked, setLiked] = useState([]); // outfits liked (inspiration)
   const [ready, setReady] = useState(false); // true once data has loaded from storage
   const [view, setView] = useState("today"); // today | looks | mystyle | closet | add
   const [weather, setWeather] = useState(null);
@@ -229,11 +231,11 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip] = await Promise.all([
-        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY),
+      const [it, lk, ip, li] = await Promise.all([
+        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setReady(true);
+      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setReady(true);
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
@@ -241,11 +243,12 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("items", KEY, items); }, [items, ready]);
   useEffect(() => { if (ready) saveStore("looks", LOOKS_KEY, looks); }, [looks, ready]);
   useEffect(() => { if (ready) saveStore("inspo", INSPO_KEY, inspo); }, [inspo, ready]);
+  useEffect(() => { if (ready) saveStore("liked", LIKED_KEY, liked); }, [liked, ready]);
 
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -260,6 +263,7 @@ export default function App() {
       if (Array.isArray(data.items)) setItems(data.items);
       if (Array.isArray(data.looks)) setLooks(data.looks);
       if (Array.isArray(data.inspo)) setInspo(data.inspo);
+      if (Array.isArray(data.liked)) setLiked(data.liked);
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -283,8 +287,8 @@ export default function App() {
   }
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
 
-  // ----- My Style (inspiration photos) -----
-  async function addInspo(e) {
+  // ----- My Style photos (worn outfits + liked/inspiration outfits) -----
+  async function addPhotos(setter, e) {
     const files = Array.from(e.target.files || []);
     if (files.length) {
       const added = [];
@@ -292,11 +296,14 @@ export default function App() {
         const img = await downscaleImage(f);
         added.push({ id: crypto.randomUUID(), img });
       }
-      setInspo(prev => [...added, ...prev]);
+      setter(prev => [...added, ...prev]);
     }
     e.target.value = ""; // allow re-selecting the same file
   }
-  function deleteInspo(id) { setInspo(prev => prev.filter(p => p.id !== id)); }
+  const addInspo = (e) => addPhotos(setInspo, e);
+  const addLiked = (e) => addPhotos(setLiked, e);
+  const deleteInspo = (id) => setInspo(prev => prev.filter(p => p.id !== id));
+  const deleteLiked = (id) => setLiked(prev => prev.filter(p => p.id !== id));
 
   // ----- Weather -----
   async function getWeather() {
@@ -488,7 +495,7 @@ export default function App() {
           <nav style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             <button className={`navbtn ${view==="today"?"active":""}`} onClick={()=>setView("today")}>Today's Look</button>
             <button className={`navbtn ${view==="looks"?"active":""}`} onClick={()=>setView("looks")}>Saved Looks ({looks.length})</button>
-            <button className={`navbtn ${view==="mystyle"?"active":""}`} onClick={()=>setView("mystyle")}>My Style ({inspo.length})</button>
+            <button className={`navbtn ${view==="mystyle"?"active":""}`} onClick={()=>setView("mystyle")}>My Style ({inspo.length + liked.length})</button>
             <button className={`navbtn ${view==="closet"?"active":""}`} onClick={()=>setView("closet")}>Closet ({items.length})</button>
             <button className={`navbtn ${view==="add"?"active":""}`} onClick={()=>setView("add")}>Add Pieces</button>
           </nav>
@@ -499,13 +506,14 @@ export default function App() {
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} getWeather={getWeather}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} items={items} setView={setView}
-            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} />
+            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView} />
         )}
         {view === "mystyle" && (
-          <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo} setView={setView} />
+          <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo}
+            liked={liked} addLiked={addLiked} deleteLiked={deleteLiked} setView={setView} />
         )}
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
@@ -531,7 +539,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo }) {
+function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked }) {
   return (
     <div>
       {/* Weather strip */}
@@ -597,13 +605,13 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
       )}
 
       {/* AI stylist chat */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} setView={setView} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} />
     </div>
   );
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
   const [style, setStyle] = useState("");
   const [styleOther, setStyleOther] = useState("");
@@ -636,7 +644,8 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       `- Pieces they'd like to include: ${piecesTextValue || "none specified"}\n` +
       `- The app's weather-based suggestion: ${suggestion}\n` +
       `- Their closet:\n${closet}\n` +
-      (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've worn and liked — use them to match their taste.` : "");
+      (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
+      (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "");
   }
 
   async function send(userText, chosenStyle, withImages, piecesTextValue) {
@@ -647,15 +656,15 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       const apiMessages = nextChat.map(m => ({ role: m.role, content: m.content }));
       // Attach style photos to the very first message only (once per conversation).
       const firstReply = chat.some(m => m.role === "assistant");
-      if (withImages && !firstReply && inspo.length) {
+      if (withImages && !firstReply && (inspo.length || liked.length)) {
         const blocks = [];
-        for (const p of inspo.slice(0, 3)) {
+        const pushImg = (p) => {
           const comma = p.img.indexOf(",");
-          const meta = p.img.slice(0, comma);
-          const data = p.img.slice(comma + 1);
-          const mt = (meta.match(/data:(.*?);/) || [])[1] || "image/jpeg";
-          blocks.push({ type: "image", source: { type: "base64", media_type: mt, data } });
-        }
+          const mt = (p.img.slice(0, comma).match(/data:(.*?);/) || [])[1] || "image/jpeg";
+          blocks.push({ type: "image", source: { type: "base64", media_type: mt, data: p.img.slice(comma + 1) } });
+        };
+        if (inspo.length) { blocks.push({ type: "text", text: "Photos of outfits I've worn (my usual style):" }); inspo.slice(0, 3).forEach(pushImg); }
+        if (liked.length) { blocks.push({ type: "text", text: "Photos of outfits I like and want to lean toward:" }); liked.slice(0, 3).forEach(pushImg); }
         blocks.push({ type: "text", text: userText });
         apiMessages[0] = { role: "user", content: blocks };
       }
@@ -843,7 +852,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
               onKeyDown={e => { if (e.key === "Enter") submitFollowup(); }} disabled={busy} style={{ flex: 1 }} />
             <button className="btn btn-primary" style={{ padding: "10px 16px" }} onClick={submitFollowup} disabled={busy || !input.trim()}>Send</button>
           </div>
-          {inspo.length === 0 && (
+          {inspo.length === 0 && liked.length === 0 && (
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 8 }}>
               Tip: add photos in <button onClick={() => setView("mystyle")} style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>My Style</button> so the stylist learns your taste.
             </div>
@@ -892,35 +901,52 @@ function Looks({ looks, deleteLook, setView }) {
   );
 }
 
-// ---------- My Style (inspiration photos) view ----------
-function MyStyle({ inspo, addInspo, deleteInspo, setView }) {
-  const fileRef = useRef();
+// ---------- My Style photos: one uploadable section ----------
+function PhotoSection({ title, blurb, cta, photos, onAdd, onRemove }) {
+  const ref = useRef();
   return (
-    <div>
-      <div className="card" style={{ padding: 24, textAlign: "center", marginBottom: 22, borderStyle: "dashed" }}>
-        <div style={{ fontSize: 20, marginBottom: 6 }}>My style</div>
-        <p style={{ fontFamily:"system-ui,sans-serif", fontSize: 13, color: "#7a5a66", maxWidth: 500, margin: "0 auto 16px" }}>
-          Add photos of yourself in outfits you've worn and loved. The AI stylist looks at these to learn your taste and style you in a way that feels like you. These stay on your device.
-        </p>
-        <input ref={fileRef} type="file" accept="image/*" multiple onChange={addInspo} style={{ display: "none" }} />
-        <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Add style photos</button>
-      </div>
-
-      {inspo.length === 0 ? (
-        <Empty title="No style photos yet"
-          body="Upload a few pictures of favourite outfits you've worn — the stylist uses them as inspiration."
-          action={<button className="btn btn-ghost" onClick={()=>setView("today")}>Back to Today's Look</button>} />
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
-          {inspo.map(p => (
+    <div style={{ marginBottom: 28 }}>
+      <h2 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 4px" }}>{title}</h2>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66", margin: "0 0 12px", maxWidth: 560 }}>{blurb}</p>
+      <input ref={ref} type="file" accept="image/*" multiple onChange={onAdd} style={{ display: "none" }} />
+      <button className="btn btn-primary" onClick={() => ref.current?.click()}>{cta}</button>
+      {photos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 12, marginTop: 14 }}>
+          {photos.map(p => (
             <div key={p.id} className="card" style={{ position: "relative" }}>
               <div style={{ aspectRatio: "3/4", background: S.blushSoft }}>
-                <Thumb src={p.img} alt="A past outfit" />
+                <Thumb src={p.img} alt="Outfit" />
               </div>
-              <button onClick={()=>deleteInspo(p.id)} title="Remove"
+              <button onClick={() => onRemove(p.id)} title="Remove"
                 style={{ position:"absolute", top:6, right:6, border:"none", background:"#00000088", color:"#fff", width:24, height:24, borderRadius:"50%", cursor:"pointer" }}>×</button>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- My Style view (worn outfits + liked/inspiration outfits) ----------
+function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, setView }) {
+  return (
+    <div>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", maxWidth: 560, margin: "0 0 22px" }}>
+        Add photos to teach the AI stylist your taste. Everything stays on your device.
+      </p>
+      <PhotoSection
+        title="Outfits you've worn"
+        blurb="Pictures of yourself in outfits you've worn and loved — so the stylist knows what suits you and what you actually reach for."
+        cta="Add worn outfits"
+        photos={inspo} onAdd={addInspo} onRemove={deleteInspo} />
+      <PhotoSection
+        title="Outfits you like"
+        blurb="Looks you're drawn to and want to lean toward — screenshots, pins, anyone's outfits. The stylist uses these as aspiration when styling you."
+        cta="Add liked outfits"
+        photos={liked} onAdd={addLiked} onRemove={deleteLiked} />
+      {inspo.length === 0 && liked.length === 0 && (
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginTop: 4 }}>
+          Add a few photos above, then head to <button onClick={() => setView("today")} style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>Today's Look</button> to ask the stylist.
         </div>
       )}
     </div>
