@@ -706,6 +706,33 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
     setStep("q1"); setStyle(""); setStyleOther(""); setPieces(""); setPicked([]); setPiecesUsed(""); setChat([]); setInput(""); setErr(null);
   }
 
+  // Which closet pieces does a stylist reply name? (so we can show their photos)
+  function mentionedPieces(text) {
+    if (!text) return [];
+    const low = text.toLowerCase();
+    const seen = new Set();
+    const out = [];
+    for (const it of items) {
+      const n = (it.name || "").trim();
+      if (n.length >= 3 && low.includes(n.toLowerCase()) && !seen.has(it.id)) {
+        seen.add(it.id); out.push(it);
+      }
+    }
+    return out.slice(0, 8);
+  }
+  const pieceStrip = (pcs, key) => (
+    <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "0 0 12px" }}>
+      {pcs.map(p => (
+        <div key={p.id} style={{ width: 78 }}>
+          <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 6, overflow: "hidden", border: `1px solid ${S.aubergine}18` }}>
+            <Thumb src={p.img} alt={p.name} />
+          </div>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
+        </div>
+      ))}
+    </div>
+  );
+
   const bubble = (who, text, key) => (
     <div key={key} style={{ display: "flex", justifyContent: who === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
       <div style={{
@@ -794,7 +821,15 @@ function Stylist({ items, weather, occasion, outfit, inspo, setView }) {
       {step === "chat" && (
         <div>
           <div style={{ maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
-            {chat.map((m, i) => bubble(m.role, m.content, i))}
+            {chat.map((m, i) => {
+              const pcs = m.role === "assistant" ? mentionedPieces(m.content) : [];
+              return (
+                <React.Fragment key={i}>
+                  {bubble(m.role, m.content, "b" + i)}
+                  {pcs.length > 0 && pieceStrip(pcs, "s" + i)}
+                </React.Fragment>
+              );
+            })}
             {busy && bubble("assistant", "Thinking…", "busy")}
             {err && (
               <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a4a3a", background: S.blushSoft, borderLeft: `3px solid ${S.clay}`, padding: "10px 12px", borderRadius: 4, marginBottom: 8 }}>
