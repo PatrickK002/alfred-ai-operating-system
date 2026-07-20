@@ -57,9 +57,9 @@ The proxy (`server/index.js`) holds your key so it never reaches the browser. If
 
 ## How your data is stored
 
-- Wardrobe items (including photos, as data URLs) live in your browser's `localStorage` under the key `wardrobe_items_v1`. Saved looks live under `wardrobe_looks_v1`.
-- Clearing site data or switching browsers/devices starts you fresh. There is no cloud sync.
-- Photos stored this way count against the browser's storage quota (typically a few MB). For a very large wardrobe you may want to swap in IndexedDB — see `src/App.jsx` `loadItems`/`saveItems`.
+- Your wardrobe (pieces, saved looks, and My Style photos) is stored on your device in **IndexedDB** — it saves and loads automatically, and is large and durable enough for photos. (Older versions used `localStorage`; that data is migrated in automatically.)
+- Data is kept per browser/app and does not sync to the cloud. On iOS, a site opened in Safari and the same site added to the Home Screen can keep **separate** storage — for the most reliable experience, use one of them consistently (the Home Screen app is recommended).
+- **Backup:** the Closet tab has *Download backup* / *Restore backup* — a single JSON file you can keep as a safety copy or use to move your wardrobe to another device or link.
 
 ## Project layout
 
