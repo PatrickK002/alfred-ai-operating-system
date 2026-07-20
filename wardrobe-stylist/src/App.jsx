@@ -1205,37 +1205,99 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
               <button onClick={()=>deleteItem(i.id)} title="Remove" style={{ position:"absolute", top:6, right:6, border:"none", background:"#00000088", color:"#fff", width:24, height:24, borderRadius:"50%", cursor:"pointer" }}>×</button>
             </div>
             <div style={{ padding: "10px 12px" }}>
-              {editId === i.id ? (
-                <div style={{ display:"grid", gap:6 }}>
-                  <input value={i.name} onChange={e=>updateItem(i.id,"name",e.target.value)} />
-                  <select value={i.category} onChange={e=>updateItem(i.id,"category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-                  <select value={i.color} onChange={e=>updateItem(i.id,"color",e.target.value)}>{COLORS.map(c=><option key={c}>{c}</option>)}</select>
-                  <select value={i.tone||"Classic"} onChange={e=>updateItem(i.id,"tone",e.target.value)}>{TONES.map(t=><option key={t}>{t}</option>)}</select>
-                  <select value={i.warmth} onChange={e=>updateItem(i.id,"warmth",e.target.value)}>{WARMTH.map(w=><option key={w}>{w}</option>)}</select>
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                    {FORMALITY.map(f => (
-                      <button key={f} className="chip" style={{ cursor:"pointer", background: i.formality?.includes(f)?S.clay:"#fff", color: i.formality?.includes(f)?"#fff":S.ink }}
-                        onClick={()=>{ const has=i.formality?.includes(f); updateItem(i.id,"formality", has? i.formality.filter(x=>x!==f):[...(i.formality||[]),f]); }}>{f}</button>
-                    ))}
-                  </div>
-                  <button className="btn btn-primary" onClick={()=>setEditId(null)}>Done</button>
+              {/* Tapping the details (or the button) opens the full edit panel. */}
+              <div onClick={()=>setEditId(i.id)} style={{ cursor: "pointer" }}>
+                <div style={{ fontSize: 15 }}>{i.name}</div>
+                <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>{i.category} · {i.color}{i.tone?` · ${i.tone}`:""} · {i.warmth}</div>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom: 8 }}>
+                  {i.formality?.map(f => <span key={f} className="chip">{f}</span>)}
                 </div>
-              ) : (
-                // Tapping the details opens the tag editor (as well as the button).
-                <div onClick={()=>setEditId(i.id)} style={{ cursor: "pointer" }}>
-                  <div style={{ fontSize: 15 }}>{i.name}</div>
-                  <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>{i.category} · {i.color}{i.tone?` · ${i.tone}`:""} · {i.warmth}</div>
-                  <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom: 8 }}>
-                    {i.formality?.map(f => <span key={f} className="chip">{f}</span>)}
-                  </div>
-                  <button className="btn btn-ghost" style={{ padding:"6px 12px" }} onClick={(e)=>{ e.stopPropagation(); setEditId(i.id); }}>Edit tags</button>
-                </div>
-              )}
+                <button className="btn btn-ghost" style={{ padding:"6px 12px" }} onClick={(e)=>{ e.stopPropagation(); setEditId(i.id); }}>Edit tags</button>
+              </div>
             </div>
           </div>
         ))}
       </div>
       <Backup exportData={exportData} importData={importData} />
+      {editId != null && items.some(i => i.id === editId) && (
+        <EditPanel
+          item={items.find(i => i.id === editId)}
+          updateItem={updateItem}
+          deleteItem={(id)=>{ deleteItem(id); setEditId(null); }}
+          onClose={()=>setEditId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- Edit panel (side drawer) ----------
+// Slides in from the right showing the item's large photo and every editable
+// attribute. Sits above the lightbox (which is z-index 50) so its own photo uses
+// a plain <img>, not a Thumb, to avoid a nested-lightbox conflict.
+function EditPanel({ item, updateItem, deleteItem, onClose }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  if (!item) return null;
+  const toggleFormality = (f) => {
+    const has = item.formality?.includes(f);
+    updateItem(item.id, "formality", has ? item.formality.filter(x=>x!==f) : [...(item.formality||[]), f]);
+  };
+  return (
+    <div
+      onClick={onClose}
+      style={{ position:"fixed", inset:0, background:"#1a0e15aa", zIndex:55, display:"flex", justifyContent:"flex-end" }}
+    >
+      <div
+        onClick={(e)=>e.stopPropagation()}
+        style={{ width:"min(440px,100%)", height:"100%", background:S.paper, overflowY:"auto", boxShadow:"-8px 0 30px #00000033", display:"flex", flexDirection:"column" }}
+      >
+        <div style={{ position:"sticky", top:0, zIndex:1, background:S.aubergine, color:S.blush, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize: 18 }}>Edit piece</div>
+          <button onClick={onClose} title="Close" style={{ border:"none", background:"#ffffff22", color:S.blush, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
+        </div>
+
+        <div style={{ padding:18 }}>
+          <div style={{ background:S.blushSoft, borderRadius:8, overflow:"hidden", marginBottom:18, aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <img src={item.img} alt={item.name} style={{ width:"100%", height:"100%", objectFit:"contain" }} />
+          </div>
+
+          <FieldLabel>Name</FieldLabel>
+          <input value={item.name||""} onChange={e=>updateItem(item.id,"name",e.target.value)}
+            style={{ width:"100%", padding:"9px 11px", fontSize:15, border:`1px solid ${S.aubergine}33`, borderRadius:4, marginBottom:12, boxSizing:"border-box" }} />
+
+          <FieldLabel>Category</FieldLabel>
+          <TagButtons options={CATEGORIES} value={item.category} onSelect={v=>updateItem(item.id,"category",v)} />
+          <div style={{ height:12 }} />
+
+          <FieldLabel>Colour</FieldLabel>
+          <TagButtons options={COLORS} value={item.color} onSelect={v=>updateItem(item.id,"color",v)} />
+          <div style={{ height:12 }} />
+
+          <FieldLabel>Tone</FieldLabel>
+          <TagButtons options={TONES} value={item.tone||"Classic"} onSelect={v=>updateItem(item.id,"tone",v)} />
+          <div style={{ height:12 }} />
+
+          <FieldLabel>Warmth</FieldLabel>
+          <TagButtons options={WARMTH} value={item.warmth||"Medium"} onSelect={v=>updateItem(item.id,"warmth",v)} />
+          <div style={{ height:12 }} />
+
+          <FieldLabel>Occasion</FieldLabel>
+          <TagButtons options={FORMALITY} multi value={item.formality} onSelect={toggleFormality} />
+        </div>
+
+        <div style={{ position:"sticky", bottom:0, background:S.paper, borderTop:`1px solid ${S.aubergine}22`, padding:"12px 18px", display:"flex", gap:10, justifyContent:"space-between", marginTop:"auto" }}>
+          {confirmDel ? (
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+              <span style={{ fontFamily:"system-ui,sans-serif", fontSize:13, color:S.ink }}>Delete this piece?</span>
+              <button className="btn btn-ghost" style={{ padding:"6px 12px" }} onClick={()=>setConfirmDel(false)}>Cancel</button>
+              <button className="btn btn-primary" style={{ padding:"6px 12px", background:S.clay }} onClick={()=>deleteItem(item.id)}>Delete</button>
+            </div>
+          ) : (
+            <button className="btn btn-ghost" style={{ padding:"8px 14px", color:S.clay }} onClick={()=>setConfirmDel(true)}>Delete piece</button>
+          )}
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
     </div>
   );
 }
