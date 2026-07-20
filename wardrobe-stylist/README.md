@@ -9,6 +9,7 @@ Tag the clothes and accessories you already own, and get outfit suggestions base
 - **Today's look** — pulls current weather, you pick the occasion, and it styles a full outfit (favouring one bold statement piece and avoiding clashing colours).
 - **AI Stylist chat** — on Today's Look, the stylist asks what style you're going for and whether you have pieces in mind, then suggests a look from your closet and answers follow-up questions (needs an API key — see Setup).
 - **My Style** — upload photos of outfits you've worn *and* outfits you like (aspiration); the AI stylist uses both as visual taste context (what suits you, plus the direction you want to lean).
+- **Personal Shopper** — save the stores and brands you love, and an AI shopper (which searches the live web) suggests new pieces that fill gaps in your closet, checks your saved stores for current sales, and discovers new brands you can save with one tap (needs an API key — see Setup).
 - **Saved looks** — keep any outfit you love with one tap; it's stored (with the weather it was styled for) so you can pull it up again later.
 - Tap any photo to enlarge it.
 
