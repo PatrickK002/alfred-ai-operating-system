@@ -669,6 +669,50 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
   );
 }
 
+// ---------- Closet-style piece picker (used in the stylist's Q2) ----------
+function PiecePicker({ items, picked, onToggle }) {
+  const [filter, setFilter] = useState("All");
+  const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
+  const shown = filter === "All" ? items : items.filter(i => i.category === filter);
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {cats.map(c => (
+          <button key={c} type="button" className="chip"
+            style={{ cursor: "pointer", touchAction: "manipulation", background: filter === c ? S.aubergine : "#fff", color: filter === c ? S.blush : S.ink }}
+            onClick={() => setFilter(c)}>{c}</button>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
+        {shown.map(i => {
+          const on = picked.includes(i.id);
+          return (
+            <button key={i.id} type="button" onClick={() => onToggle(i.id)} className="card"
+              style={{
+                textAlign: "left", padding: 0, cursor: "pointer", touchAction: "manipulation",
+                border: `${on ? 2 : 1}px solid ${on ? S.aubergine : S.aubergine + "18"}`,
+                boxShadow: on ? `0 0 0 1px ${S.aubergine}` : "none",
+              }}>
+              <div style={{ aspectRatio: "1", background: S.blushSoft, position: "relative" }}>
+                {i.img
+                  ? <img src={i.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
+                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a76", fontFamily: "system-ui,sans-serif", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase" }}>No photo</div>}
+                {on && (
+                  <div style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: S.aubergine, color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, boxShadow: "0 1px 4px #0004" }}>✓</div>
+                )}
+              </div>
+              <div style={{ padding: "9px 11px" }}>
+                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 14, color: S.ink }}>{i.name}</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 2 }}>{i.category}{i.color ? ` · ${i.color}` : ""}{i.tone ? ` · ${i.tone}` : ""}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------- AI Stylist chat ----------
 function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike }) {
   const dislikedKeys = new Set((disliked || []).map(d => d.key));
@@ -912,25 +956,8 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
           {bubble("user", style, "q1a")}
           {bubble("assistant", "Lovely. Tap any pieces you'd like to build the look around — or describe them below. (optional)", "q2")}
           {items.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "10px 0" }}>
-              {items.map(i => {
-                const on = picked.includes(i.id);
-                return (
-                  <button key={i.id} type="button" onClick={() => togglePiece(i.id)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                      fontFamily: "system-ui,sans-serif", fontSize: 12.5, padding: "5px 11px 5px 6px",
-                      borderRadius: 18, touchAction: "manipulation",
-                      border: `1px solid ${on ? S.aubergine : S.aubergine + "33"}`,
-                      background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink,
-                    }}>
-                    {i.img
-                      ? <img src={i.img} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: "50%", pointerEvents: "none" }} />
-                      : <span style={{ width: 24, height: 24, borderRadius: "50%", background: on ? "#ffffff33" : S.blushSoft, display: "inline-block", pointerEvents: "none" }} />}
-                    {i.name}{on ? " ✓" : ""}
-                  </button>
-                );
-              })}
+            <div style={{ margin: "12px 0" }}>
+              <PiecePicker items={items} picked={picked} onToggle={togglePiece} />
             </div>
           )}
           <textarea value={pieces} onChange={e => setPieces(e.target.value)} rows={2}
