@@ -1,8 +1,8 @@
 name: Deploy Wardrobe Stylist to GitHub Pages
 
 # Builds the wardrobe-stylist app and publishes the static site to GitHub Pages.
-# The Pages site is created automatically on first run (enablement: true), so no
-# manual repository-settings toggle is needed.
+# One-time setup: in the repo, Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions". After that this workflow deploys automatically.
 on:
   push:
     branches:
@@ -33,13 +33,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: wardrobe-stylist/package-lock.json
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - run: npm ci
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
