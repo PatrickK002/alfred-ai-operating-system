@@ -135,11 +135,55 @@ Respond with JSON only.`;
   });
 }
 
+// Conversational stylist. The client sends a system prompt (persona + wardrobe
+// context) and the message history; the reply is plain assistant text. Images
+// (photos of past outfits) may ride along inside message content blocks.
+function handleChat(req, res) {
+  if (!API_KEY) {
+    return send(res, 503, { error: "ANTHROPIC_API_KEY is not set. The AI stylist is unavailable; weather-based styling still works." });
+  }
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", async () => {
+    try {
+      const { system, messages, max_tokens } = JSON.parse(raw);
+      if (!Array.isArray(messages) || !messages.length) return send(res, 400, { error: "messages required" });
+
+      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: Math.min(Math.max(Number(max_tokens) || 700, 1), 2000),
+          system: typeof system === "string" ? system : undefined,
+          messages,
+        }),
+      });
+
+      const data = await anthropicRes.json();
+      if (!anthropicRes.ok) return send(res, anthropicRes.status, { error: data?.error?.message || "Anthropic API error" });
+
+      const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+      send(res, 200, { text });
+    } catch (err) {
+      send(res, 500, { error: String(err?.message || err) });
+    }
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
   if (req.url === "/api/tag") {
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
     return handleTag(req, res);
+  }
+  if (req.url === "/api/chat") {
+    if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
+    return handleChat(req, res);
   }
   if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
   return send(res, 404, { error: "Not found" });
