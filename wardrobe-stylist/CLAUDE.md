@@ -20,7 +20,7 @@ into modules is explicitly requested.
   `wardrobe`, store `kv`) under keys `items`/`looks`/`inspo`, which is durable and
   large enough for photos (localStorage was too small/evictable on iOS). `loadStore`
   migrates legacy `localStorage` values (`wardrobe_items_v1`, `wardrobe_looks_v1`,
-  `wardrobe_inspo_v1`, `wardrobe_liked_v1`) in on first run. "My Style" holds two
+  `wardrobe_inspo_v1`, `wardrobe_liked_v1`, `wardrobe_disliked_v1`) in on first run. "My Style" holds two
   photo sets: `inspo` (outfits worn) and `liked` (outfits liked / aspiration);
   both are sent to the stylist, labelled, on the first message. Load is async — App holds a `ready` flag so
   the save effects don't clobber storage before the initial load finishes; it also
@@ -37,7 +37,10 @@ into modules is explicitly requested.
   titled `outfitCard` (a soft-background board with the pieces laid out) instead of
   plain text. The title comes from a `Look: <name>` first line the model is asked to
   emit (`parseReply` strips it). Actions: "Save look" (`onSaveLook` →
-  `saveLookPieces` adds to Saved Looks) and "Suggest another" (`regenerate`).
+  `saveLookPieces` adds to Saved Looks), "Suggest another" (`regenerate`), and
+  "Don't suggest again" (`onDislike` → `dislikeCombo` records the piece-id combo in
+  `disliked`, persisted; every request's system prompt lists disliked combos so that
+  exact set is never suggested again).
 - **Lightbox**: `LightboxContext` provides an `open(src)` fn; any `Thumb` with a
   photo is tappable to enlarge.
 - **Saved looks**: from Today's Look, "Save this look" stores the current outfit
