@@ -33,6 +33,11 @@ into modules is explicitly requested.
   on the first message as image blocks. `/api/chat` (in `server/index.js`) proxies
   to the Anthropic Messages API and returns assistant text; 503 without a key, and
   the UI degrades gracefully.
+- **Stylist outfit board**: when a reply names ≥2 closet pieces, it renders as a
+  titled `outfitCard` (a soft-background board with the pieces laid out) instead of
+  plain text. The title comes from a `Look: <name>` first line the model is asked to
+  emit (`parseReply` strips it). Actions: "Save look" (`onSaveLook` →
+  `saveLookPieces` adds to Saved Looks) and "Suggest another" (`regenerate`).
 - **Lightbox**: `LightboxContext` provides an `open(src)` fn; any `Thumb` with a
   photo is tappable to enlarge.
 - **Saved looks**: from Today's Look, "Save this look" stores the current outfit

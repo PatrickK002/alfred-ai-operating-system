@@ -296,6 +296,22 @@ export default function App() {
   }
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
 
+  // Save an arbitrary set of pieces (e.g. the AI stylist's suggestion) as a look.
+  // Returns the look's stable key so callers can show a "Saved" state.
+  function saveLookPieces(pieces) {
+    if (!pieces || !pieces.length) return null;
+    const key = "ai|" + occasion + "|" + pieces.map(p => p.id).sort().join(",");
+    if (!looks.some(l => l.key === key)) {
+      const look = {
+        id: crypto.randomUUID(), key, occasion,
+        weather: weather ? { temp: weather.temp, code: weather.code } : null,
+        pieces: pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img })),
+      };
+      setLooks(prev => [look, ...prev]);
+    }
+    return key;
+  }
+
   // ----- My Style photos (worn outfits + liked/inspiration outfits) -----
   // Skips any photo already in the set (identical downscaled image data).
   async function addPhotos(setter, current, e) {
@@ -529,7 +545,7 @@ export default function App() {
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} getWeather={getWeather}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} items={items} setView={setView}
-            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} />
+            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} onSaveLook={saveLookPieces} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView} />
@@ -568,7 +584,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked }) {
+function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked, onSaveLook }) {
   return (
     <div>
       {/* Weather strip */}
@@ -634,13 +650,13 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
       )}
 
       {/* AI stylist chat */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} />
     </div>
   );
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook }) {
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
   const [style, setStyle] = useState("");
   const [styleOther, setStyleOther] = useState("");
@@ -651,6 +667,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [savedKeys, setSavedKeys] = useState(() => new Set()); // stylist looks saved this session
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
@@ -665,7 +682,8 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
     const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
     return `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
       `Build looks ONLY from the pieces in their closet below; if something useful is missing, say so briefly. ` +
-      `Reference pieces by name. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers).\n\n` +
+      `Reference pieces by name. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers). ` +
+      `When you propose a full outfit, begin your reply with a single line "Look: <2-4 word name>", then a blank line, then a short explanation.\n\n` +
       `Today's context:\n` +
       `- Weather: ${w}\n` +
       `- Occasion: ${occasion}\n` +
@@ -771,6 +789,51 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
     </div>
   );
 
+  // Pull an optional "Look: <name>" title off the front of a reply.
+  function parseReply(text) {
+    const m = (text || "").match(/^\s*(?:look|outfit|title)\s*:\s*(.+)/i);
+    if (m) {
+      const title = m[1].trim().replace(/[\s.·–—-]+$/, "").slice(0, 40);
+      const rest = text.slice(m[0].length).replace(/^\s+/, "");
+      return { title, text: rest || text };
+    }
+    return { title: null, text: text || "" };
+  }
+  function regenerate() {
+    if (busy) return;
+    send("Not quite — please suggest a different outfit from my closet.", style, false, piecesUsed);
+  }
+
+  // A visual outfit board: titled card + the pieces laid out, with save / redo.
+  const outfitCard = (title, pcs, i) => {
+    const key = "ai|" + occasion + "|" + pcs.map(p => p.id).sort().join(",");
+    const saved = savedKeys.has(key);
+    return (
+      <div key={"o" + i} style={{ background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 12, padding: 14, margin: "0 0 14px" }}>
+        <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
+          {title || style || "Your look"}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>
+          {pcs.map(p => (
+            <div key={p.id}>
+              <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
+                <Thumb src={p.img} alt={p.name} />
+              </div>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <button className="btn btn-primary" style={{ padding: "8px 14px" }} disabled={saved}
+            onClick={() => { const k = onSaveLook(pcs); if (k) setSavedKeys(s => new Set(s).add(k)); }}>
+            {saved ? "Saved ✓" : "♥ Save look"}
+          </button>
+          <button className="btn btn-ghost" style={{ padding: "8px 14px" }} disabled={busy} onClick={regenerate}>Suggest another</button>
+        </div>
+      </div>
+    );
+  };
+
   const bubble = (who, text, key) => (
     <div key={key} style={{ display: "flex", justifyContent: who === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
       <div style={{
@@ -860,11 +923,23 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView }) {
         <div>
           <div style={{ maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
             {chat.map((m, i) => {
-              const pcs = m.role === "assistant" ? mentionedPieces(m.content) : [];
+              if (m.role !== "assistant") {
+                return <React.Fragment key={i}>{bubble("user", m.content, "b" + i)}</React.Fragment>;
+              }
+              const pcs = mentionedPieces(m.content);
+              if (pcs.length >= 2) {
+                const parsed = parseReply(m.content);
+                return (
+                  <React.Fragment key={i}>
+                    {bubble("assistant", parsed.text, "b" + i)}
+                    {outfitCard(parsed.title, pcs, i)}
+                  </React.Fragment>
+                );
+              }
               return (
                 <React.Fragment key={i}>
-                  {bubble(m.role, m.content, "b" + i)}
-                  {pcs.length > 0 && pieceStrip(pcs, "s" + i)}
+                  {bubble("assistant", m.content, "b" + i)}
+                  {pcs.length === 1 && pieceStrip(pcs, "s" + i)}
                 </React.Fragment>
               );
             })}
