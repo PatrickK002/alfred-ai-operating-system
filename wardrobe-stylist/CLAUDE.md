@@ -17,7 +17,18 @@ into modules is explicitly requested.
   `TONES`, `WARMTH`, `FORMALITY`, plus `NEUTRALS`/`JEWELRY` helpers. Update these
   lists to add/remove tag options; the tap-button UIs read from them automatically.
 - **Persistence**: `loadItems`/`saveItems` use `localStorage` (key `wardrobe_items_v1`).
-  Saved looks use `loadLooks`/`saveLooks` (key `wardrobe_looks_v1`).
+  Saved looks use `loadLooks`/`saveLooks` (key `wardrobe_looks_v1`). "My Style"
+  inspiration photos use `loadInspo`/`saveInspo` (key `wardrobe_inspo_v1`,
+  downscaled via `downscaleImage`).
+- **AI Stylist**: the `Stylist` component (on the Today view) runs a Q1 (style) →
+  Q2 (pieces in mind) → chat flow, POSTing to `/api/chat`. The client builds the
+  system prompt (persona + closet inventory + weather + occasion + current
+  suggestion) and sends the message history; up to 3 "My Style" photos ride along
+  on the first message as image blocks. `/api/chat` (in `server/index.js`) proxies
+  to the Anthropic Messages API and returns assistant text; 503 without a key, and
+  the UI degrades gracefully.
+- **Lightbox**: `LightboxContext` provides an `open(src)` fn; any `Thumb` with a
+  photo is tappable to enlarge.
 - **Saved looks**: from Today's Look, "Save this look" stores the current outfit
   under a stable `outfit.key` (occasion + sorted piece ids) so a given combination
   saves only once. Each saved look snapshots its pieces, so it survives later item

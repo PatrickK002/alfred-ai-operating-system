@@ -7,7 +7,10 @@ Tag the clothes and accessories you already own, and get outfit suggestions base
 - **Add pieces** — upload photos and tag them by category, colour, tone, warmth, and occasion (fast tap-buttons). If you set up an API key, uploads are pre-tagged automatically and you just confirm.
 - **Closet** — browse and edit everything, filterable by category.
 - **Today's look** — pulls current weather, you pick the occasion, and it styles a full outfit (favouring one bold statement piece and avoiding clashing colours).
+- **AI Stylist chat** — on Today's Look, the stylist asks what style you're going for and whether you have pieces in mind, then suggests a look from your closet and answers follow-up questions (needs an API key — see Setup).
+- **My Style** — upload photos of outfits you've worn and loved; the AI stylist uses them as visual taste context.
 - **Saved looks** — keep any outfit you love with one tap; it's stored (with the weather it was styled for) so you can pull it up again later.
+- Tap any photo to enlarge it.
 
 ## Install as an app (iPad / iPhone / Android)
 
