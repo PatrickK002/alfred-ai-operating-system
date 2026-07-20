@@ -42,6 +42,11 @@ into modules is explicitly requested.
   `disliked`, persisted; every request's system prompt lists disliked combos so that
   exact set is never suggested again). The Saved Looks view (`DislikedList`) shows
   blocked combinations with an "Allow again" button (`removeDislike`).
+- **Closet editing**: tapping a piece (or its "Edit tags" button) opens `EditPanel`,
+  a right-side drawer (`position:fixed`, z-index 55 — above the lightbox) showing the
+  item's large photo and every attribute as `TagButtons` groups, plus a Delete
+  (confirm) / Done footer. Edits call `updateItem` live. The old cramped inline card
+  form is gone.
 - **Lightbox**: `LightboxContext` provides an `open(src)` fn; any `Thumb` with a
   photo is tappable to enlarge.
 - **Saved looks**: from Today's Look, "Save this look" stores the current outfit
