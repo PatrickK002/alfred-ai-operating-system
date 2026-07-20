@@ -20,7 +20,9 @@ into modules is explicitly requested.
   `wardrobe`, store `kv`) under keys `items`/`looks`/`inspo`, which is durable and
   large enough for photos (localStorage was too small/evictable on iOS). `loadStore`
   migrates legacy `localStorage` values (`wardrobe_items_v1`, `wardrobe_looks_v1`,
-  `wardrobe_inspo_v1`) in on first run. Load is async — App holds a `ready` flag so
+  `wardrobe_inspo_v1`, `wardrobe_liked_v1`) in on first run. "My Style" holds two
+  photo sets: `inspo` (outfits worn) and `liked` (outfits liked / aspiration);
+  both are sent to the stylist, labelled, on the first message. Load is async — App holds a `ready` flag so
   the save effects don't clobber storage before the initial load finishes; it also
   calls `navigator.storage.persist()`. `downscaleImage` shrinks "My Style" photos.
   `exportData`/`importData` provide an optional JSON backup (Backup card in Closet).
