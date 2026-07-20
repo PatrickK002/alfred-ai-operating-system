@@ -263,6 +263,7 @@ export default function App() {
     const key = pieces.map(p => p.id).sort().join(",");
     setDisliked(prev => prev.some(d => d.key === key) ? prev : [{ key, names: pieces.map(p => p.name) }, ...prev]);
   }
+  function removeDislike(key) { setDisliked(prev => prev.filter(d => d.key !== key)); }
 
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
@@ -560,7 +561,8 @@ export default function App() {
             disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
-          <Looks looks={looks} deleteLook={deleteLook} setView={setView} />
+          <Looks looks={looks} deleteLook={deleteLook} setView={setView}
+            disliked={disliked} removeDislike={removeDislike} items={items} />
         )}
         {view === "mystyle" && (
           <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo}
@@ -991,11 +993,56 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   );
 }
 
-// ---------- Saved looks view ----------
-function Looks({ looks, deleteLook, setView }) {
-  if (!looks.length) return <Empty title="No saved looks yet"
-    body="When a look comes together, tap “Save this look” on Today's Look to keep it here for next time."
-    action={<button className="btn btn-primary" onClick={()=>setView("today")}>Style a look</button>} />;
+// ---------- "Not suggested again" (disliked combinations) ----------
+function DislikedList({ disliked, removeDislike, items }) {
+  const byId = new Map(items.map(i => [i.id, i]));
+  return (
+    <div style={{ marginTop: 36 }}>
+      <h2 style={{ fontWeight: 400, fontSize: 22, borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8, marginTop: 0 }}>
+        Not suggested again ({disliked.length})
+      </h2>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66", margin: "10px 0 0", maxWidth: 560 }}>
+        Combinations you've told the stylist to avoid. Tap “Allow again” to let it suggest one of these.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
+        {disliked.map(d => {
+          const pcs = d.key.split(",").map(id => byId.get(id)).filter(Boolean);
+          return (
+            <div key={d.key} className="card" style={{ padding: 14 }}>
+              {pcs.length ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(64px,1fr))", gap: 8, marginBottom: 12 }}>
+                  {pcs.map(p => (
+                    <div key={p.id} title={p.name}>
+                      <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 3, overflow: "hidden" }}>
+                        <Thumb src={p.img} alt={p.name} />
+                      </div>
+                      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: S.ink, marginBottom: 12 }}>{(d.names || []).join(" + ")}</div>
+              )}
+              <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={() => removeDislike(d.key)}>Allow again</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Saved looks view (kept looks + blocked combinations) ----------
+function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
+  const hasDisliked = disliked && disliked.length > 0;
+  if (!looks.length) return (
+    <div>
+      <Empty title="No saved looks yet"
+        body="When a look comes together, tap “Save look” on the stylist's suggestion (or “Save this look” on Today's Look) to keep it here."
+        action={<button className="btn btn-primary" onClick={()=>setView("today")}>Style a look</button>} />
+      {hasDisliked && <DislikedList disliked={disliked} removeDislike={removeDislike} items={items} />}
+    </div>
+  );
 
   return (
     <div>
@@ -1025,6 +1072,7 @@ function Looks({ looks, deleteLook, setView }) {
           </div>
         ))}
       </div>
+      {hasDisliked && <DislikedList disliked={disliked} removeDislike={removeDislike} items={items} />}
     </div>
   );
 }

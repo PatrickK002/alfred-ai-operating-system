@@ -40,7 +40,8 @@ into modules is explicitly requested.
   `saveLookPieces` adds to Saved Looks), "Suggest another" (`regenerate`), and
   "Don't suggest again" (`onDislike` → `dislikeCombo` records the piece-id combo in
   `disliked`, persisted; every request's system prompt lists disliked combos so that
-  exact set is never suggested again).
+  exact set is never suggested again). The Saved Looks view (`DislikedList`) shows
+  blocked combinations with an "Allow again" button (`removeDislike`).
 - **Lightbox**: `LightboxContext` provides an `open(src)` fn; any `Thumb` with a
   photo is tappable to enlarge.
 - **Saved looks**: from Today's Look, "Save this look" stores the current outfit
