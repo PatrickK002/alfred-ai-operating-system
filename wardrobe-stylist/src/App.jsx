@@ -59,40 +59,71 @@ function colorsClash(a, b) {
   return a !== b;
 }
 
-// ---------- Persistence ----------
-// Items (including photos as data URLs) persist in the browser's localStorage.
+// ---------- Persistence (IndexedDB, auto-migrating from localStorage) ----------
+// Wardrobe data (including photos as data URLs) is stored in IndexedDB — far
+// larger and more durable than localStorage, so photos survive app updates and
+// reopening the app. Everything saves and loads automatically; there is no
+// manual step. Legacy localStorage data is migrated in on first load.
+//   - items:  the wardrobe pieces (key `wardrobe_items_v1`)
+//   - looks:  saved outfits (key `wardrobe_looks_v1`), each a self-contained
+//             snapshot so it survives edits/deletes of the underlying pieces
+//   - inspo:  "My Style" photos of past outfits (key `wardrobe_inspo_v1`)
 const KEY = "wardrobe_items_v1";
-function loadItems() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
-}
-function saveItems(items) {
-  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) {
-    console.warn("Could not save wardrobe (storage full?):", e);
-  }
-}
-
-// Saved looks (favourited outfits) persist under their own key. Each look stores
-// a self-contained snapshot of its pieces, so a saved look survives even if the
-// underlying wardrobe item is later edited or deleted.
 const LOOKS_KEY = "wardrobe_looks_v1";
-function loadLooks() {
-  try { return JSON.parse(localStorage.getItem(LOOKS_KEY)) || []; } catch { return []; }
+const INSPO_KEY = "wardrobe_inspo_v1";
+
+const DB_NAME = "wardrobe";
+const STORE = "kv";
+let _dbPromise = null;
+function openDB() {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("no-idb")); return; }
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _dbPromise;
 }
-function saveLooks(looks) {
-  try { localStorage.setItem(LOOKS_KEY, JSON.stringify(looks)); } catch (e) {
-    console.warn("Could not save looks (storage full?):", e);
-  }
+async function idbGet(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+    rq.onsuccess = () => resolve(rq.result);
+    rq.onerror = () => reject(rq.error);
+  });
+}
+async function idbSet(key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
-// "My Style" — photos of outfits the user has worn and liked. These feed the AI
-// stylist as visual taste context. Downscaled on upload to stay storage-friendly.
-const INSPO_KEY = "wardrobe_inspo_v1";
-function loadInspo() {
-  try { return JSON.parse(localStorage.getItem(INSPO_KEY)) || []; } catch { return []; }
+// Prefer IndexedDB; if a collection is missing there, migrate any legacy
+// localStorage value in (so upgrading from the old version loses nothing).
+async function loadStore(idbKey, lsKey) {
+  try {
+    let v = await idbGet(idbKey);
+    if (v == null) {
+      try {
+        const raw = localStorage.getItem(lsKey);
+        if (raw) { v = JSON.parse(raw); if (Array.isArray(v)) await idbSet(idbKey, v); }
+      } catch {}
+    }
+    return Array.isArray(v) ? v : [];
+  } catch {
+    try { return JSON.parse(localStorage.getItem(lsKey)) || []; } catch { return []; }
+  }
 }
-function saveInspo(inspo) {
-  try { localStorage.setItem(INSPO_KEY, JSON.stringify(inspo)); } catch (e) {
-    console.warn("Could not save style photos (storage full?):", e);
+async function saveStore(idbKey, lsKey, value) {
+  try { await idbSet(idbKey, value); }
+  catch {
+    try { localStorage.setItem(lsKey, JSON.stringify(value)); } catch (e) { console.warn("Could not save (storage full?):", e); }
   }
 }
 
@@ -179,9 +210,10 @@ const S = {
 };
 
 export default function App() {
-  const [items, setItems] = useState(loadItems());
-  const [looks, setLooks] = useState(loadLooks());
-  const [inspo, setInspo] = useState(loadInspo());
+  const [items, setItems] = useState([]);
+  const [looks, setLooks] = useState([]);
+  const [inspo, setInspo] = useState([]);
+  const [ready, setReady] = useState(false); // true once data has loaded from storage
   const [view, setView] = useState("today"); // today | looks | mystyle | closet | add
   const [weather, setWeather] = useState(null);
   const [weatherErr, setWeatherErr] = useState(null);
@@ -193,9 +225,44 @@ export default function App() {
   const [lightbox, setLightbox] = useState(null); // src of enlarged photo
   const fileRef = useRef();
 
-  useEffect(() => saveItems(items), [items]);
-  useEffect(() => saveLooks(looks), [looks]);
-  useEffect(() => saveInspo(inspo), [inspo]);
+  // Load everything from durable storage on first mount, then keep it saved.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [it, lk, ip] = await Promise.all([
+        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY),
+      ]);
+      if (!alive) return;
+      setItems(it); setLooks(lk); setInspo(ip); setReady(true);
+      try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
+    })();
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => { if (ready) saveStore("items", KEY, items); }, [items, ready]);
+  useEffect(() => { if (ready) saveStore("looks", LOOKS_KEY, looks); }, [looks, ready]);
+  useEffect(() => { if (ready) saveStore("inspo", INSPO_KEY, inspo); }, [inspo, ready]);
+
+  // ----- Backup (optional; move your wardrobe between devices/links) -----
+  function exportData() {
+    try {
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo };
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "wardrobe-backup.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { alert("Couldn't create the backup file."); }
+  }
+  async function importData(file) {
+    try {
+      const data = JSON.parse(await file.text());
+      if (Array.isArray(data.items)) setItems(data.items);
+      if (Array.isArray(data.looks)) setLooks(data.looks);
+      if (Array.isArray(data.inspo)) setInspo(data.inspo);
+      alert("Backup restored.");
+    } catch { alert("That file didn't look like a wardrobe backup."); }
+  }
 
   // ----- Saved looks -----
   const currentLookSaved = !!(outfit?.key && looks.some(l => l.key === outfit.key));
@@ -441,7 +508,8 @@ export default function App() {
           <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo} setView={setView} />
         )}
         {view === "closet" && (
-          <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView} />
+          <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
+            exportData={exportData} importData={importData} />
         )}
         {view === "add" && (
           <Add fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
@@ -824,15 +892,39 @@ function MyStyle({ inspo, addInspo, deleteInspo, setView }) {
   );
 }
 
+// ---------- Backup card (export / import wardrobe) ----------
+function Backup({ exportData, importData }) {
+  const ref = useRef();
+  return (
+    <div className="card" style={{ marginTop: 30, padding: 16 }}>
+      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 4 }}>Backup</div>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66", margin: "0 0 12px", maxWidth: 560 }}>
+        Your wardrobe saves automatically on this device — you don't need to do anything day to day. Use a backup only to keep a safety copy or move your wardrobe to another device or link.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn btn-ghost" onClick={exportData}>Download backup</button>
+        <input ref={ref} type="file" accept="application/json,.json" style={{ display: "none" }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f && confirm("Restore this backup? It replaces your current wardrobe on this device.")) importData(f); e.target.value = ""; }} />
+        <button className="btn btn-ghost" onClick={() => ref.current?.click()}>Restore backup</button>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Closet view ----------
-function Closet({ items, deleteItem, updateItem, setView }) {
+function Closet({ items, deleteItem, updateItem, setView, exportData, importData }) {
   const [filter, setFilter] = useState("All");
   const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
   const shown = filter === "All" ? items : items.filter(i => i.category === filter);
   const [editId, setEditId] = useState(null);
 
-  if (!items.length) return <Empty title="Nothing here yet" body="Upload photos of your clothes and accessories to build your digital closet."
-    action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />;
+  if (!items.length) return (
+    <div>
+      <Empty title="Nothing here yet" body="Upload photos of your clothes and accessories to build your digital closet."
+        action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />
+      <Backup exportData={exportData} importData={importData} />
+    </div>
+  );
 
   return (
     <div>
@@ -879,6 +971,7 @@ function Closet({ items, deleteItem, updateItem, setView }) {
           </div>
         ))}
       </div>
+      <Backup exportData={exportData} importData={importData} />
     </div>
   );
 }

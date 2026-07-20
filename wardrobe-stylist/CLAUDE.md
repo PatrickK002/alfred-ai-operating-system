@@ -16,10 +16,14 @@ into modules is explicitly requested.
 - **Constants** near the top define the tag vocabularies: `CATEGORIES`, `COLORS`,
   `TONES`, `WARMTH`, `FORMALITY`, plus `NEUTRALS`/`JEWELRY` helpers. Update these
   lists to add/remove tag options; the tap-button UIs read from them automatically.
-- **Persistence**: `loadItems`/`saveItems` use `localStorage` (key `wardrobe_items_v1`).
-  Saved looks use `loadLooks`/`saveLooks` (key `wardrobe_looks_v1`). "My Style"
-  inspiration photos use `loadInspo`/`saveInspo` (key `wardrobe_inspo_v1`,
-  downscaled via `downscaleImage`).
+- **Persistence**: data is stored in **IndexedDB** (`openDB`/`idbGet`/`idbSet`, DB
+  `wardrobe`, store `kv`) under keys `items`/`looks`/`inspo`, which is durable and
+  large enough for photos (localStorage was too small/evictable on iOS). `loadStore`
+  migrates legacy `localStorage` values (`wardrobe_items_v1`, `wardrobe_looks_v1`,
+  `wardrobe_inspo_v1`) in on first run. Load is async — App holds a `ready` flag so
+  the save effects don't clobber storage before the initial load finishes; it also
+  calls `navigator.storage.persist()`. `downscaleImage` shrinks "My Style" photos.
+  `exportData`/`importData` provide an optional JSON backup (Backup card in Closet).
 - **AI Stylist**: the `Stylist` component (on the Today view) runs a Q1 (style) →
   Q2 (pieces in mind) → chat flow, POSTing to `/api/chat`. The client builds the
   system prompt (persona + closet inventory + weather + occasion + current
