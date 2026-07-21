@@ -47,7 +47,15 @@ into modules is explicitly requested.
   plan from the closet via `composeForSlot` (snapshots pieces so it survives edits),
   and `packingSummary` aggregates the unique pieces for the packing overview. The
   dashboard mirrors the reference design: summary card, day tabs, slot cards, packing
-  bars, and "outfits at a glance".
+  bars, and "outfits at a glance". Each holiday outfit has a "♥ Save look" that goes
+  into Saved Looks via `onSaveLook` with a `note` ("Positano · Day 2 · Dinner") shown
+  on the saved-look card.
+- **saveLookPieces(pieces, opts)**: the shared save-a-look helper takes optional
+  `{ occasion, note, weather }` so Today, the stylist, and the travel planner can all
+  save into the one Saved Looks collection with the right label.
+- **Grid overflow**: piece grids inside fixed/scrolling cards (Today carousel, travel
+  mini-boards) use `repeat(N, minmax(0,1fr))` + `minWidth:0` so photos can't spill
+  past the card edge (a plain `1fr` track floors at the image's min-content width).
 - **AI Stylist**: the `Stylist` component (on the Today view) runs a Q1 (style) →
   Q2 (pieces in mind) → chat flow, POSTing to `/api/chat`. The client builds the
   system prompt (persona + closet inventory + weather + occasion + current
