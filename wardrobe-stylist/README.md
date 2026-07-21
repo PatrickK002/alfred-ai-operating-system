@@ -6,11 +6,13 @@ Tag the clothes and accessories you already own, and get outfit suggestions base
 
 - **Add pieces** — upload photos and tag them by category, colour, tone, warmth, and occasion (fast tap-buttons). If you set up an API key, uploads are pre-tagged automatically and you just confirm.
 - **Closet** — browse and edit everything, filterable by category.
-- **Today's look** — pulls current weather, you pick the occasion, and it styles a full outfit (favouring one bold statement piece and avoiding clashing colours).
+- **Today's look** — pulls current weather, you pick the occasion, and it lines up a **carousel of recommended looks** to swipe through and save (each favouring one bold statement piece and avoiding clashing colours). The AI stylist chat sits right at the top.
+- **Insights** — a read on your style drawn from your tagged pieces: your colour palette, the balance of your wardrobe (neutrals vs colour, tone, categories, occasions), and an optional written stylist's take.
+- **Travel** — planning a holiday? Enter the destination, dates, temperature and vibe, and it builds a day-by-day outfit plan (day/afternoon/evening/night) from your own closet, plus a packing overview.
 - **AI Stylist chat** — on Today's Look, the stylist asks what style you're going for and whether you have pieces in mind, then suggests a look from your closet and answers follow-up questions (needs an API key — see Setup).
 - **My Style** — upload photos of outfits you've worn *and* outfits you like (aspiration); the AI stylist uses both as visual taste context (what suits you, plus the direction you want to lean).
 - **Personal Shopper** — save the stores and brands you love, and an AI shopper (which searches the live web) suggests new pieces that fill gaps in your closet, checks your saved stores for current sales, and discovers new brands you can save with one tap (needs an API key — see Setup).
-- **Saved looks** — keep any outfit you love with one tap; it's stored (with the weather it was styled for) so you can pull it up again later.
+- **Saved looks** — keep any outfit you love with one tap; it's stored (with the weather it was styled for) so you can pull it up again later, and you can filter them by occasion to find one fast.
 - Tap any photo to enlarge it.
 
 ## Install as an app (iPad / iPhone / Android)

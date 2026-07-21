@@ -26,6 +26,28 @@ into modules is explicitly requested.
   the save effects don't clobber storage before the initial load finishes; it also
   calls `navigator.storage.persist()`. `downscaleImage` shrinks "My Style" photos.
   `exportData`/`importData` provide an optional JSON backup (Backup card in Closet).
+- **Today view order**: weather strip → `Stylist` (AI chat, moved to the top) →
+  **Today look recommendations** carousel. `buildOutfit` now calls
+  `recommendOutfits` (repeated `composeOutfit` calls, deduped by `key`) to fill a
+  horizontally-scrolling carousel of looks, each with a per-look "♥ Save look".
+- **composeOutfit / recommendOutfits**: `buildOutfit`'s logic is extracted into the
+  pure module-level `composeOutfit(items, weather, occasion)` so it can be reused by
+  both the Today carousel and the travel planner (which passes a synthetic weather
+  from the trip's temperature).
+- **Saved looks filtering**: the `Looks` view has occasion filter chips (from each
+  look's `occasion`) so saved looks are categorised and findable.
+- **Insights** (`insights` view): a computed style profile — colour palette (swatches
+  + a proportion bar, using `COLOR_HEX`/`colorHex`), category and tone/occasion
+  `Meter` bars, a neutrals-vs-colour split, and a one-line summary. An optional
+  "stylist's read" button posts to `/api/chat` for a written take (degrades without a
+  key). All the visuals are deterministic and work offline.
+- **Travel** (`travel` view): plan a holiday. `trips` (key `wardrobe_trips_v1`, in
+  backup) each hold `{ destination, start, end, temp, vibe, notes, plan }`.
+  `generateTripPlan` builds a per-day, per-slot (Day/Afternoon/Evening/Night) outfit
+  plan from the closet via `composeForSlot` (snapshots pieces so it survives edits),
+  and `packingSummary` aggregates the unique pieces for the packing overview. The
+  dashboard mirrors the reference design: summary card, day tabs, slot cards, packing
+  bars, and "outfits at a glance".
 - **AI Stylist**: the `Stylist` component (on the Today view) runs a Q1 (style) →
   Q2 (pieces in mind) → chat flow, POSTing to `/api/chat`. The client builds the
   system prompt (persona + closet inventory + weather + occasion + current

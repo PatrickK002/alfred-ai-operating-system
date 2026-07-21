@@ -59,6 +59,150 @@ function colorsClash(a, b) {
   return a !== b;
 }
 
+// Approximate hex for each colour tag, for the palette visuals on the Insights page.
+const COLOR_HEX = {
+  "Black": "#1c1c1c", "White": "#f4f1ee", "Black & White": "#5a5a5a", "Grey": "#9a9a9a",
+  "Beige": "#d8c7ad", "Cream": "#efe6d3", "Brown": "#6f4b33", "Tan": "#c19a6b",
+  "Navy": "#2a3550", "Blue": "#3f6fb0", "Green": "#4c7a52", "Red": "#b23a34",
+  "Pink": "#e0a3b4", "Purple": "#7a5490", "Orange": "#d1743a", "Yellow": "#e3c04a",
+  "Gold": "#c8a24b", "Silver": "#c3c6cb", "Denim": "#4a6274", "Floral": "#c98a9e",
+  "Multicolour": "#b57f5a",
+};
+function colorHex(name) { return COLOR_HEX[name] || "#b9a08f"; }
+
+// ---------- Outfit composition (shared by Today + Travel) ----------
+// Pure: builds one outfit from the closet for a given weather + occasion. Uses
+// randomness so repeated calls give different looks; callers dedupe by `key`.
+function composeOutfit(items, weather, occasion) {
+  if (!weather) return { pieces: [], notes: [], key: "" };
+  const needWarmth = warmthForTemp(weather.temp);
+  const wet = isWet(weather.code);
+  const pool = items.filter(i => i.formality?.includes(occasion));
+
+  const result = { pieces: [], notes: [] };
+  const hasBold = () => result.pieces.some(p => p.tone === "Bold");
+
+  const pick = (cat, opts = {}) => {
+    let cand = pool.filter(i => i.category === cat);
+    if (opts.warmthOk) cand = cand.filter(i => i.warmth === "Not applicable" || needWarmth.includes(i.warmth));
+    if (opts.avoidColor) cand = cand.filter(i => !colorsClash(i.color, opts.avoidColor)).concat(cand.filter(i => colorsClash(i.color, opts.avoidColor)));
+    if (!cand.length && opts.warmthOk) cand = pool.filter(i => i.category === cat); // relax warmth
+    if (!cand.length) return null;
+    if (hasBold()) {
+      const quiet = cand.filter(i => i.tone !== "Bold");
+      if (quiet.length) cand = quiet;
+    }
+    return cand[Math.floor(Math.random() * cand.length)];
+  };
+
+  const useOnePiece = Math.random() < 0.4 && (pool.some(i => i.category === "Dresses") || pool.some(i => i.category === "Jumpsuits"));
+  let baseColor = null;
+  function pushTopBottom() {
+    const top = pick("Tops", { warmthOk: true });
+    if (top) { result.pieces.push(top); baseColor = top.color; }
+    const bottom = pick("Bottoms", { warmthOk: true, avoidColor: baseColor });
+    if (bottom) result.pieces.push(bottom);
+  }
+  if (useOnePiece) {
+    const one = pick("Dresses", { warmthOk: true }) || pick("Jumpsuits", { warmthOk: true });
+    if (one) { result.pieces.push(one); baseColor = one.color; }
+    else { pushTopBottom(); }
+  } else { pushTopBottom(); }
+
+  if (weather.temp < 16 || wet) {
+    const outer = pick("Outerwear", { warmthOk: weather.temp < 16, avoidColor: baseColor });
+    if (outer) result.pieces.push(outer);
+    else if (weather.temp < 12) result.notes.push("It's chilly — add a warm layer if you have one un-tagged.");
+  }
+  const shoes = pick("Shoes", { avoidColor: baseColor });
+  if (shoes) result.pieces.push(shoes);
+  const bag = pick("Bags"); if (bag) result.pieces.push(bag);
+  const belt = pick("Belts"); if (belt && !useOnePiece) result.pieces.push(belt);
+  const acc = pick("Accessories"); if (acc) result.pieces.push(acc);
+  JEWELRY.forEach(j => { const p = pick(j); if (p && Math.random() < 0.6) result.pieces.push(p); });
+
+  if (wet) result.notes.push("Rain expected — closed shoes and a jacket recommended.");
+  if (weather.wind > 30) result.notes.push("Windy out — a fitted layer beats anything loose.");
+  const boldPiece = result.pieces.find(p => p.tone === "Bold");
+  if (boldPiece) result.notes.push(`Let the ${boldPiece.name.toLowerCase()} be the statement — everything else stays quiet.`);
+  if (!result.pieces.length) result.notes.push("No items match this occasion + weather yet. Add more pieces or switch the occasion.");
+
+  result.key = occasion + "|" + result.pieces.map(p => p.id).sort().join(",");
+  return result;
+}
+
+// Build several distinct outfit recommendations (for the Today carousel).
+function recommendOutfits(items, weather, occasion, count = 6) {
+  if (!weather) return [];
+  const out = [];
+  const seen = new Set();
+  for (let tries = 0; tries < count * 6 && out.length < count; tries++) {
+    const o = composeOutfit(items, weather, occasion);
+    if (!o.pieces.length) break;
+    if (seen.has(o.key)) continue;
+    seen.add(o.key);
+    out.push(o);
+  }
+  return out;
+}
+
+// ---------- Travel / holiday planning ----------
+const PACK_GROUPS = {
+  Clothing: ["Tops", "Bottoms", "Dresses", "Jumpsuits", "Outerwear"],
+  Shoes: ["Shoes"],
+  Accessories: ["Bags", "Belts", "Accessories", "Necklaces", "Brooches", "Earrings", "Rings", "Bracelets"],
+};
+function packGroup(cat) {
+  for (const [g, cats] of Object.entries(PACK_GROUPS)) if (cats.includes(cat)) return g;
+  return "Accessories";
+}
+// The four day-parts a trip plans for, each with the occasions it prefers.
+const TRIP_SLOTS = [
+  { slot: "Day", label: "Explore & sightseeing", occ: ["Casual", "Work", "Going out"] },
+  { slot: "Afternoon", label: "Afternoon out", occ: ["Casual", "Going out", "Work"] },
+  { slot: "Evening", label: "Dinner", occ: ["Going out", "Work", "Casual"] },
+  { slot: "Night", label: "Drinks", occ: ["Going out", "Casual", "Work"] },
+];
+function snapshotPiece(p) { return { id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img }; }
+// Compose an outfit for a slot, trying its preferred occasions until one lands.
+function composeForSlot(items, weather, occasions) {
+  for (const occ of occasions) {
+    const o = composeOutfit(items, weather, occ);
+    if (o.pieces.length) return { occasion: occ, pieces: o.pieces };
+  }
+  return { occasion: occasions[0], pieces: [] };
+}
+// The list of dates (inclusive) a trip covers, capped for sanity.
+function tripDays(start, end) {
+  const s = new Date(start + "T00:00:00"), e = new Date(end + "T00:00:00");
+  if (isNaN(s) || isNaN(e) || e < s) return [];
+  const out = [];
+  for (let t = new Date(s); t <= e && out.length < 21; t.setDate(t.getDate() + 1)) out.push(new Date(t));
+  return out;
+}
+// Build a full per-day, per-slot outfit plan from the closet (snapshots pieces).
+function generateTripPlan(items, trip) {
+  const days = tripDays(trip.start, trip.end);
+  const w = { temp: Number(trip.temp) || 24, code: 0, wind: 5 };
+  return days.map(d => ({
+    date: d.toISOString().slice(0, 10),
+    slots: TRIP_SLOTS.map(sd => {
+      const o = composeForSlot(items, w, sd.occ);
+      return { slot: sd.slot, label: sd.label, occasion: o.occasion, pieces: o.pieces.map(snapshotPiece) };
+    }),
+  }));
+}
+// Unique pieces used across a plan, grouped for the packing overview.
+function packingSummary(plan) {
+  const byId = new Map();
+  for (const day of plan) for (const slot of day.slots) for (const p of slot.pieces) byId.set(p.id, p);
+  const pieces = [...byId.values()];
+  const groups = { Clothing: 0, Shoes: 0, Accessories: 0 };
+  for (const p of pieces) groups[packGroup(p.category)]++;
+  return { total: pieces.length, groups, pieces };
+}
+function fmtDate(iso, opts) { try { return new Date(iso + "T00:00:00").toLocaleDateString(undefined, opts); } catch { return iso; } }
+
 // ---------- Persistence (IndexedDB, auto-migrating from localStorage) ----------
 // Wardrobe data (including photos as data URLs) is stored in IndexedDB — far
 // larger and more durable than localStorage, so photos survive app updates and
@@ -74,6 +218,7 @@ const INSPO_KEY = "wardrobe_inspo_v1";   // outfits the user has worn ("My Style
 const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to (inspiration)
 const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist must never suggest again
 const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for the personal shopper)
+const TRIPS_KEY = "wardrobe_trips_v1"; // planned holidays (Travel page)
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -219,13 +364,15 @@ export default function App() {
   const [liked, setLiked] = useState([]); // outfits liked (inspiration)
   const [disliked, setDisliked] = useState([]); // combinations never to suggest again
   const [brands, setBrands] = useState([]); // saved stores/brands for the personal shopper
+  const [trips, setTrips] = useState([]); // planned holidays
   const [ready, setReady] = useState(false); // true once data has loaded from storage
-  const [view, setView] = useState("today"); // today | looks | mystyle | closet | add | shop
+  const [view, setView] = useState("today"); // today | looks | mystyle | closet | shop | insights | travel | add
   const [weather, setWeather] = useState(null);
   const [weatherErr, setWeatherErr] = useState(null);
   const [loadingW, setLoadingW] = useState(false);
   const [occasion, setOccasion] = useState("Casual");
   const [outfit, setOutfit] = useState(null);
+  const [recs, setRecs] = useState([]); // carousel of recommended looks
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
   const [autoTagging, setAutoTagging] = useState(false);
   const [lightbox, setLightbox] = useState(null); // src of enlarged photo
@@ -244,11 +391,11 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di, br] = await Promise.all([
-        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY),
+      const [it, lk, ip, li, di, br, tr] = await Promise.all([
+        loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY), loadStore("trips", TRIPS_KEY),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setReady(true);
+      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setTrips(tr); setReady(true);
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
@@ -259,6 +406,17 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("liked", LIKED_KEY, liked); }, [liked, ready]);
   useEffect(() => { if (ready) saveStore("disliked", DISLIKED_KEY, disliked); }, [disliked, ready]);
   useEffect(() => { if (ready) saveStore("brands", BRANDS_KEY, brands); }, [brands, ready]);
+  useEffect(() => { if (ready) saveStore("trips", TRIPS_KEY, trips); }, [trips, ready]);
+
+  // ----- Trips (Travel page) -----
+  function saveTrip(trip) {
+    setTrips(prev => {
+      const i = prev.findIndex(t => t.id === trip.id);
+      if (i >= 0) { const c = [...prev]; c[i] = trip; return c; }
+      return [trip, ...prev];
+    });
+  }
+  function deleteTrip(id) { setTrips(prev => prev.filter(t => t.id !== id)); }
 
   // ----- Saved stores/brands (personal shopper) -----
   function addBrand(b) {
@@ -287,7 +445,7 @@ export default function App() {
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands, trips };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -305,6 +463,7 @@ export default function App() {
       if (Array.isArray(data.liked)) setLiked(data.liked);
       if (Array.isArray(data.disliked)) setDisliked(data.disliked);
       if (Array.isArray(data.brands)) setBrands(data.brands);
+      if (Array.isArray(data.trips)) setTrips(data.trips);
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -470,70 +629,12 @@ export default function App() {
   }
 
   // ----- Outfit builder -----
+  // Build a fresh set of recommended looks for the Today carousel.
   function buildOutfit() {
     if (!weather) return;
-    const needWarmth = warmthForTemp(weather.temp);
-    const wet = isWet(weather.code);
-    const pool = items.filter(i => i.formality?.includes(occasion));
-
-    const result = { pieces: [], notes: [] };
-    const hasBold = () => result.pieces.some(p => p.tone === "Bold");
-
-    const pick = (cat, opts = {}) => {
-      let cand = pool.filter(i => i.category === cat);
-      if (opts.warmthOk) cand = cand.filter(i => i.warmth === "Not applicable" || needWarmth.includes(i.warmth));
-      if (opts.avoidColor) cand = cand.filter(i => !colorsClash(i.color, opts.avoidColor)).concat(cand.filter(i => colorsClash(i.color, opts.avoidColor)));
-      if (!cand.length && opts.warmthOk) cand = pool.filter(i => i.category === cat); // relax warmth
-      if (!cand.length) return null;
-      // One statement piece per look: if a bold item is already chosen, prefer
-      // non-bold options for the rest, but fall back to bold if that's all there is.
-      if (hasBold()) {
-        const quiet = cand.filter(i => i.tone !== "Bold");
-        if (quiet.length) cand = quiet;
-      }
-      return cand[Math.floor(Math.random() * cand.length)];
-    };
-
-    // Decide silhouette: dress/jumpsuit OR top+bottom
-    const useOnePiece = Math.random() < 0.4 && (pool.some(i => i.category === "Dresses") || pool.some(i => i.category === "Jumpsuits"));
-    let baseColor = null;
-    if (useOnePiece) {
-      const one = pick("Dresses", { warmthOk: true }) || pick("Jumpsuits", { warmthOk: true });
-      if (one) { result.pieces.push(one); baseColor = one.color; }
-      else { pushTopBottom(); }
-    } else { pushTopBottom(); }
-
-    function pushTopBottom() {
-      const top = pick("Tops", { warmthOk: true });
-      if (top) { result.pieces.push(top); baseColor = top.color; }
-      const bottom = pick("Bottoms", { warmthOk: true, avoidColor: baseColor });
-      if (bottom) result.pieces.push(bottom);
-    }
-
-    // Outerwear if cool or wet
-    if (weather.temp < 16 || wet) {
-      const outer = pick("Outerwear", { warmthOk: weather.temp < 16, avoidColor: baseColor });
-      if (outer) result.pieces.push(outer);
-      else if (weather.temp < 12) result.notes.push("It's chilly — add a warm layer if you have one un-tagged.");
-    }
-    // Shoes
-    const shoes = pick("Shoes", { avoidColor: baseColor });
-    if (shoes) result.pieces.push(shoes);
-    // Accessories: one bag, one belt (if bottom present), a little jewelry
-    const bag = pick("Bags"); if (bag) result.pieces.push(bag);
-    const belt = pick("Belts"); if (belt && !useOnePiece) result.pieces.push(belt);
-    const acc = pick("Accessories"); if (acc) result.pieces.push(acc);
-    JEWELRY.forEach(j => { const p = pick(j); if (p && Math.random() < 0.6) result.pieces.push(p); });
-
-    if (wet) result.notes.push("Rain expected — closed shoes and a jacket recommended.");
-    if (weather.wind > 30) result.notes.push("Windy out — a fitted layer beats anything loose.");
-    const boldPiece = result.pieces.find(p => p.tone === "Bold");
-    if (boldPiece) result.notes.push(`Let the ${boldPiece.name.toLowerCase()} be the statement — everything else stays quiet.`);
-    if (!result.pieces.length) result.notes.push("No items match this occasion + weather yet. Add more pieces or switch the occasion.");
-
-    // Stable identity for this exact combination, so a look can only be saved once.
-    result.key = occasion + "|" + result.pieces.map(p => p.id).sort().join(",");
-    setOutfit(result);
+    const list = recommendOutfits(items, weather, occasion, 6);
+    setRecs(list);
+    setOutfit(list[0] || composeOutfit(items, weather, occasion));
   }
 
   // ---------- Render ----------
@@ -568,6 +669,8 @@ export default function App() {
             <button className={`navbtn ${view==="looks"?"active":""}`} onClick={()=>setView("looks")}>Saved Looks ({looks.length})</button>
             <button className={`navbtn ${view==="mystyle"?"active":""}`} onClick={()=>setView("mystyle")}>My Style ({inspo.length + liked.length})</button>
             <button className={`navbtn ${view==="closet"?"active":""}`} onClick={()=>setView("closet")}>Closet ({items.length})</button>
+            <button className={`navbtn ${view==="insights"?"active":""}`} onClick={()=>setView("insights")}>Insights</button>
+            <button className={`navbtn ${view==="travel"?"active":""}`} onClick={()=>setView("travel")}>Travel</button>
             <button className={`navbtn ${view==="shop"?"active":""}`} onClick={()=>setView("shop")}>Personal Shopper</button>
             <button className={`navbtn ${view==="add"?"active":""}`} onClick={()=>setView("add")}>Add Pieces</button>
           </nav>
@@ -577,8 +680,8 @@ export default function App() {
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "26px 20px 60px" }}>
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} getWeather={getWeather}
-            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} items={items} setView={setView}
-            saveCurrentLook={saveCurrentLook} currentLookSaved={currentLookSaved} inspo={inspo} liked={liked} onSaveLook={saveLookPieces}
+            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
+            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks}
             disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
@@ -592,6 +695,12 @@ export default function App() {
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
             exportData={exportData} importData={importData} />
+        )}
+        {view === "insights" && (
+          <Insights items={items} inspo={inspo} liked={liked} looks={looks} setView={setView} />
+        )}
+        {view === "travel" && (
+          <Travel items={items} trips={trips} saveTrip={saveTrip} deleteTrip={deleteTrip} weather={weather} setView={setView} />
         )}
         {view === "shop" && (
           <Shopper items={items} brands={brands} addBrand={addBrand} removeBrand={removeBrand}
@@ -623,7 +732,12 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, items, setView, saveCurrentLook, currentLookSaved, inspo, liked, onSaveLook, disliked, onDislike }) {
+function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, disliked, onDislike }) {
+  const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
+  const savedKeys = new Set([...(looks || []).map(l => l.key), ...saved]);
+  const saveRec = (o) => { const k = onSaveLook(o.pieces); if (k) setSaved(s => new Set(s).add(k)); };
+  const recKey = (o) => "ai|" + occasion + "|" + o.pieces.map(p => p.id).sort().join(",");
+
   return (
     <div>
       {/* Weather strip */}
@@ -639,57 +753,70 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
         <button className="btn btn-ghost" onClick={getWeather}>Refresh</button>
       </div>
 
-      {/* Occasion + build */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 24 }}>
-        <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13 }}>Dressing for:&nbsp;
-          <select value={occasion} onChange={e=>setOccasion(e.target.value)}>
-            {FORMALITY.map(f => <option key={f}>{f}</option>)}
-          </select>
-        </label>
-        <button className="btn btn-primary" onClick={buildOutfit} disabled={!weather || !items.length}>Style me</button>
-      </div>
-
-      {!items.length && (
-        <Empty title="Your closet is empty" body="Add a few pieces and I'll start putting looks together for the weather outside."
-          action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />
-      )}
-
-      {outfit && (
-        <div>
-          <h2 style={{ fontWeight: 400, fontSize: 22, borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8 }}>Today's look — {occasion}</h2>
-          {outfit.pieces.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14, marginTop: 16 }}>
-              {outfit.pieces.map(p => (
-                <div key={p.id} className="card">
-                  <div style={{ aspectRatio: "1", background: S.blushSoft }}>
-                    <Thumb src={p.img} alt={p.name} />
-                  </div>
-                  <div style={{ padding: "8px 10px" }}>
-                    <div style={{ fontSize: 14 }}>{p.name}</div>
-                    <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>{p.category} · {p.color}{p.tone?` · ${p.tone}`:""}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {outfit.notes.length > 0 && (
-            <div style={{ marginTop: 18, background: S.blushSoft, borderLeft: `3px solid ${S.gold}`, padding: "12px 16px", fontFamily:"system-ui,sans-serif", fontSize: 13 }}>
-              {outfit.notes.map((n,i) => <div key={i}>· {n}</div>)}
-            </div>
-          )}
-          {outfit.pieces.length > 0 && (
-            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
-              <button className="btn btn-primary" onClick={saveCurrentLook} disabled={currentLookSaved}>
-                {currentLookSaved ? "Saved ✓" : "Save this look"}
-              </button>
-              <button className="btn btn-ghost" onClick={buildOutfit}>Try another combination</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* AI stylist chat */}
+      {/* AI stylist chat — moved above Today's Look */}
       <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} />
+
+      {/* Today Look Recommendations (carousel) */}
+      <div style={{ marginTop: 34 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8 }}>
+          <div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>For today's weather</div>
+            <h2 style={{ fontWeight: 400, fontSize: 22, margin: 0 }}>Today look recommendations</h2>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13 }}>For:&nbsp;
+              <select value={occasion} onChange={e=>setOccasion(e.target.value)}>
+                {FORMALITY.map(f => <option key={f}>{f}</option>)}
+              </select>
+            </label>
+            <button className="btn btn-primary" onClick={buildOutfit} disabled={!weather || !items.length}>
+              {recs.length ? "Refresh looks" : "Style me"}
+            </button>
+          </div>
+        </div>
+
+        {!items.length && (
+          <Empty title="Your closet is empty" body="Add a few pieces and I'll start putting looks together for the weather outside."
+            action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />
+        )}
+
+        {items.length > 0 && recs.length === 0 && (
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66", background: S.blushSoft, borderRadius: 10, padding: "16px 18px", marginTop: 16 }}>
+            Tap <strong>{weather ? "Style me" : "…once the weather loads"}</strong> and I'll line up a few looks for {occasion.toLowerCase()} in today's weather — swipe through and save the ones you love.
+          </div>
+        )}
+
+        {recs.length > 0 && (
+          <div style={{ display: "flex", gap: 16, overflowX: "auto", scrollSnapType: "x mandatory", paddingBottom: 10, marginTop: 18, WebkitOverflowScrolling: "touch" }}>
+            {recs.map((o, idx) => {
+              const isSaved = savedKeys.has(recKey(o));
+              return (
+                <div key={o.key} style={{ flex: "0 0 auto", width: "min(300px, 82vw)", scrollSnapAlign: "start", background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 14, padding: 14 }}>
+                  <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
+                    Look {idx + 1}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                    {o.pieces.map(p => (
+                      <div key={p.id}>
+                        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
+                          <Thumb src={p.img} alt={p.name} />
+                        </div>
+                        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {o.notes.length > 0 && (
+                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 10, lineHeight: 1.4 }}>{o.notes[0]}</div>
+                  )}
+                  <button className="btn btn-primary" style={{ marginTop: 12, padding: "8px 14px" }} disabled={isSaved} onClick={() => saveRec(o)}>
+                    {isSaved ? "Saved ✓" : "♥ Save look"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1300,6 +1427,369 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView }
   );
 }
 
+// ---------- Insights (style profile + colour palette) ----------
+// A small meter bar used across the insights breakdowns.
+function Meter({ label, value, max, count, color }) {
+  const pct = max ? Math.round((value / max) * 100) : 0;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, marginBottom: 4 }}>
+        <span>{label}</span><span style={{ color: "#8a6a76" }}>{count}</span>
+      </div>
+      <div style={{ height: 8, background: "#00000010", borderRadius: 6, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color || S.aubergine, borderRadius: 6 }} />
+      </div>
+    </div>
+  );
+}
+
+function Insights({ items, inspo, liked, looks, setView }) {
+  const [ai, setAi] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  if (!items.length) return (
+    <Empty title="Nothing to analyse yet"
+      body="Add and tag a few pieces and I'll map out your colour palette, the balance of your wardrobe, and what defines your style."
+      action={<button className="btn btn-primary" onClick={() => setView("add")}>Add pieces</button>} />
+  );
+
+  const count = (arr, pred) => arr.filter(pred).length;
+  const tally = (key) => { const m = {}; items.forEach(i => { const v = i[key]; if (v) m[v] = (m[v] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+
+  const palette = tally("color");
+  const maxColor = palette[0]?.[1] || 1;
+  const catList = tally("category");
+  const maxCat = catList[0]?.[1] || 1;
+  const tone = { Muted: count(items, i => i.tone === "Muted"), Classic: count(items, i => i.tone === "Classic"), Bold: count(items, i => i.tone === "Bold") };
+  const neutralN = count(items, i => NEUTRALS.includes(i.color));
+  const neutralPct = Math.round((neutralN / items.length) * 100);
+  const boldPct = Math.round((tone.Bold / items.length) * 100);
+  const occ = FORMALITY.map(f => [f, count(items, i => i.formality?.includes(f))]);
+  const maxOcc = Math.max(1, ...occ.map(o => o[1]));
+
+  const topCats = catList.slice(0, 3).map(c => c[0].toLowerCase());
+  const topColors = palette.slice(0, 3).map(c => c[0].toLowerCase());
+  const summary =
+    `Your wardrobe is ${neutralPct >= 60 ? "grounded in neutrals" : neutralPct >= 35 ? "a balance of neutrals and colour" : "colour-forward"}, ` +
+    `and reads ${boldPct >= 25 ? "bold and expressive" : tone.Muted >= tone.Classic ? "soft and muted" : "classic and understated"}. ` +
+    `It's strongest in ${topCats.join(", ") || "a few categories"}` +
+    (topColors.length ? `, with ${topColors.join(", ")} the colours you reach for most.` : ".");
+
+  async function deeperRead() {
+    setBusy(true); setErr(null);
+    try {
+      const closet = items.map(i => `- ${i.name} (${i.category}, ${i.color}, ${i.tone} tone)`).join("\n");
+      const sys = "You are a perceptive personal stylist. In 2 short paragraphs, describe this person's style identity, their colour story, and one or two ways to build on it. Warm, specific, plain text — no markdown headers.";
+      const msg = `Here is my closet:\n${closet}\n\nA quick read: neutrals ${neutralPct}%, bold pieces ${boldPct}%. Strongest categories: ${topCats.join(", ")}. Top colours: ${topColors.join(", ")}.`;
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: sys, messages: [{ role: "user", content: msg }], max_tokens: 600 }),
+      });
+      if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
+      const data = await res.json();
+      setAi(data.text || "");
+    } catch (e) {
+      setErr(e.message === "needs-key" ? "The AI read needs your hosted app (Render). The breakdowns above work everywhere." : "Couldn't reach the stylist just now — please try again.");
+    }
+    setBusy(false);
+  }
+
+  const sectionTitle = (kicker, title) => (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>{kicker}</div>
+      <div style={{ fontSize: 19 }}>{title}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", maxWidth: 620, margin: "0 0 22px" }}>
+        A read on your style, drawn from the {items.length} pieces you've tagged — your colour palette, the balance of your wardrobe, and what you reach for.
+      </p>
+
+      {/* Style summary */}
+      <div className="card" style={{ padding: 20, marginBottom: 22, borderLeft: `4px solid ${S.gold}` }}>
+        {sectionTitle("Your style", "In a nutshell")}
+        <p style={{ fontSize: 17, lineHeight: 1.55, margin: 0 }}>{summary}</p>
+      </div>
+
+      {/* Colour palette */}
+      <div className="card" style={{ padding: 20, marginBottom: 22 }}>
+        {sectionTitle("Your colours", "Colour palette")}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {palette.map(([c, n]) => {
+            const size = 44 + Math.round((n / maxColor) * 40);
+            return (
+              <div key={c} style={{ textAlign: "center", width: size }}>
+                <div style={{ width: size, height: size, borderRadius: "50%", background: colorHex(c), border: `1px solid ${S.aubergine}22`, boxShadow: "inset 0 0 0 2px #ffffff55" }} title={`${c} · ${n}`} />
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#7a5a66", marginTop: 5, lineHeight: 1.2 }}>{c}<br />{n}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginTop: 20, border: `1px solid ${S.aubergine}18` }}>
+          {palette.map(([c, n]) => <div key={c} style={{ width: `${(n / items.length) * 100}%`, background: colorHex(c) }} title={`${c} ${Math.round(n / items.length * 100)}%`} />)}
+        </div>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 10 }}>
+          {neutralPct}% neutrals · {100 - neutralPct}% colour
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 22, marginBottom: 22 }}>
+        {/* Categories */}
+        <div className="card" style={{ padding: 20 }}>
+          {sectionTitle("What you own", "By category")}
+          {catList.map(([c, n]) => <Meter key={c} label={c} value={n} max={maxCat} count={n} />)}
+        </div>
+
+        {/* Balance */}
+        <div className="card" style={{ padding: 20 }}>
+          {sectionTitle("The feel", "Tone & balance")}
+          <Meter label="Muted" value={tone.Muted} max={items.length} count={tone.Muted} color="#b9a08f" />
+          <Meter label="Classic" value={tone.Classic} max={items.length} count={tone.Classic} color={S.aubergine} />
+          <Meter label="Bold" value={tone.Bold} max={items.length} count={tone.Bold} color={S.clay} />
+          <div style={{ height: 12 }} />
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 8 }}>Dressed for</div>
+          {occ.map(([f, n]) => <Meter key={f} label={f} value={n} max={maxOcc} count={n} color={S.gold} />)}
+        </div>
+      </div>
+
+      {/* AI deeper read */}
+      <div className="card" style={{ padding: 20 }}>
+        {sectionTitle("Optional", "A stylist's read")}
+        {ai
+          ? <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap", margin: 0 }}>{ai}</p>
+          : <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "0 0 14px", maxWidth: 560 }}>Want a warmer, written take on your style and how to build on it? I can put one together from your closet.</p>}
+        {!ai && <button className="btn btn-primary" onClick={deeperRead} disabled={busy}>{busy ? "Reading your closet…" : "Get a stylist's read"}</button>}
+        {err && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a4a3a", marginTop: 12 }}>{err}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Travel / holiday planner ----------
+const VIBES = ["Relaxed", "Smart casual", "Dressy", "Mixed"];
+const SLOT_ICON = { Day: "☀️", Afternoon: "⛅", Evening: "🍷", Night: "🌙" };
+
+function Travel({ items, trips, saveTrip, deleteTrip, weather, setView }) {
+  const [activeId, setActiveId] = useState(trips[0]?.id || null);
+  const [editing, setEditing] = useState(!trips.length);
+  const [dayIdx, setDayIdx] = useState(0);
+  const [showPack, setShowPack] = useState(false);
+  const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
+  const [form, setForm] = useState(blank);
+
+  const active = trips.find(t => t.id === activeId) || trips[0] || null;
+
+  function startNew() { setForm(blank); setActiveId(null); setEditing(true); }
+  function startEdit() {
+    if (!active) return;
+    setForm({ destination: active.destination, start: active.start, end: active.end, temp: active.temp, vibe: active.vibe, notes: active.notes || "" });
+    setEditing(true);
+  }
+  function build() {
+    // Editing the active trip keeps its id; otherwise it's a new trip.
+    const tripId = (active && activeId === active.id) ? active.id : crypto.randomUUID();
+    const trip = {
+      id: tripId,
+      destination: form.destination.trim() || "My trip",
+      start: form.start, end: form.end, temp: Number(form.temp) || 24, vibe: form.vibe, notes: form.notes.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    trip.plan = generateTripPlan(items, trip);
+    saveTrip(trip);
+    setActiveId(trip.id);
+    setEditing(false);
+    setDayIdx(0);
+  }
+  function regenerate() {
+    if (!active) return;
+    const trip = { ...active, plan: generateTripPlan(items, active) };
+    saveTrip(trip);
+    setDayIdx(d => Math.min(d, Math.max(0, trip.plan.length - 1)));
+  }
+
+  const canBuild = form.destination.trim() && form.start && form.end && tripDays(form.start, form.end).length > 0;
+
+  // ----- Setup form -----
+  if (editing || !active) {
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ fontWeight: 400, fontSize: 26, margin: 0 }}>Holiday</h2>
+            <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>AI-built outfits and packing for your trip, from your own closet.</p>
+          </div>
+          {trips.length > 0 && <button className="btn btn-ghost" onClick={() => setEditing(false)}>Back to trip</button>}
+        </div>
+
+        <div className="card" style={{ padding: 20, marginTop: 20, maxWidth: 560 }}>
+          <FieldLabel>Where are you going?</FieldLabel>
+          <input value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="e.g. Positano, Italy" style={{ width: "100%", marginBottom: 12 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><FieldLabel>From</FieldLabel><input type="date" value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} style={{ width: "100%" }} /></div>
+            <div><FieldLabel>To</FieldLabel><input type="date" value={form.end} onChange={e => setForm(f => ({ ...f, end: e.target.value }))} style={{ width: "100%" }} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div><FieldLabel>Typical temp (°C)</FieldLabel><input type="number" value={form.temp} onChange={e => setForm(f => ({ ...f, temp: e.target.value }))} style={{ width: "100%" }} /></div>
+            <div><FieldLabel>Vibe</FieldLabel><select value={form.vibe} onChange={e => setForm(f => ({ ...f, vibe: e.target.value }))} style={{ width: "100%" }}>{VIBES.map(v => <option key={v}>{v}</option>)}</select></div>
+          </div>
+          <FieldLabel>Notes (optional)</FieldLabel>
+          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Coastal town, fine dining, beach clubs…" style={{ width: "100%", resize: "vertical", marginBottom: 14 }} />
+          {!items.length
+            ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a4a3a" }}>Add some pieces to your closet first — the planner builds outfits from what you own.</div>
+            : <button className="btn btn-primary" onClick={build} disabled={!canBuild}>Build my trip</button>}
+          {form.start && form.end && !tripDays(form.start, form.end).length && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a4a3a", marginTop: 10 }}>Check the dates — the end date should be on or after the start.</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ----- Trip dashboard -----
+  const days = active.plan || [];
+  const day = days[Math.min(dayIdx, days.length - 1)] || days[0];
+  const pack = packingSummary(days);
+  const vibeText = active.vibe;
+  const summaryBullets = [
+    `${TRIP_SLOTS.length} outfits planned per day`,
+    `${days.length * TRIP_SLOTS.length} outfits across ${days.length} day${days.length > 1 ? "s" : ""}`,
+    `${pack.total} pieces from your closet`,
+    `Day, afternoon, evening & night covered`,
+    `${vibeText} — smart-casual to dressy`,
+  ];
+
+  const miniBoard = (pieces, key, w = 84) => (
+    <div key={key} style={{ display: "grid", gridTemplateColumns: pieces.length > 3 ? "repeat(3,1fr)" : `repeat(${Math.max(1, pieces.length)},1fr)`, gap: 6 }}>
+      {pieces.map(p => (
+        <div key={p.id}>
+          <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 6, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
+            <Thumb src={p.img} alt={p.name} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        <div>
+          <h2 style={{ fontWeight: 400, fontSize: 26, margin: 0 }}>Holiday</h2>
+          <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>AI-built outfits and packing for your trip.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={startNew}>+ New trip</button>
+        </div>
+      </div>
+
+      {/* Trip switcher */}
+      {trips.length > 1 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {trips.map(t => (
+            <button key={t.id} className="chip" style={{ cursor: "pointer", background: t.id === active.id ? S.aubergine : "#fff", color: t.id === active.id ? S.blush : S.ink }}
+              onClick={() => { setActiveId(t.id); setDayIdx(0); }}>{t.destination}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Summary card */}
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "space-between" }}>
+          <div style={{ flex: "1 1 300px" }}>
+            <div style={{ fontSize: 24 }}>{active.destination}</div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", margin: "6px 0 16px" }}>
+              {fmtDate(active.start, { day: "numeric", month: "short" })} – {fmtDate(active.end, { day: "numeric", month: "short", year: "numeric" })}
+            </div>
+            <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
+              <div><div style={{ fontSize: 22 }}>{days.length}</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Days</div></div>
+              <div><div style={{ fontSize: 22 }}>{active.temp}°C</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Typical</div></div>
+              <div><div style={{ fontSize: 22 }}>{active.vibe}</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Vibe</div></div>
+            </div>
+            {active.notes && <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "16px 0 0", maxWidth: 460 }}>{active.notes}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+              <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={startEdit}>Edit trip details</button>
+              <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={() => { if (confirm("Delete this trip?")) { deleteTrip(active.id); const rest = trips.filter(t => t.id !== active.id); setActiveId(rest[0]?.id || null); setEditing(!rest.length); } }}>Delete</button>
+            </div>
+          </div>
+          <div style={{ flex: "0 1 250px", background: S.blushSoft, borderRadius: 10, padding: 16 }}>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 10 }}>Trip summary</div>
+            {summaryBullets.map((b, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, marginBottom: 7 }}>
+                <span style={{ color: S.gold }}>✓</span><span>{b}</span>
+              </div>
+            ))}
+            <button className="btn btn-primary" style={{ marginTop: 8, padding: "8px 13px" }} onClick={regenerate}>✦ Regenerate outfits</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Outfit plan */}
+      <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Outfit plan</h3>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 18 }}>
+        {days.map((d, i) => (
+          <button key={d.date} onClick={() => setDayIdx(i)} className="card"
+            style={{ flex: "0 0 auto", cursor: "pointer", padding: "10px 16px", textAlign: "center", border: `1px solid ${i === dayIdx ? S.aubergine : S.aubergine + "22"}`, background: i === dayIdx ? S.aubergine : "#fff", color: i === dayIdx ? S.blush : S.ink }}>
+            <div style={{ fontSize: 14 }}>Day {i + 1}</div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, opacity: .8 }}>{fmtDate(d.date, { weekday: "short", day: "numeric", month: "short" })}</div>
+          </button>
+        ))}
+      </div>
+
+      {day && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 14, marginBottom: 28 }}>
+          {day.slots.map(s => (
+            <div key={s.slot} className="card" style={{ padding: 14 }}>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 2 }}>{SLOT_ICON[s.slot]} {s.slot}</div>
+              <div style={{ fontSize: 15, marginBottom: 10 }}>{s.label}</div>
+              {s.pieces.length
+                ? miniBoard(s.pieces, s.slot)
+                : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", padding: "18px 4px" }}>No match — add more {s.occasion.toLowerCase()} pieces.</div>}
+              {s.pieces.length > 0 && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 8 }}>{s.occasion}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Packing overview */}
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <h3 style={{ fontWeight: 400, fontSize: 20, margin: 0 }}>Packing overview</h3>
+          <div className="chip">{pack.total} items</div>
+        </div>
+        {["Clothing", "Shoes", "Accessories"].map(g => (
+          <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
+        ))}
+        <button className="btn btn-ghost" style={{ marginTop: 8, padding: "7px 13px" }} onClick={() => setShowPack(v => !v)}>{showPack ? "Hide packing list" : "View full packing list"}</button>
+        {showPack && (
+          <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 10 }}>
+            {pack.pieces.map(p => (
+              <div key={p.id} title={p.name}>
+                <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden" }}><Thumb src={p.img} alt={p.name} /></div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Outfits at a glance */}
+      <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Outfits at a glance</h3>
+      <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
+        {days.flatMap((d, di) => d.slots.filter(s => s.pieces.length).map((s, si) => (
+          <div key={di + "-" + si} style={{ flex: "0 0 auto", width: 150, background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 10, padding: 10 }}>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginBottom: 6 }}>Day {di + 1} · {s.slot}</div>
+            {miniBoard(s.pieces, di + "-" + si)}
+          </div>
+        )))}
+      </div>
+    </div>
+  );
+}
+
 // ---------- "Not suggested again" (disliked combinations) ----------
 function DislikedList({ disliked, removeDislike, items }) {
   const byId = new Map(items.map(i => [i.id, i]));
@@ -1342,6 +1832,7 @@ function DislikedList({ disliked, removeDislike, items }) {
 // ---------- Saved looks view (kept looks + blocked combinations) ----------
 function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
   const hasDisliked = disliked && disliked.length > 0;
+  const [filter, setFilter] = useState("All");
   if (!looks.length) return (
     <div>
       <Empty title="No saved looks yet"
@@ -1351,13 +1842,26 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
     </div>
   );
 
+  // Categorise saved looks by occasion so they're easy to filter and find.
+  const occasions = FORMALITY.filter(f => looks.some(l => l.occasion === f));
+  const cats = ["All", ...occasions];
+  const count = (c) => c === "All" ? looks.length : looks.filter(l => l.occasion === c).length;
+  const shown = filter === "All" ? looks : looks.filter(l => l.occasion === filter);
+
   return (
     <div>
       <h2 style={{ fontWeight: 400, fontSize: 22, borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8, marginTop: 0 }}>
         Saved looks ({looks.length})
       </h2>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0 4px" }}>
+        {cats.map(c => (
+          <button key={c} className="chip" style={{ cursor: "pointer", background: filter===c?S.aubergine:"#fff", color: filter===c?S.blush:S.ink }} onClick={()=>setFilter(c)}>
+            {c} ({count(c)})
+          </button>
+        ))}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
-        {looks.map(l => (
+        {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 17 }}>{l.occasion}</div>
