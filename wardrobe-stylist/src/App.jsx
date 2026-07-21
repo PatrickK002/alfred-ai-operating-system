@@ -487,15 +487,20 @@ export default function App() {
   }
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
 
-  // Save an arbitrary set of pieces (e.g. the AI stylist's suggestion) as a look.
-  // Returns the look's stable key so callers can show a "Saved" state.
-  function saveLookPieces(pieces) {
+  // Save an arbitrary set of pieces (e.g. the AI stylist's suggestion, a Today
+  // recommendation, or a holiday-plan outfit) as a look. `opts` lets callers
+  // override the occasion label, attach a note (e.g. "Positano · Day 2 · Dinner"),
+  // and set the weather snapshot. Returns the look's stable key so callers can show
+  // a "Saved" state.
+  function saveLookPieces(pieces, opts = {}) {
     if (!pieces || !pieces.length) return null;
-    const key = "ai|" + occasion + "|" + pieces.map(p => p.id).sort().join(",");
+    const occ = opts.occasion || occasion;
+    const key = "ai|" + occ + "|" + pieces.map(p => p.id).sort().join(",");
     if (!looks.some(l => l.key === key)) {
       const look = {
-        id: crypto.randomUUID(), key, occasion,
-        weather: weather ? { temp: weather.temp, code: weather.code } : null,
+        id: crypto.randomUUID(), key, occasion: occ,
+        note: opts.note || undefined,
+        weather: opts.weather !== undefined ? opts.weather : (weather ? { temp: weather.temp, code: weather.code } : null),
         pieces: pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img })),
       };
       setLooks(prev => [look, ...prev]);
@@ -700,7 +705,8 @@ export default function App() {
           <Insights items={items} inspo={inspo} liked={liked} looks={looks} setView={setView} />
         )}
         {view === "travel" && (
-          <Travel items={items} trips={trips} saveTrip={saveTrip} deleteTrip={deleteTrip} weather={weather} setView={setView} />
+          <Travel items={items} trips={trips} saveTrip={saveTrip} deleteTrip={deleteTrip} weather={weather} setView={setView}
+            onSaveLook={saveLookPieces} looks={looks} />
         )}
         {view === "shop" && (
           <Shopper items={items} brands={brands} addBrand={addBrand} removeBrand={removeBrand}
@@ -795,9 +801,9 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
                   <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
                     Look {idx + 1}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
                     {o.pieces.map(p => (
-                      <div key={p.id}>
+                      <div key={p.id} style={{ minWidth: 0 }}>
                         <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
                           <Thumb src={p.img} alt={p.name} />
                         </div>
@@ -1572,7 +1578,7 @@ function Insights({ items, inspo, liked, looks, setView }) {
 const VIBES = ["Relaxed", "Smart casual", "Dressy", "Mixed"];
 const SLOT_ICON = { Day: "☀️", Afternoon: "⛅", Evening: "🍷", Night: "🌙" };
 
-function Travel({ items, trips, saveTrip, deleteTrip, weather, setView }) {
+function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLook, looks }) {
   const [activeId, setActiveId] = useState(trips[0]?.id || null);
   const [editing, setEditing] = useState(!trips.length);
   const [dayIdx, setDayIdx] = useState(0);
@@ -1661,17 +1667,29 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView }) {
     `${vibeText} — smart-casual to dressy`,
   ];
 
-  const miniBoard = (pieces, key, w = 84) => (
-    <div key={key} style={{ display: "grid", gridTemplateColumns: pieces.length > 3 ? "repeat(3,1fr)" : `repeat(${Math.max(1, pieces.length)},1fr)`, gap: 6 }}>
-      {pieces.map(p => (
-        <div key={p.id}>
-          <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 6, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
-            <Thumb src={p.img} alt={p.name} />
+  const miniBoard = (pieces, key) => {
+    const cols = Math.min(3, Math.max(1, pieces.length));
+    return (
+      <div key={key} style={{ display: "grid", gridTemplateColumns: `repeat(${cols},minmax(0,1fr))`, gap: 6 }}>
+        {pieces.map(p => (
+          <div key={p.id} style={{ minWidth: 0 }}>
+            <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 6, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
+              <Thumb src={p.img} alt={p.name} />
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
-  );
+        ))}
+      </div>
+    );
+  };
+
+  // Save a holiday-plan outfit into Saved Looks (tagged with the trip + slot).
+  const savedKeys = new Set((looks || []).map(l => l.key));
+  const slotKey = (slot) => "ai|" + slot.occasion + "|" + slot.pieces.map(p => p.id).sort().join(",");
+  const saveSlot = (slot, di) => onSaveLook(slot.pieces, {
+    occasion: slot.occasion,
+    note: `${active.destination} · Day ${di + 1} · ${slot.slot}`,
+    weather: null,
+  });
 
   return (
     <div>
@@ -1741,16 +1759,26 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView }) {
 
       {day && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 14, marginBottom: 28 }}>
-          {day.slots.map(s => (
-            <div key={s.slot} className="card" style={{ padding: 14 }}>
+          {day.slots.map(s => {
+            const isSaved = savedKeys.has(slotKey(s));
+            return (
+            <div key={s.slot} className="card" style={{ padding: 14, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 2 }}>{SLOT_ICON[s.slot]} {s.slot}</div>
               <div style={{ fontSize: 15, marginBottom: 10 }}>{s.label}</div>
               {s.pieces.length
                 ? miniBoard(s.pieces, s.slot)
                 : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", padding: "18px 4px" }}>No match — add more {s.occasion.toLowerCase()} pieces.</div>}
-              {s.pieces.length > 0 && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 8 }}>{s.occasion}</div>}
+              {s.pieces.length > 0 && (
+                <>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0" }}>{s.occasion}</div>
+                  <button className="btn btn-primary" style={{ marginTop: "auto", padding: "7px 12px" }} disabled={isSaved} onClick={() => saveSlot(s, dayIdx)}>
+                    {isSaved ? "Saved ✓" : "♥ Save look"}
+                  </button>
+                </>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -1779,12 +1807,18 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView }) {
       {/* Outfits at a glance */}
       <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Outfits at a glance</h3>
       <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
-        {days.flatMap((d, di) => d.slots.filter(s => s.pieces.length).map((s, si) => (
+        {days.flatMap((d, di) => d.slots.filter(s => s.pieces.length).map((s, si) => {
+          const isSaved = savedKeys.has(slotKey(s));
+          return (
           <div key={di + "-" + si} style={{ flex: "0 0 auto", width: 150, background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 10, padding: 10 }}>
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginBottom: 6 }}>Day {di + 1} · {s.slot}</div>
             {miniBoard(s.pieces, di + "-" + si)}
+            <button className="btn btn-ghost" style={{ marginTop: 8, padding: "5px 10px", width: "100%", fontSize: 11 }} disabled={isSaved} onClick={() => saveSlot(s, di)}>
+              {isSaved ? "Saved ✓" : "♥ Save"}
+            </button>
           </div>
-        )))}
+          );
+        }))}
       </div>
     </div>
   );
@@ -1863,12 +1897,13 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
         {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: l.note ? 4 : 12 }}>
               <div style={{ fontSize: 17 }}>{l.occasion}</div>
               <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>
                 {l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : ""}
               </div>
             </div>
+            {l.note && <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11.5, color: S.clay, marginBottom: 12 }}>✈ {l.note}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 8 }}>
               {l.pieces.map(p => (
                 <div key={p.id} title={`${p.name} · ${p.category}`}>
