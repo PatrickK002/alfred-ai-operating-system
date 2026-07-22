@@ -691,6 +691,14 @@ export default function App() {
       return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
     }));
   }
+  // Remove a piece from a recommended look entirely (no replacement).
+  function removePiece(recIndex, pieceId) {
+    setRecs(prev => prev.map((o, i) => {
+      if (i !== recIndex) return o;
+      const pieces = o.pieces.filter(p => p.id !== pieceId);
+      return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
+    }));
+  }
   // AI-reasoned swap: ask the stylist to pick the best replacement from the closet
   // for one piece, and explain why. Falls back to the deterministic pick if needed.
   async function aiSwapPiece(recIndex, pieceId) {
@@ -777,7 +785,7 @@ export default function App() {
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
-            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} swapping={swapping}
+            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
@@ -829,10 +837,11 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, swapping, disliked, onDislike }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
+  const [expanded, setExpanded] = useState(null); // index of the look shown in the big view
   const savedKeys = new Set([...(looks || []).map(l => l.key), ...saved]);
   const saveRec = (o) => { const k = onSaveLook(o.pieces); if (k) setSaved(s => new Set(s).add(k)); };
   const recKey = (o) => "ai|" + occasion + "|" + o.pieces.map(p => p.id).sort().join(",");
@@ -913,8 +922,12 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
               const isSaved = savedKeys.has(recKey(o));
               return (
                 <div key={o.key} style={{ flex: "0 0 auto", width: "min(300px, 82vw)", scrollSnapAlign: "start", background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 14, padding: 14 }}>
-                  <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
-                    Look {idx + 1}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4 }}>
+                      Look {idx + 1}
+                    </div>
+                    <button onClick={() => setExpanded(idx)} title="Expand this look"
+                      style={{ border: `1px solid ${S.aubergine}33`, background: "#fff", color: S.aubergine, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}>⤢ Expand</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
                     {o.pieces.map(p => {
@@ -925,8 +938,12 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                           <Thumb src={p.img} alt={p.name} />
                           <button onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} title="Ask the stylist to swap this (with a reason)"
                             style={{ position: "absolute", top: 4, left: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#B5654Ad9", color: "#fff", cursor: swapping ? "default" : "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>{isAiSwapping ? "…" : "✨"}</button>
-                          <button onClick={() => onSwapPiece(idx, p.id)} title="Quick swap for another piece"
-                            style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
+                          <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 4 }}>
+                            <button onClick={() => onSwapPiece(idx, p.id)} title="Quick swap for another piece"
+                              style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
+                            <button onClick={() => onRemovePiece(idx, p.id)} title="Remove this piece from the look"
+                              style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#8a4a3ad9", color: "#fff", cursor: "pointer", fontSize: 15, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>×</button>
+                          </div>
                         </div>
                         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
                       </div>
@@ -935,7 +952,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                   </div>
                   {o.swapNote
                     ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "7px 10px", marginTop: 8, lineHeight: 1.4 }}>✨ {o.swapNote}</div>
-                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Tap ✨ for a stylist swap (with why), or ↻ for a quick one.</div>}
+                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>✨ stylist swap · ↻ quick swap · × remove</div>}
                   {o.notes.length > 0 && (
                     <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 6, lineHeight: 1.4 }}>{o.notes[0]}</div>
                   )}
@@ -947,6 +964,65 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
             })}
           </div>
         )}
+      </div>
+
+      {expanded != null && recs[expanded] && (
+        <LookDetail
+          look={recs[expanded]} idx={expanded}
+          saved={savedKeys.has(recKey(recs[expanded]))} swapping={swapping}
+          onSwapPiece={onSwapPiece} onAiSwapPiece={onAiSwapPiece} onRemovePiece={onRemovePiece}
+          onSave={() => saveRec(recs[expanded])} onClose={() => setExpanded(null)} />
+      )}
+    </div>
+  );
+}
+
+// ---------- Expanded look view (bigger, with per-piece controls) ----------
+function LookDetail({ look, idx, saved, swapping, onSwapPiece, onAiSwapPiece, onRemovePiece, onSave, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 56, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(680px, 100%)", margin: "auto", boxShadow: "0 20px 60px #0007", overflow: "hidden" }}>
+        <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 19 }}>Look {idx + 1}</div>
+          <button onClick={onClose} title="Close" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ padding: 18 }}>
+          {look.pieces.length === 0 && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 14, color: "#7a5a66", padding: "24px 0", textAlign: "center" }}>You've removed every piece from this look. Swap some back in or refresh your looks.</div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 16 }}>
+            {look.pieces.map(p => {
+              const isAiSwapping = swapping === idx + ":" + p.id;
+              return (
+                <div key={p.id} style={{ background: "#fff", border: `1px solid ${S.aubergine}14`, borderRadius: 10, overflow: "hidden" }}>
+                  <div style={{ aspectRatio: "1", background: S.blushSoft }}>
+                    <Thumb src={p.img} alt={p.name} />
+                  </div>
+                  <div style={{ padding: "10px 12px" }}>
+                    <div style={{ fontSize: 14 }}>{p.name}</div>
+                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 10 }}>{p.category}{p.color ? ` · ${p.color}` : ""}{p.tone ? ` · ${p.tone}` : ""}</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }}>{isAiSwapping ? "…" : "✨ Stylist"}</button>
+                      <button onClick={() => onSwapPiece(idx, p.id)} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }}>↻ Swap</button>
+                      <button onClick={() => onRemovePiece(idx, p.id)} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 11, color: S.clay }}>× Remove</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {look.swapNote && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "9px 12px", marginTop: 16, lineHeight: 1.45 }}>✨ {look.swapNote}</div>
+          )}
+          {look.notes.length > 0 && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", marginTop: 14, lineHeight: 1.5 }}>{look.notes.map((n, i) => <div key={i}>· {n}</div>)}</div>
+          )}
+          <button className="btn btn-primary" style={{ marginTop: 18 }} disabled={saved || !look.pieces.length} onClick={onSave}>
+            {saved ? "Saved ✓" : "♥ Save look"}
+          </button>
+        </div>
       </div>
     </div>
   );
