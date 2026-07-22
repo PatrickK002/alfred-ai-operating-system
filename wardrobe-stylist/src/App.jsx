@@ -69,6 +69,31 @@ function lookClimate(look, byId) {
   const temp = look?.weather?.temp != null ? look.weather.temp : estTempFromPieces(look?.pieces, byId);
   return { temp, ...climateFor(temp) };
 }
+
+// ---------- Four-season tag for saved looks ----------
+// Temperature can't tell spring from autumn (same °C), so the season is an editable
+// tag: auto-guessed from the month the look was saved + its temperature, then the user
+// can change it.
+const SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
+const SEASON_EMOJI = { Spring: "🌸", Summer: "☀️", Autumn: "🍂", Winter: "❄️" };
+function monthSeason(m) { // 0–11 → N-hemisphere meteorological season
+  if (m === 11 || m <= 1) return "Winter";
+  if (m <= 4) return "Spring";
+  if (m <= 7) return "Summer";
+  return "Autumn";
+}
+function guessSeason(look, byId) {
+  const temp = look?.weather?.temp != null ? look.weather.temp : estTempFromPieces(look?.pieces, byId);
+  if (temp != null && temp >= 24) return "Summer";
+  if (temp != null && temp < 4) return "Winter";
+  if (look?.savedAt) { const d = new Date(look.savedAt); if (!isNaN(d)) return monthSeason(d.getMonth()); }
+  if (temp != null) return temp >= 12 ? "Spring" : "Winter";
+  return "Summer";
+}
+// The look's tag: an explicit user choice if set, else the auto guess.
+function lookSeason(look, byId) {
+  return look?.season && SEASONS.includes(look.season) ? look.season : guessSeason(look, byId);
+}
 // Map temperature (°C) to needed warmth levels
 function warmthForTemp(t) {
   if (t >= 26) return ["Very light", "Light"];
@@ -663,19 +688,22 @@ export default function App() {
   function saveCurrentLook() {
     if (!outfit || !outfit.pieces.length) return;
     if (currentLookSaved) return;
+    const savedAt = new Date().toISOString();
+    const weatherSnap = weather ? { temp: weather.temp, code: weather.code } : null;
+    const pieces = outfit.pieces.map(p => ({
+      id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img,
+    }));
     const look = {
-      id: crypto.randomUUID(),
-      key: outfit.key,
-      occasion,
-      weather: weather ? { temp: weather.temp, code: weather.code } : null,
-      // snapshot the pieces so the saved look is independent of later edits/deletes
-      pieces: outfit.pieces.map(p => ({
-        id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img,
-      })),
+      id: crypto.randomUUID(), key: outfit.key, occasion,
+      weather: weatherSnap, savedAt,
+      season: guessSeason({ weather: weatherSnap, pieces, savedAt }),
+      pieces, // snapshot so the saved look survives later edits/deletes
     };
     setLooks(prev => [look, ...prev]);
   }
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
+  // Change a saved look's season tag.
+  function setLookSeason(id, season) { setLooks(prev => prev.map(l => l.id === id ? { ...l, season } : l)); }
 
   // Save an arbitrary set of pieces (e.g. the AI stylist's suggestion, a Today
   // recommendation, or a holiday-plan outfit) as a look. `opts` lets callers
@@ -687,11 +715,15 @@ export default function App() {
     const occ = opts.occasion || occasion;
     const key = "ai|" + occ + "|" + pieces.map(p => p.id).sort().join(",");
     if (!looks.some(l => l.key === key)) {
+      const savedAt = new Date().toISOString();
+      const weatherSnap = opts.weather !== undefined ? opts.weather : (weather ? { temp: weather.temp, code: weather.code } : null);
+      const snap = pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img }));
       const look = {
         id: crypto.randomUUID(), key, occasion: occ,
         note: opts.note || undefined,
-        weather: opts.weather !== undefined ? opts.weather : (weather ? { temp: weather.temp, code: weather.code } : null),
-        pieces: pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img })),
+        weather: weatherSnap, savedAt,
+        season: guessSeason({ weather: weatherSnap, pieces: snap, savedAt }),
+        pieces: snap,
       };
       setLooks(prev => [look, ...prev]);
     }
@@ -982,7 +1014,7 @@ export default function App() {
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView}
-            disliked={disliked} removeDislike={removeDislike} items={items} />
+            disliked={disliked} removeDislike={removeDislike} items={items} setLookSeason={setLookSeason} />
         )}
         {view === "mystyle" && (
           <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo}
@@ -2436,10 +2468,10 @@ function DislikedList({ disliked, removeDislike, items }) {
 }
 
 // ---------- Saved looks view (kept looks + blocked combinations) ----------
-function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
+function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, setLookSeason }) {
   const hasDisliked = disliked && disliked.length > 0;
   const [filter, setFilter] = useState("All");    // by occasion
-  const [season, setSeason] = useState("All");    // by wearing-season
+  const [season, setSeason] = useState("All");    // by season tag
   if (!looks.length) return (
     <div>
       <Empty title="No saved looks yet"
@@ -2449,19 +2481,18 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
     </div>
   );
 
-  // Tag every look with its occasion and its wearing-season + temperature range.
+  // Tag every look with its occasion, its season, and its temperature range.
   const byId = new Map(items.map(i => [i.id, i]));
-  const withClimate = looks.map(l => ({ ...l, climate: lookClimate(l, byId) }));
+  const tagged = looks.map(l => ({ ...l, seasonTag: lookSeason(l, byId), climate: lookClimate(l, byId) }));
 
   const occasions = FORMALITY.filter(f => looks.some(l => l.occasion === f));
   const occCats = ["All", ...occasions];
-  const seasons = SEASON_ORDER.filter(s => withClimate.some(l => l.climate.season === s));
-  const seasonCats = ["All", ...seasons];
+  const seasonCats = ["All", ...SEASONS.filter(s => tagged.some(l => l.seasonTag === s))];
 
-  const matches = (l) => (filter === "All" || l.occasion === filter) && (season === "All" || l.climate.season === season);
-  const occCount = (c) => c === "All" ? looks.length : withClimate.filter(l => l.occasion === c && (season === "All" || l.climate.season === season)).length;
-  const seasonCount = (s) => (s === "All" ? withClimate.filter(l => filter === "All" || l.occasion === filter).length : withClimate.filter(l => l.climate.season === s && (filter === "All" || l.occasion === filter)).length);
-  const shown = withClimate.filter(matches);
+  const matches = (l) => (filter === "All" || l.occasion === filter) && (season === "All" || l.seasonTag === season);
+  const occCount = (c) => tagged.filter(l => (c === "All" || l.occasion === c) && (season === "All" || l.seasonTag === season)).length;
+  const seasonCount = (s) => tagged.filter(l => (s === "All" || l.seasonTag === s) && (filter === "All" || l.occasion === filter)).length;
+  const shown = tagged.filter(matches);
 
   const chip = (label, active, onClick) => (
     <button key={label} className="chip" style={{ cursor: "pointer", background: active ? S.aubergine : "#fff", color: active ? S.blush : S.ink }} onClick={onClick}>{label}</button>
@@ -2478,20 +2509,31 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "4px 0" }}>
         <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Season</span>
-        {seasonCats.map(s => chip(`${s} (${seasonCount(s)})`, season === s, () => setSeason(s)))}
+        {seasonCats.map(s => chip(s === "All" ? `All (${seasonCount("All")})` : `${SEASON_EMOJI[s]} ${s} (${seasonCount(s)})`, season === s, () => setSeason(s)))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
         {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 17 }}>{l.occasion}</div>
               <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>
-                {l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : ""}
+                {l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : l.climate.range}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: l.note ? 6 : 12 }}>
-              <span className="chip" style={{ background: S.blushSoft, borderColor: `${S.aubergine}22` }}>{l.climate.emoji} {l.climate.season}</span>
-              <span style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>{l.climate.range}</span>
+            {/* Season tag — tap a season to set it */}
+            <div style={{ marginBottom: l.note ? 8 : 12 }}>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 5 }}>Season</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {SEASONS.map(s => {
+                  const on = l.seasonTag === s;
+                  return (
+                    <button key={s} className="chip" title={`Tag as ${s}`} onClick={() => setLookSeason(l.id, s)}
+                      style={{ cursor: "pointer", padding: "3px 9px", background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink, borderColor: on ? S.aubergine : `${S.aubergine}33` }}>
+                      {SEASON_EMOJI[s]} {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             {l.note && <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11.5, color: S.clay, marginBottom: 12 }}>✈ {l.note}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 8 }}>

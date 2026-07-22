@@ -35,13 +35,15 @@ into modules is explicitly requested.
   both the Today carousel and the travel planner (which passes a synthetic weather
   from the trip's temperature).
 - **Saved looks filtering**: the `Looks` view has two filter-chip rows — **Occasion**
-  (from each look's `occasion`) and **Season**. Each look is tagged with a wearing-season
-  + temperature range via `lookClimate(look, byId)`: from `look.weather.temp` if the
-  look was styled for real weather, else estimated from the warmest piece's `warmth`
-  (`WARMTH_TEMP`/`estTempFromPieces` — a coat ⇒ winter). Bands: Summer (22°C+),
-  Spring/Autumn (12–21°C), Winter (5–11°C), Deep winter (<5°C), or "Any season" when
-  unknown. The band + range shows as a chip on each card. Piece snapshots now include
-  `warmth` so the estimate works for weather-less looks (holiday plans, etc.).
+  and **Season**. Each look carries an editable four-**season tag** (`look.season` ∈
+  Spring/Summer/Autumn/Winter): tap a season chip on the card to set it (`setLookSeason`).
+  New looks default via `guessSeason` (temperature extremes decide Summer/Winter
+  outright; otherwise the save month `look.savedAt` picks Spring vs Autumn); `lookSeason`
+  returns the explicit tag or the guess. The card also shows the temperature **range**
+  from `lookClimate` (`WARMTH_TEMP`/`estTempFromPieces` estimate temp from the warmest
+  piece when a look has no weather stamp — a coat ⇒ winter). Piece snapshots include
+  `warmth`, and looks store `savedAt`, so both work for weather-less looks (holiday
+  plans, etc.).
 - **Insights** (`insights` view): a computed style profile — colour palette (swatches
   + a proportion bar, using `COLOR_HEX`/`colorHex`), category and tone/occasion
   `Meter` bars, a neutrals-vs-colour split, and a one-line summary. An optional
