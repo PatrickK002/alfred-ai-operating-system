@@ -73,7 +73,7 @@ function colorHex(name) { return COLOR_HEX[name] || "#b9a08f"; }
 // ---------- Outfit composition (shared by Today + Travel) ----------
 // Pure: builds one outfit from the closet for a given weather + occasion. Uses
 // randomness so repeated calls give different looks; callers dedupe by `key`.
-function composeOutfit(items, weather, occasion) {
+function composeOutfit(items, weather, occasion, avoidIds) {
   if (!weather) return { pieces: [], notes: [], key: "" };
   const needWarmth = warmthForTemp(weather.temp);
   const wet = isWet(weather.code);
@@ -88,6 +88,11 @@ function composeOutfit(items, weather, occasion) {
     if (opts.avoidColor) cand = cand.filter(i => !colorsClash(i.color, opts.avoidColor)).concat(cand.filter(i => colorsClash(i.color, opts.avoidColor)));
     if (!cand.length && opts.warmthOk) cand = pool.filter(i => i.category === cat); // relax warmth
     if (!cand.length) return null;
+    // Learn from removals: lean away from pieces the user keeps taking out.
+    if (avoidIds && avoidIds.size) {
+      const kept = cand.filter(i => !avoidIds.has(i.id));
+      if (kept.length) cand = kept;
+    }
     if (hasBold()) {
       const quiet = cand.filter(i => i.tone !== "Bold");
       if (quiet.length) cand = quiet;
@@ -133,7 +138,7 @@ function composeOutfit(items, weather, occasion) {
 
 // Pick a different closet piece to stand in for one the user removed from a look:
 // same category, right occasion + warmth, not already in the look, avoiding clashes.
-function pickAlternative(items, weather, occasion, piece, current) {
+function pickAlternative(items, weather, occasion, piece, current, avoidIds) {
   const usedIds = new Set(current.map(p => p.id));
   let cand = items.filter(i => i.category === piece.category && i.formality?.includes(occasion) && !usedIds.has(i.id));
   if (weather) {
@@ -142,6 +147,10 @@ function pickAlternative(items, weather, occasion, piece, current) {
     if (warm.length) cand = warm;
   }
   if (!cand.length) return null;
+  if (avoidIds && avoidIds.size) {
+    const kept = cand.filter(i => !avoidIds.has(i.id));
+    if (kept.length) cand = kept;
+  }
   const otherColors = current.filter(p => p.id !== piece.id).map(p => p.color);
   const nonClash = cand.filter(c => !otherColors.some(oc => colorsClash(c.color, oc)));
   if (nonClash.length) cand = nonClash;
@@ -149,18 +158,53 @@ function pickAlternative(items, weather, occasion, piece, current) {
 }
 
 // Build several distinct outfit recommendations (for the Today carousel).
-function recommendOutfits(items, weather, occasion, count = 6) {
+function recommendOutfits(items, weather, occasion, count = 6, avoidIds) {
   if (!weather) return [];
   const out = [];
   const seen = new Set();
   for (let tries = 0; tries < count * 6 && out.length < count; tries++) {
-    const o = composeOutfit(items, weather, occasion);
+    const o = composeOutfit(items, weather, occasion, avoidIds);
     if (!o.pieces.length) break;
     if (seen.has(o.key)) continue;
     seen.add(o.key);
     out.push(o);
   }
   return out;
+}
+
+// ---------- Parse a stylist outfit reply ----------
+// Match a named piece back to a closet item (exact, then fuzzy contains).
+function matchItem(items, name) {
+  const low = (name || "").trim().toLowerCase();
+  if (!low) return null;
+  return items.find(i => (i.name || "").toLowerCase() === low)
+    || items.find(i => (i.name || "").length >= 3 && low.includes((i.name || "").toLowerCase()))
+    || items.find(i => low.length >= 3 && (i.name || "").toLowerCase().includes(low));
+}
+// The stylist is asked to end an outfit with a "Pieces:" block, one line per piece:
+//   - <exact name> | <core|optional> | <reason>
+// Returns { title, prose (block stripped), pieces: [{...item, role, reason}] }.
+function parseOutfitReply(text, items) {
+  let body = text || "", title = null;
+  const tm = body.match(/^\s*(?:look|outfit|title)\s*:\s*(.+)/i);
+  if (tm) { title = tm[1].trim().replace(/[\s.·–—-]+$/, "").slice(0, 40); body = body.slice(tm[0].length).replace(/^\s+/, ""); }
+  const pieces = [];
+  const seen = new Set();
+  const kept = [];
+  let inBlock = false;
+  for (const line of body.split("\n")) {
+    if (/^\s*pieces\s*:/i.test(line)) { inBlock = true; continue; }
+    const m = line.match(/^\s*[-*•]\s*(.+?)\s*\|\s*(core|optional)\s*\|\s*(.+?)\s*$/i);
+    if (m) {
+      inBlock = true;
+      const it = matchItem(items, m[1]);
+      if (it && !seen.has(it.id)) { seen.add(it.id); pieces.push({ ...it, role: /optional/i.test(m[2]) ? "optional" : "core", reason: m[3].trim() }); }
+      continue;
+    }
+    if (inBlock && !line.trim()) continue;
+    kept.push(line);
+  }
+  return { title, prose: kept.join("\n").trim(), pieces };
 }
 
 // ---------- Travel / holiday planning ----------
@@ -236,6 +280,7 @@ const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to 
 const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist must never suggest again
 const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for the personal shopper)
 const TRIPS_KEY = "wardrobe_trips_v1"; // planned holidays (Travel page)
+const PREFS_KEY = "wardrobe_prefs_v1"; // learned style signals (e.g. pieces the user removes)
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -382,6 +427,7 @@ export default function App() {
   const [disliked, setDisliked] = useState([]); // combinations never to suggest again
   const [brands, setBrands] = useState([]); // saved stores/brands for the personal shopper
   const [trips, setTrips] = useState([]); // planned holidays
+  const [prefs, setPrefs] = useState({ removed: {} }); // learned signals: { removed: { pieceId: {name, count} } }
   const [ready, setReady] = useState(false); // true once data has loaded from storage
   const [view, setView] = useState("today"); // today | looks | mystyle | closet | shop | insights | travel | add
   const [weather, setWeather] = useState(null);
@@ -411,12 +457,13 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di, br, tr, loc] = await Promise.all([
+      const [it, lk, ip, li, di, br, tr, loc, pf] = await Promise.all([
         loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY), loadStore("trips", TRIPS_KEY),
-        idbGet("location").catch(() => null),
+        idbGet("location").catch(() => null), idbGet("prefs").catch(() => null),
       ]);
       if (!alive) return;
       setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setTrips(tr); setReady(true);
+      if (pf && typeof pf === "object") setPrefs({ removed: pf.removed || {} });
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
@@ -439,6 +486,23 @@ export default function App() {
     });
   }
   function deleteTrip(id) { setTrips(prev => prev.filter(t => t.id !== id)); }
+
+  // ----- Learned style signals -----
+  useEffect(() => { if (ready) idbSet("prefs", prefs).catch(() => {}); }, [prefs, ready]);
+  // Record that the user took a piece out of a suggested look (a soft negative
+  // signal the stylist + recommendations lean away from).
+  function notePieceRemoved(piece) {
+    if (!piece || !piece.id) return;
+    setPrefs(prev => {
+      const removed = { ...(prev.removed || {}) };
+      const cur = removed[piece.id];
+      removed[piece.id] = { name: piece.name || cur?.name || "a piece", count: (cur?.count || 0) + 1 };
+      return { ...prev, removed };
+    });
+  }
+  // Ids the user removes often — leaned away from in suggestions.
+  const avoidIds = new Set(Object.entries(prefs.removed || {}).filter(([, r]) => (r.count || 0) >= 2).map(([id]) => id));
+  const removedNames = Object.values(prefs.removed || {}).filter(r => (r.count || 0) >= 2).map(r => r.name);
 
   // ----- Saved stores/brands (personal shopper) -----
   function addBrand(b) {
@@ -467,7 +531,7 @@ export default function App() {
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands, trips };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands, trips, prefs };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -486,6 +550,7 @@ export default function App() {
       if (Array.isArray(data.disliked)) setDisliked(data.disliked);
       if (Array.isArray(data.brands)) setBrands(data.brands);
       if (Array.isArray(data.trips)) setTrips(data.trips);
+      if (data.prefs && typeof data.prefs === "object") setPrefs({ removed: data.prefs.removed || {} });
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -674,9 +739,9 @@ export default function App() {
   // Build a fresh set of recommended looks for the Today carousel.
   function buildOutfit() {
     if (!weather) return;
-    const list = recommendOutfits(items, weather, occasion, 6);
+    const list = recommendOutfits(items, weather, occasion, 6, avoidIds);
     setRecs(list);
-    setOutfit(list[0] || composeOutfit(items, weather, occasion));
+    setOutfit(list[0] || composeOutfit(items, weather, occasion, avoidIds));
   }
   // Deselect a piece in a recommended look and swap in an alternative (or drop it
   // if the closet has no other match). Keeps the look's stable key in sync.
@@ -685,14 +750,17 @@ export default function App() {
       if (i !== recIndex) return o;
       const piece = o.pieces.find(p => p.id === pieceId);
       if (!piece) return o;
-      const alt = pickAlternative(items, weather, occasion, piece, o.pieces);
+      const alt = pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds);
       const pieces = alt ? o.pieces.map(p => p.id === pieceId ? alt : p) : o.pieces.filter(p => p.id !== pieceId);
       if (!alt) flash(`No other ${piece.category.toLowerCase()} for this look — removed it`);
       return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
     }));
   }
-  // Remove a piece from a recommended look entirely (no replacement).
+  // Remove a piece from a recommended look entirely (no replacement). Records the
+  // removal so the stylist + recommendations learn to lean away from it.
   function removePiece(recIndex, pieceId) {
+    const removed = recs[recIndex]?.pieces.find(p => p.id === pieceId);
+    notePieceRemoved(removed);
     setRecs(prev => prev.map((o, i) => {
       if (i !== recIndex) return o;
       const pieces = o.pieces.filter(p => p.id !== pieceId);
@@ -727,7 +795,7 @@ export default function App() {
         const low = nm.toLowerCase();
         chosen = alts.find(a => a.name.toLowerCase() === low) || alts.find(a => low.includes(a.name.toLowerCase()));
       }
-      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces);
+      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds);
       if (!alt) { flash("Couldn't find an alternative"); setSwapping(null); return; }
       setRecs(prev => prev.map((r, i) => {
         if (i !== recIndex) return r;
@@ -786,7 +854,7 @@ export default function App() {
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
-            disliked={disliked} onDislike={dislikeCombo} />
+            disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView}
@@ -837,7 +905,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -884,7 +952,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
       </div>
 
       {/* AI stylist chat — moved above Today's Look */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} />
 
       {/* Today Look Recommendations (carousel) */}
       <div style={{ marginTop: 34 }}>
@@ -978,12 +1046,12 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
 }
 
 // ---------- Expanded look view (bigger, with per-piece controls) ----------
-function LookDetail({ look, idx, saved, swapping, onSwapPiece, onAiSwapPiece, onRemovePiece, onSave, onClose }) {
+function LookDetail({ look, idx, title, saved, swapping, onSwapPiece, onAiSwapPiece, onRemovePiece, onSave, onClose }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 56, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
       <div onClick={e => e.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(680px, 100%)", margin: "auto", boxShadow: "0 20px 60px #0007", overflow: "hidden" }}>
         <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 19 }}>Look {idx + 1}</div>
+          <div style={{ fontSize: 19 }}>{title || `Look ${idx + 1}`}</div>
           <button onClick={onClose} title="Close" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
 
@@ -996,12 +1064,16 @@ function LookDetail({ look, idx, saved, swapping, onSwapPiece, onAiSwapPiece, on
               const isAiSwapping = swapping === idx + ":" + p.id;
               return (
                 <div key={p.id} style={{ background: "#fff", border: `1px solid ${S.aubergine}14`, borderRadius: 10, overflow: "hidden" }}>
-                  <div style={{ aspectRatio: "1", background: S.blushSoft }}>
+                  <div style={{ aspectRatio: "1", background: S.blushSoft, position: "relative" }}>
                     <Thumb src={p.img} alt={p.name} />
+                    {p.role === "optional" && (
+                      <div style={{ position: "absolute", top: 6, left: 6, background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 10 }}>Optional</div>
+                    )}
                   </div>
                   <div style={{ padding: "10px 12px" }}>
                     <div style={{ fontSize: 14 }}>{p.name}</div>
-                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 10 }}>{p.category}{p.color ? ` · ${p.color}` : ""}{p.tone ? ` · ${p.tone}` : ""}</div>
+                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: p.reason ? 6 : 10 }}>{p.category}{p.color ? ` · ${p.color}` : ""}{p.tone ? ` · ${p.tone}` : ""}</div>
+                    {p.reason && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#6a5560", marginBottom: 10, lineHeight: 1.4 }}>{p.reason}</div>}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }}>{isAiSwapping ? "…" : "✨ Stylist"}</button>
                       <button onClick={() => onSwapPiece(idx, p.id)} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }}>↻ Swap</button>
@@ -1077,7 +1149,7 @@ function PiecePicker({ items, picked, onToggle }) {
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike, removedNames, onNotePieceRemoved }) {
   const dislikedKeys = new Set((disliked || []).map(d => d.key));
   const comboKey = (pcs) => pcs.map(p => p.id).sort().join(",");
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
@@ -1091,6 +1163,9 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [savedKeys, setSavedKeys] = useState(() => new Set()); // stylist looks saved this session
+  const [boards, setBoards] = useState({});   // per-message edited outfit boards
+  const [boardSwapping, setBoardSwapping] = useState(null); // "msgIndex:pieceId" being AI-swapped
+  const [expanded, setExpanded] = useState(null); // message index shown in the big view
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
@@ -1105,8 +1180,13 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
     return `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
       `Build looks ONLY from the pieces in their closet below; if something useful is missing, say so briefly. ` +
-      `Reference pieces by name. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers). ` +
-      `When you propose a full outfit, begin your reply with a single line "Look: <2-4 word name>", then a blank line, then a short explanation.\n\n` +
+      `Reference pieces by their exact names. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers).\n\n` +
+      `When you propose a full outfit, format your reply as:\n` +
+      `1. A first line: "Look: <2-4 word name>".\n` +
+      `2. A short, friendly explanation (2-4 sentences).\n` +
+      `3. A final block listing every piece, one per line, in EXACTLY this format:\n` +
+      `Pieces:\n- <exact closet piece name> | <core or optional> | <one short reason you chose it>\n` +
+      `Mark a piece "optional" ONLY when it is a just-in-case layer (e.g. a jacket to add if the evening gets cooler); everything actually worn is "core". Give a genuine reason for each.\n\n` +
       `Today's context:\n` +
       `- Weather: ${w}\n` +
       `- Occasion: ${occasion}\n` +
@@ -1116,6 +1196,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       `- Their closet:\n${closet}\n` +
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
       (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "") +
+      ((removedNames && removedNames.length) ? `\n\nThe user often REMOVES these pieces from suggested looks — lean away from them unless they're clearly ideal: ${removedNames.join(", ")}.` : "") +
       ((disliked && disliked.length) ? `\n\nNEVER suggest these exact combinations again — the user disliked them:\n${disliked.map(d => `- ${d.names.join(" + ")}`).join("\n")}` : "");
   }
 
@@ -1213,47 +1294,146 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     </div>
   );
 
-  // Pull an optional "Look: <name>" title off the front of a reply.
-  function parseReply(text) {
-    const m = (text || "").match(/^\s*(?:look|outfit|title)\s*:\s*(.+)/i);
-    if (m) {
-      const title = m[1].trim().replace(/[\s.·–—-]+$/, "").slice(0, 40);
-      const rest = text.slice(m[0].length).replace(/^\s+/, "");
-      return { title, text: rest || text };
-    }
-    return { title: null, text: text || "" };
-  }
   function regenerate() {
     if (busy) return;
     send("Not quite — please suggest a different outfit from my closet.", style, false, piecesUsed);
   }
 
-  // A visual outfit board: titled card + the pieces laid out, with save / redo.
-  const outfitCard = (title, pcs, i) => {
+  // ----- Editable outfit boards (per assistant message) -----
+  // The pieces a message's board starts from (structured block, else name-mentions).
+  const boardBase = (i) => {
+    const text = chat[i]?.content || "";
+    const parsed = parseOutfitReply(text, items);
+    if (parsed.pieces.length >= 2) return parsed.pieces;
+    return mentionedPieces(text).map(it => ({ ...it, role: "core", reason: "" }));
+  };
+  const boardPieces = (i) => boards[i]?.pieces ?? boardBase(i);
+  const boardSwapNote = (i) => boards[i]?.swapNote;
+  function setBoard(i, patch) { setBoards(prev => ({ ...prev, [i]: { ...(prev[i] || { pieces: boardBase(i) }), ...patch } })); }
+
+  function boardSwap(i, pieceId) {
+    const cur = boardPieces(i);
+    const piece = cur.find(p => p.id === pieceId);
+    if (!piece) return;
+    const alt = pickAlternative(items, weather, occasion, piece, cur);
+    const pieces = alt ? cur.map(p => p.id === pieceId ? { ...alt, role: piece.role, reason: "" } : p) : cur.filter(p => p.id !== pieceId);
+    setBoard(i, { pieces, swapNote: undefined });
+  }
+  function boardRemove(i, pieceId) {
+    const cur = boardPieces(i);
+    const piece = cur.find(p => p.id === pieceId);
+    if (piece) onNotePieceRemoved?.(piece); // learn from the removal
+    setBoard(i, { pieces: cur.filter(p => p.id !== pieceId), swapNote: undefined });
+  }
+  async function boardAiSwap(i, pieceId) {
+    if (boardSwapping) return;
+    const cur = boardPieces(i);
+    const piece = cur.find(p => p.id === pieceId);
+    if (!piece) return;
+    const usedIds = new Set(cur.map(p => p.id));
+    const alts = items.filter(it => it.category === piece.category && it.formality?.includes(occasion) && !usedIds.has(it.id));
+    if (!alts.length) { setErr(`No other ${piece.category.toLowerCase()} in your closet to swap in.`); return; }
+    setBoardSwapping(i + ":" + pieceId); setErr(null);
+    try {
+      const lookDesc = cur.map(p => `${p.name} (${p.category}, ${p.color})`).join("; ");
+      const options = alts.map(a => `- ${a.name} (${a.color}, ${a.tone} tone, warmth ${a.warmth})`).join("\n");
+      const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}` : "unknown";
+      const sys = "You are a personal stylist. The user wants to replace ONE piece in an outfit from their own closet. Pick the single best replacement from the provided options ONLY. Reply with ONE line in EXACTLY this format, nothing else:\nSwap: <exact option name> | <one short sentence on why it works>";
+      const msg = `Occasion: ${occasion}. Weather: ${w}.\nThe outfit: ${lookDesc}.\nReplace this piece: ${piece.name} (${piece.category}).\nChoose from these options:\n${options}`;
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system: sys, messages: [{ role: "user", content: msg }], max_tokens: 200 }) });
+      if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
+      const data = await res.json();
+      const m = (data.text || "").match(/^\s*swap\s*:\s*(.+)$/im);
+      let chosen = null, reason = "";
+      if (m) { const [nm, ...rest] = m[1].split("|").map(s => s.trim()); reason = rest.join(" | "); const low = nm.toLowerCase(); chosen = alts.find(a => a.name.toLowerCase() === low) || alts.find(a => low.includes(a.name.toLowerCase())); }
+      const alt = chosen || pickAlternative(items, weather, occasion, piece, cur);
+      if (!alt) { setErr("Couldn't find an alternative."); setBoardSwapping(null); return; }
+      const cur2 = boardPieces(i);
+      setBoard(i, { pieces: cur2.map(p => p.id === pieceId ? { ...alt, role: piece.role, reason: reason || "" } : p), swapNote: `${piece.name} → ${alt.name}${reason ? " — " + reason : ""}` });
+    } catch (e) {
+      setErr(e.message === "needs-key" ? "AI swap needs your hosted app (Render)." : "Couldn't reach the stylist — try again.");
+    }
+    setBoardSwapping(null);
+  }
+
+  // A small piece tile with per-piece controls (✨ stylist swap / ↻ swap / × remove).
+  const pieceTile = (i, p) => {
+    const isAiSwapping = boardSwapping === i + ":" + p.id;
+    return (
+      <div key={p.id} style={{ minWidth: 0 }}>
+        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
+          <Thumb src={p.img} alt={p.name} />
+          <button onClick={() => boardAiSwap(i, p.id)} disabled={!!boardSwapping} title="Ask the stylist to swap this (with a reason)"
+            style={{ position: "absolute", top: 4, left: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "#B5654Ad9", color: "#fff", cursor: boardSwapping ? "default" : "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>{isAiSwapping ? "…" : "✨"}</button>
+          <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 3 }}>
+            <button onClick={() => boardSwap(i, p.id)} title="Quick swap" style={{ width: 22, height: 22, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
+            <button onClick={() => boardRemove(i, p.id)} title="Remove from look" style={{ width: 22, height: 22, borderRadius: "50%", border: "none", background: "#8a4a3ad9", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>×</button>
+          </div>
+          {p.role === "optional" && (
+            <div style={{ position: "absolute", bottom: 4, left: 4, background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 10 }}>Optional</div>
+          )}
+        </div>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
+      </div>
+    );
+  };
+
+  // A visual outfit board: title, core pieces, optional layers (tagged separately),
+  // a "why each piece" overview, per-piece controls, and save / dislike / redo.
+  const outfitBoard = (title, allPieces, i) => {
+    const pcs = allPieces;
+    const core = pcs.filter(p => p.role !== "optional");
+    const optional = pcs.filter(p => p.role === "optional");
+    const withReasons = pcs.filter(p => p.reason);
     const key = "ai|" + occasion + "|" + pcs.map(p => p.id).sort().join(",");
     const saved = savedKeys.has(key);
     const isDisliked = dislikedKeys.has(comboKey(pcs));
+    const note = boardSwapNote(i);
     return (
       <div key={"o" + i} style={{ background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 12, padding: 14, margin: "0 0 14px" }}>
-        <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, marginBottom: 12 }}>
-          {title || style || "Your look"}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4 }}>
+            {title || style || "Your look"}
+          </div>
+          <button onClick={() => setExpanded(i)} title="Expand this look"
+            style={{ border: `1px solid ${S.aubergine}33`, background: "#fff", color: S.aubergine, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12 }}>⤢ Expand</button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>
-          {pcs.map(p => (
-            <div key={p.id}>
-              <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
-                <Thumb src={p.img} alt={p.name} />
-              </div>
-              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
+
+        {core.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>
+            {core.map(p => pieceTile(i, p))}
+          </div>
+        )}
+        {optional.length > 0 && (
+          <>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: S.clay, margin: "12px 0 6px" }}>Optional layer — only if needed</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>
+              {optional.map(p => pieceTile(i, p))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
+
+        {withReasons.length > 0 && (
+          <div style={{ background: "#fff", border: `1px solid ${S.aubergine}14`, borderRadius: 8, padding: "10px 12px", marginTop: 12 }}>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: S.clay, marginBottom: 7 }}>Why this look</div>
+            {withReasons.map(p => (
+              <div key={p.id} style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: S.ink, marginBottom: 5, lineHeight: 1.4 }}>
+                <strong>{p.name}</strong>{p.role === "optional" ? " (optional)" : ""} — <span style={{ color: "#6a5560" }}>{p.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {note && (
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "7px 10px", marginTop: 10, lineHeight: 1.4 }}>✨ {note}</div>
+        )}
+
         <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          <button className="btn btn-primary" style={{ padding: "8px 14px" }} disabled={saved}
+          <button className="btn btn-primary" style={{ padding: "8px 14px" }} disabled={saved || !pcs.length}
             onClick={() => { const k = onSaveLook(pcs); if (k) setSavedKeys(s => new Set(s).add(k)); }}>
             {saved ? "Saved ✓" : "♥ Save look"}
           </button>
-          <button className="btn btn-ghost" style={{ padding: "8px 14px" }} disabled={busy || isDisliked}
+          <button className="btn btn-ghost" style={{ padding: "8px 14px" }} disabled={busy || isDisliked || !pcs.length}
             onClick={() => {
               onDislike(pcs);
               const names = pcs.map(p => p.name).join(", ");
@@ -1342,20 +1522,22 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
               if (m.role !== "assistant") {
                 return <React.Fragment key={i}>{bubble("user", m.content, "b" + i)}</React.Fragment>;
               }
-              const pcs = mentionedPieces(m.content);
-              if (pcs.length >= 2) {
-                const parsed = parseReply(m.content);
+              const parsed = parseOutfitReply(m.content, items);
+              const current = boardPieces(i);
+              const isBoard = boards[i] ? current.length >= 1 : current.length >= 2;
+              if (isBoard) {
                 return (
                   <React.Fragment key={i}>
-                    {bubble("assistant", parsed.text, "b" + i)}
-                    {outfitCard(parsed.title, pcs, i)}
+                    {bubble("assistant", parsed.prose || m.content, "b" + i)}
+                    {outfitBoard(parsed.title, current, i)}
                   </React.Fragment>
                 );
               }
+              const one = mentionedPieces(m.content);
               return (
                 <React.Fragment key={i}>
                   {bubble("assistant", m.content, "b" + i)}
-                  {pcs.length === 1 && pieceStrip(pcs, "s" + i)}
+                  {one.length === 1 && pieceStrip(one, "s" + i)}
                 </React.Fragment>
               );
             })}
@@ -1378,6 +1560,18 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
             </div>
           )}
         </div>
+      )}
+
+      {expanded != null && boardPieces(expanded).length > 0 && (
+        <LookDetail
+          look={{ pieces: boardPieces(expanded), notes: [], swapNote: boardSwapNote(expanded) }}
+          idx={expanded}
+          title={parseOutfitReply(chat[expanded]?.content || "", items).title || style || "Your look"}
+          saved={savedKeys.has("ai|" + occasion + "|" + boardPieces(expanded).map(p => p.id).sort().join(","))}
+          swapping={boardSwapping}
+          onSwapPiece={(i, pid) => boardSwap(i, pid)} onAiSwapPiece={(i, pid) => boardAiSwap(i, pid)} onRemovePiece={(i, pid) => boardRemove(i, pid)}
+          onSave={() => { const k = onSaveLook(boardPieces(expanded)); if (k) setSavedKeys(s => new Set(s).add(k)); }}
+          onClose={() => setExpanded(null)} />
       )}
     </div>
   );
