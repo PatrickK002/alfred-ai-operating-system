@@ -1,12 +1,12 @@
 # The Wardrobe — personal stylist
 
-Tag the clothes and accessories you already own, and get outfit suggestions based on the live weather where you are. Everything is stored locally in your browser; nothing about your wardrobe leaves your device (weather uses only your coordinates against a free, no-signup API).
+Tag the clothes and accessories you already own, and get outfit suggestions based on the live weather for the location you choose. Everything is stored locally in your browser; nothing about your wardrobe leaves your device (weather uses only the city you pick against a free, no-signup API).
 
 ## What it does
 
 - **Add pieces** — upload photos and tag them by category, colour, tone, warmth, and occasion (fast tap-buttons). If you set up an API key, uploads are pre-tagged automatically and you just confirm.
 - **Closet** — browse and edit everything, filterable by category.
-- **Today's look** — pulls current weather, you pick the occasion, and it lines up a **carousel of recommended looks** to swipe through and save (each favouring one bold statement piece and avoiding clashing colours). The AI stylist chat sits right at the top.
+- **Today's look** — set your location (you choose the city — no GPS), pick the occasion, and it lines up a **carousel of recommended looks** to swipe through and save (each favouring one bold statement piece and avoiding clashing colours). Don't like a piece in a look? Tap **↻** on it and the stylist swaps in an alternative. The AI stylist chat sits right at the top.
 - **Insights** — a read on your style drawn from your tagged pieces: your colour palette, the balance of your wardrobe (neutrals vs colour, tone, categories, occasions), and an optional written stylist's take.
 - **Travel** — planning a holiday? Enter the destination, dates, temperature and vibe, and it builds a day-by-day outfit plan (day/afternoon/evening/night) from your own closet, plus a packing overview.
 - **AI Stylist chat** — on Today's Look, the stylist asks what style you're going for and whether you have pieces in mind, then suggests a look from your closet and answers follow-up questions (needs an API key — see Setup).
