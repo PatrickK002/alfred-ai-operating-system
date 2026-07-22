@@ -1102,7 +1102,14 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
           )}
           {weatherErr && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a4a3a", marginTop: 4 }}>{weatherErr}</div>}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Optional: dress for a temperature of your choice instead of the actual one */}
+          <label title="Optional — dress for a temperature of your choice instead of the actual one"
+            style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, background: S.blushSoft, border: `1px solid ${S.aubergine}22`, borderRadius: 20, padding: "5px 10px" }}>
+            🌡️ Dress for
+            <input type="number" inputMode="numeric" value={tempOverride} onChange={e => setTempOverride(e.target.value)} placeholder={weather ? `${weather.temp}` : "°C"} style={{ width: 52, padding: "4px 6px" }} />°C
+            {tempOverride !== "" && <button onClick={() => setTempOverride("")} title="Use the actual temperature" style={{ border: "none", background: "transparent", color: S.clay, cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12, textDecoration: "underline", padding: 0 }}>clear</button>}
+          </label>
           {showLocInput ? (
             <>
               <input value={locInput} onChange={e => setLocInput(e.target.value)} placeholder="City, e.g. London"
@@ -1139,11 +1146,6 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
             <h2 style={{ fontWeight: 400, fontSize: 22, margin: 0 }}>Look recommendations</h2>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }} title="Optional — leave blank to use the actual temperature">
-              Dress for:
-              <input type="number" inputMode="numeric" value={tempOverride} onChange={e => setTempOverride(e.target.value)} placeholder={weather ? `${weather.temp}` : "°C"} style={{ width: 62 }} />°C
-              {tempOverride !== "" && <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setTempOverride("")} title="Use the actual temperature">Clear</button>}
-            </label>
             <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13 }}>For:&nbsp;
               <select value={occasion} onChange={e=>setOccasion(e.target.value)}>
                 {FORMALITY.map(f => <option key={f}>{f}</option>)}
