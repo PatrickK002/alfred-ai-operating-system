@@ -850,6 +850,30 @@ export default function App() {
     setAutoTagging(false);
   }
 
+  // Auto-save any brands the auto-tagger spotted in the photos to Saved Shops.
+  // Dedupes against existing brands and within the batch; silent when nothing new.
+  function autoSaveBrands(found) {
+    const norm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+    const existing = new Set();
+    brands.forEach(x => { existing.add((x.name || "").toLowerCase()); const u = norm(x.url); if (u) existing.add(u); });
+    const toAdd = [];
+    const seen = new Set();
+    for (const b of found) {
+      const name = (b.name || "").trim();
+      if (!name) continue;
+      let url = (b.url || "").trim();
+      if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+      const nkey = name.toLowerCase(), ukey = norm(url);
+      if (existing.has(nkey) || (ukey && existing.has(ukey)) || seen.has(nkey)) continue;
+      seen.add(nkey);
+      toAdd.push({ id: crypto.randomUUID(), name, url, note: "Spotted in your closet" });
+    }
+    if (toAdd.length) {
+      setBrands(prev => [...toAdd, ...prev]);
+      flash(`Added ${toAdd.length} brand${toAdd.length > 1 ? "s" : ""} to your shops`);
+    }
+  }
+
   function commitQueue() {
     const ready = queue.filter(q => q.tags && q.tags.category);
     const committed = ready.map(q => ({
@@ -857,8 +881,11 @@ export default function App() {
       category: q.tags.category, color: q.tags.color || "Unspecified", tone: q.tags.tone || "Classic",
       warmth: q.tags.warmth || "Medium", formality: q.tags.formality?.length ? q.tags.formality : ["Casual"],
       name: q.tags.name || q.tags.category,
+      brand: q.tags.brand || undefined,
     }));
     setItems(prev => [...committed, ...prev]);
+    // Any brands the vision tagger identified go straight to Saved Shops.
+    autoSaveBrands(ready.map(q => ({ name: q.tags.brand, url: q.tags.brandUrl })).filter(b => b.name));
     // keep any still-untagged items in the queue
     setQueue(prev => prev.filter(q => !q.tags?.category));
     if (ready.length && ready.length === queue.length) setView("closet");
