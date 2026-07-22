@@ -1493,8 +1493,12 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     setStep("chat");
     setPiecesUsed(piecesTextValue);
     onRemember?.({ style, note: `Dressed for ${occasion.toLowerCase()}, wanted a "${style}" look${piecesTextValue ? ` built around ${piecesTextValue}` : ""}.` });
+    const tempLine = weather
+      ? `It's ${weather.temp}°C${weather.override ? " (the temperature I want to dress for)" : ""}, ${weatherLabel(weather.code).toLowerCase()}. `
+      : "";
     const opener = `I'm dressing for ${occasion.toLowerCase()}. The style I'm after is "${style}". ` +
       (piecesTextValue ? `I'd like to build it around: ${piecesTextValue}. ` : `I don't have specific pieces in mind. `) +
+      tempLine +
       `Please style a full outfit from my closet and tell me why it works.`;
     send(opener, style, true, piecesTextValue);
   }
