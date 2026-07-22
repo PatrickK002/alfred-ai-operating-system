@@ -78,7 +78,7 @@ function colorHex(name) { return COLOR_HEX[name] || "#b9a08f"; }
 // ---------- Outfit composition (shared by Today + Travel) ----------
 // Pure: builds one outfit from the closet for a given weather + occasion. Uses
 // randomness so repeated calls give different looks; callers dedupe by `key`.
-function composeOutfit(items, weather, occasion, avoidIds) {
+function composeOutfit(items, weather, occasion, avoidIds, favorIds) {
   if (!weather) return { pieces: [], notes: [], key: "" };
   const needWarmth = warmthForTemp(weather.temp);
   const wet = isWet(weather.code);
@@ -101,6 +101,11 @@ function composeOutfit(items, weather, occasion, avoidIds) {
     if (hasBold()) {
       const quiet = cand.filter(i => i.tone !== "Bold");
       if (quiet.length) cand = quiet;
+    }
+    // Learn from saved looks: often lean toward pieces the user has saved before.
+    if (favorIds && favorIds.size) {
+      const fav = cand.filter(i => favorIds.has(i.id));
+      if (fav.length && Math.random() < 0.6) cand = fav;
     }
     return cand[Math.floor(Math.random() * cand.length)];
   };
@@ -143,7 +148,7 @@ function composeOutfit(items, weather, occasion, avoidIds) {
 
 // Pick a different closet piece to stand in for one the user removed from a look:
 // same category, right occasion + warmth, not already in the look, avoiding clashes.
-function pickAlternative(items, weather, occasion, piece, current, avoidIds) {
+function pickAlternative(items, weather, occasion, piece, current, avoidIds, favorIds) {
   const usedIds = new Set(current.map(p => p.id));
   let cand = items.filter(i => i.category === piece.category && i.formality?.includes(occasion) && !usedIds.has(i.id));
   if (weather) {
@@ -159,22 +164,44 @@ function pickAlternative(items, weather, occasion, piece, current, avoidIds) {
   const otherColors = current.filter(p => p.id !== piece.id).map(p => p.color);
   const nonClash = cand.filter(c => !otherColors.some(oc => colorsClash(c.color, oc)));
   if (nonClash.length) cand = nonClash;
+  if (favorIds && favorIds.size) {
+    const fav = cand.filter(i => favorIds.has(i.id));
+    if (fav.length && Math.random() < 0.6) cand = fav;
+  }
   return cand[Math.floor(Math.random() * cand.length)];
 }
 
 // Build several distinct outfit recommendations (for the Today carousel).
-function recommendOutfits(items, weather, occasion, count = 6, avoidIds) {
+function recommendOutfits(items, weather, occasion, count = 6, avoidIds, favorIds) {
   if (!weather) return [];
   const out = [];
   const seen = new Set();
   for (let tries = 0; tries < count * 6 && out.length < count; tries++) {
-    const o = composeOutfit(items, weather, occasion, avoidIds);
+    const o = composeOutfit(items, weather, occasion, avoidIds, favorIds);
     if (!o.pieces.length) break;
     if (seen.has(o.key)) continue;
     seen.add(o.key);
     out.push(o);
   }
   return out;
+}
+
+// Summarise the user's saved looks into a positive taste signal: the piece ids they
+// favour, plus a short text digest for the stylist.
+function savedTaste(looks) {
+  if (!looks || !looks.length) return { favorIds: new Set(), text: "" };
+  const counts = {};
+  looks.forEach(l => (l.pieces || []).forEach(p => {
+    counts[p.id] = counts[p.id] || { name: p.name, n: 0 };
+    counts[p.id].n++;
+  }));
+  const favorIds = new Set(Object.keys(counts));
+  const topPieces = Object.values(counts).sort((a, b) => b.n - a.n).slice(0, 6).map(c => c.name);
+  const recent = looks.slice(0, 3).map(l => `${l.occasion}: ${(l.pieces || []).map(p => p.name).join(" + ")}`);
+  const text = `Looks they've SAVED because they love them (lean into these pieces and pairings when it fits):` +
+    (topPieces.length ? `\n- Pieces they save most: ${topPieces.join(", ")}.` : "") +
+    (recent.length ? `\n- Recent saved looks:\n${recent.map(c => `  · ${c}`).join("\n")}` : "");
+  return { favorIds, text };
 }
 
 // ---------- Parse a stylist outfit reply ----------
@@ -537,6 +564,9 @@ export default function App() {
   const avoidIds = new Set(Object.entries(prefs.removed || {}).filter(([, r]) => (r.count || 0) >= 2).map(([id]) => id));
   const removedNames = Object.values(prefs.removed || {}).filter(r => (r.count || 0) >= 2).map(r => r.name);
 
+  // Positive taste signal from the looks the user has saved.
+  const taste = savedTaste(looks);
+
   // ----- Stylist memory (carried across conversations) -----
   useEffect(() => { if (ready) idbSet("memory", memory).catch(() => {}); }, [memory, ready]);
   // Remember something the user told the stylist (a request/question) and/or a style
@@ -802,9 +832,9 @@ export default function App() {
   // Build a fresh set of recommended looks for the Today carousel.
   function buildOutfit() {
     if (!weather) return;
-    const list = recommendOutfits(items, weather, occasion, 6, avoidIds);
+    const list = recommendOutfits(items, weather, occasion, 6, avoidIds, taste.favorIds);
     setRecs(list);
-    setOutfit(list[0] || composeOutfit(items, weather, occasion, avoidIds));
+    setOutfit(list[0] || composeOutfit(items, weather, occasion, avoidIds, taste.favorIds));
   }
   // Deselect a piece in a recommended look and swap in an alternative (or drop it
   // if the closet has no other match). Keeps the look's stable key in sync.
@@ -813,7 +843,7 @@ export default function App() {
       if (i !== recIndex) return o;
       const piece = o.pieces.find(p => p.id === pieceId);
       if (!piece) return o;
-      const alt = pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds);
+      const alt = pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
       const pieces = alt ? o.pieces.map(p => p.id === pieceId ? alt : p) : o.pieces.filter(p => p.id !== pieceId);
       if (!alt) flash(`No other ${piece.category.toLowerCase()} for this look — removed it`);
       return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
@@ -858,7 +888,7 @@ export default function App() {
         const low = nm.toLowerCase();
         chosen = alts.find(a => a.name.toLowerCase() === low) || alts.find(a => low.includes(a.name.toLowerCase()));
       }
-      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds);
+      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
       if (!alt) { flash("Couldn't find an alternative"); setSwapping(null); return; }
       setRecs(prev => prev.map((r, i) => {
         if (i !== recIndex) return r;
@@ -925,7 +955,7 @@ export default function App() {
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved}
-            memory={memory} onRemember={remember} onForget={clearMemory} />
+            memory={memory} onRemember={remember} onForget={clearMemory} savedTaste={taste.text} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView}
@@ -976,7 +1006,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -1033,7 +1063,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
       </div>
 
       {/* AI stylist chat — moved above Today's Look */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} savedTaste={savedTaste} />
 
       {/* Today Look Recommendations (carousel) */}
       <div style={{ marginTop: 34 }}>
@@ -1227,7 +1257,7 @@ function PiecePicker({ items, picked, onToggle }) {
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
   const dislikedKeys = new Set((disliked || []).map(d => d.key));
   const comboKey = (pcs) => pcs.map(p => p.id).sort().join(",");
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
@@ -1296,6 +1326,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       `- Their closet:\n${closet}\n` +
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
       (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "") +
+      (savedTaste ? `\n\n${savedTaste}` : "") +
       ((memory && (memory.styles?.length || memory.notes?.length)) ? `\n\nWhat you remember about them from earlier conversations (use it naturally; don't recite it back):` +
         (memory.styles?.length ? `\n- Styles they've asked for before: ${memory.styles.slice(0, 6).join(", ")}.` : "") +
         (memory.notes?.length ? `\n- Things they've said/requested:\n${memory.notes.slice(0, 10).map(n => `  · ${n}`).join("\n")}` : "") : "") +
