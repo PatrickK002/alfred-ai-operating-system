@@ -63,15 +63,23 @@ into modules is explicitly requested.
   on the first message as image blocks. `/api/chat` (in `server/index.js`) proxies
   to the Anthropic Messages API and returns assistant text; 503 without a key, and
   the UI degrades gracefully.
-- **Stylist outfit board**: when a reply names ≥2 closet pieces, it renders as a
-  titled `outfitCard` (a soft-background board with the pieces laid out) instead of
-  plain text. The title comes from a `Look: <name>` first line the model is asked to
-  emit (`parseReply` strips it). Actions: "Save look" (`onSaveLook` →
-  `saveLookPieces` adds to Saved Looks), "Suggest another" (`regenerate`), and
-  "Don't suggest again" (`onDislike` → `dislikeCombo` records the piece-id combo in
-  `disliked`, persisted; every request's system prompt lists disliked combos so that
-  exact set is never suggested again). The Saved Looks view (`DislikedList`) shows
-  blocked combinations with an "Allow again" button (`removeDislike`).
+- **Stylist outfit board**: the model is asked to end an outfit reply with a
+  `Pieces:` block, one line per piece: `- <name> | <core|optional> | <reason>`.
+  `parseOutfitReply` pulls the `Look:` title + this block out of the prose and matches
+  each name to a closet item (`matchItem`); it powers the board, the per-item **why**
+  overview box, and the **Optional layer** tag (optional = just-in-case layers like a
+  jacket "if it gets cooler", shown separately from core pieces). Each board is
+  editable per message (`boards[msgIndex]`): per-piece **✨ stylist swap** (`boardAiSwap`
+  → `/api/chat`, returns `Swap: <name> | <why>`), **↻ quick swap** (`boardSwap` →
+  `pickAlternative`), **× remove** (`boardRemove`, which calls `onNotePieceRemoved`),
+  and **⤢ Expand** (opens the shared `LookDetail` modal). Board actions: "Save look",
+  "Don't suggest again" (`onDislike` → `dislikeCombo`), "Suggest another" (`regenerate`).
+- **Learning (`prefs`)**: `prefs.removed` (key `wardrobe_prefs_v1`, in backup) counts
+  how often each piece is removed from a look. Pieces removed ≥2× go into `avoidIds`
+  (leaned away from by `composeOutfit`/`pickAlternative`) and `removedNames` (listed in
+  the stylist system prompt). `notePieceRemoved` is called from both the Today
+  recommendations and the chat boards. Within a session the stylist also has the full
+  chat history (questions, requests) as context.
 - **Personal Shopper**: the `Shopper` component (its own "Personal Shopper" view)
   lets the user save stores/brands they like (`brands`, key `wardrobe_brands_v1`,
   each `{ id, name, url, note }`; `addBrand` dedupes by host/name, included in
