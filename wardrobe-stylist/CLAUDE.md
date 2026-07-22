@@ -146,9 +146,11 @@ into modules is explicitly requested.
   The tagger also returns `brand` (+ `brandUrl`) when it can read a clear logo/wordmark
   or legible brand text (neck/care label, swing tag, packaging) in the photo — it
   transcribes what's visible and never guesses; on commit, `autoSaveBrands` adds any
-  spotted brands to the Personal
-  Shopper's saved brands (deduped by name/host, note "Spotted in your closet"), and the
-  brand is stored on the item.
+  spotted brands to the Personal Shopper's saved brands (deduped by name/host, note
+  "Spotted in your closet"), and the brand is stored on the item. A **Scan closet for
+  brands** button on the Personal Shopper runs `scanClosetBrands`, which POSTs each
+  existing piece's photo to the lightweight `/api/brand` endpoint (brand-only vision)
+  to back-fill brands from pieces added before the feature.
 - **Styling engine**: `buildOutfit()` filters by occasion + weather-appropriate
   warmth, builds a dress/jumpsuit or top+bottom silhouette, adds outerwear when
   cool/wet, then shoes and accessories. It favours a single "Bold" tone piece and

@@ -175,6 +175,54 @@ function handleChat(req, res) {
   });
 }
 
+// Brand-only vision scan: read a brand/label from one photo (a clear logo/wordmark
+// or legible text on the item, a tag, or packaging). Used to find brands in pieces
+// already in the closet. Returns { brand, brandUrl } — empty when none is legible.
+function handleBrand(req, res) {
+  if (!API_KEY) {
+    return send(res, 503, { error: "ANTHROPIC_API_KEY is not set. Brand scanning is disabled." });
+  }
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", async () => {
+    try {
+      const { base64, mediaType } = JSON.parse(raw);
+      if (!base64) return send(res, 400, { error: "base64 required" });
+      const prompt = `Look at this clothing/accessory photo. If you can read a brand/label name from a clear LOGO or wordmark, or from legible TEXT anywhere in the image (on the item, a neck/care label, a swing tag, or packaging), report it exactly as shown. Only report a name you can actually see or read — never guess or infer from style. Return ONLY JSON, no prose: {"brand": name or "", "brandUrl": that brand's official homepage like "gucci.com" (only if confident and brand is set) or ""}`;
+
+      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 150,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: base64 } },
+              { type: "text", text: prompt },
+            ],
+          }],
+        }),
+      });
+
+      const data = await anthropicRes.json();
+      if (!anthropicRes.ok) return send(res, anthropicRes.status, { error: data?.error?.message || "Anthropic API error" });
+      const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
+      const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      let brand = "", brandUrl = "";
+      try { const j = JSON.parse(clean); brand = (j.brand || "").trim(); brandUrl = (j.brandUrl || "").trim(); } catch {}
+      send(res, 200, { brand, brandUrl });
+    } catch (err) {
+      send(res, 500, { error: String(err?.message || err) });
+    }
+  });
+}
+
 // Personal shopper. Like /api/chat, but with the Anthropic web-search server tool
 // enabled so the shopper can look up brands, specific items, and current sales on
 // the live web. The search runs server-side inside the same request; we return the
@@ -230,6 +278,10 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/shop") {
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
     return handleShop(req, res);
+  }
+  if (req.url === "/api/brand") {
+    if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
+    return handleBrand(req, res);
   }
   if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
   return send(res, 404, { error: "Not found" });
