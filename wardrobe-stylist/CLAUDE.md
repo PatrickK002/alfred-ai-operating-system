@@ -34,6 +34,12 @@ into modules is explicitly requested.
   pure module-level `composeOutfit(items, weather, occasion)` so it can be reused by
   both the Today carousel and the travel planner (which passes a synthetic weather
   from the trip's temperature).
+- **Temperature override**: an optional "Dress for … °C" input on Today sets
+  `tempOverride`. When non-empty, `styleWeather` replaces the actual temp with the
+  chosen one (keeping the real code/wind) and is passed to `buildOutfit`, the swap
+  helpers, and the `Stylist` (its prompt flags it as a chosen temperature) — the
+  weather strip still shows the actual conditions. With an override set you can style
+  even without a location (`styleWeather` truthy). Blank = use the actual temperature.
 - **Saved looks filtering**: the `Looks` view has two filter-chip rows — **Occasion**
   and **Season**. Each look carries an editable four-**season tag** (`look.season` ∈
   Spring/Summer/Autumn/Winter): tap a season chip on the card to set it (`setLookSeason`).
