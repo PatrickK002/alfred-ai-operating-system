@@ -114,6 +114,11 @@ into modules is explicitly requested.
   options and return `Swap: <name> | <why>`; the chosen piece is swapped in and the
   reason is shown on the card as `swapNote` (falls back to `pickAlternative` / degrades
   without a key). `swapping` holds the `"recIndex:pieceId"` being AI-swapped.
+  `removePiece(recIndex, pieceId)` drops a piece from a look (× button beside ↻).
+- **Expanded look**: each recommendation card has an "⤢ Expand" button that opens
+  `LookDetail`, a modal (z-index 56) with larger photos and per-piece labelled
+  controls (✨ Stylist / ↻ Swap / × Remove) plus the notes and Save; it reads
+  `recs[expanded]` so swaps/removes reflect live.
 - **Piece picker**: the stylist Q2 `PiecePicker` shows ~two rows in a `maxHeight`
   scroll container (compact) rather than the full closet.
 
