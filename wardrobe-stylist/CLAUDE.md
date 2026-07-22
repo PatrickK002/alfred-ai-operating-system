@@ -101,8 +101,17 @@ into modules is explicitly requested.
   warmth, builds a dress/jumpsuit or top+bottom silhouette, adds outerwear when
   cool/wet, then shoes and accessories. It favours a single "Bold" tone piece and
   avoids clashing two saturated colours (`colorsClash`, `NEUTRALS`).
-- **Weather**: Open-Meteo, no API key. `warmthForTemp()` maps °C → allowed warmth
-  levels; `"Not applicable"` warmth is always allowed.
+- **Weather**: Open-Meteo, no API key, **manual location only** (no geolocation/GPS).
+  `chooseLocation(name)` geocodes the typed city via Open-Meteo's geocoding API and
+  `fetchWeather(loc)` gets its current weather; the chosen `location` ({name,lat,lon})
+  is persisted to IndexedDB (`idbSet("location")`) and reloaded on open. `warmthForTemp()`
+  maps °C → allowed warmth levels; `"Not applicable"` warmth is always allowed.
+- **Swap a piece**: each piece in a Today recommendation has a ↻ button;
+  `swapPiece(recIndex, pieceId)` replaces it via `pickAlternative` (same category,
+  right occasion/warmth, avoids clashes, excludes pieces already in the look) or drops
+  it if the closet has no other match.
+- **Piece picker**: the stylist Q2 `PiecePicker` shows ~two rows in a `maxHeight`
+  scroll container (compact) rather than the full closet.
 
 ## Conventions
 

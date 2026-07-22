@@ -131,6 +131,23 @@ function composeOutfit(items, weather, occasion) {
   return result;
 }
 
+// Pick a different closet piece to stand in for one the user removed from a look:
+// same category, right occasion + warmth, not already in the look, avoiding clashes.
+function pickAlternative(items, weather, occasion, piece, current) {
+  const usedIds = new Set(current.map(p => p.id));
+  let cand = items.filter(i => i.category === piece.category && i.formality?.includes(occasion) && !usedIds.has(i.id));
+  if (weather) {
+    const needWarmth = warmthForTemp(weather.temp);
+    const warm = cand.filter(i => i.warmth === "Not applicable" || needWarmth.includes(i.warmth));
+    if (warm.length) cand = warm;
+  }
+  if (!cand.length) return null;
+  const otherColors = current.filter(p => p.id !== piece.id).map(p => p.color);
+  const nonClash = cand.filter(c => !otherColors.some(oc => colorsClash(c.color, oc)));
+  if (nonClash.length) cand = nonClash;
+  return cand[Math.floor(Math.random() * cand.length)];
+}
+
 // Build several distinct outfit recommendations (for the Today carousel).
 function recommendOutfits(items, weather, occasion, count = 6) {
   if (!weather) return [];
@@ -370,6 +387,8 @@ export default function App() {
   const [weather, setWeather] = useState(null);
   const [weatherErr, setWeatherErr] = useState(null);
   const [loadingW, setLoadingW] = useState(false);
+  const [location, setLocation] = useState(null); // { name, lat, lon } — manually chosen
+  const [locBusy, setLocBusy] = useState(false);
   const [occasion, setOccasion] = useState("Casual");
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
@@ -391,11 +410,13 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di, br, tr] = await Promise.all([
+      const [it, lk, ip, li, di, br, tr, loc] = await Promise.all([
         loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY), loadStore("trips", TRIPS_KEY),
+        idbGet("location").catch(() => null),
       ]);
       if (!alive) return;
       setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setTrips(tr); setReady(true);
+      if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
@@ -532,25 +553,40 @@ export default function App() {
   const deleteInspo = (id) => setInspo(prev => prev.filter(p => p.id !== id));
   const deleteLiked = (id) => setLiked(prev => prev.filter(p => p.id !== id));
 
-  // ----- Weather -----
-  async function getWeather() {
+  // ----- Weather (manual location only — no GPS) -----
+  async function fetchWeather(loc) {
+    if (!loc) return;
     setLoadingW(true); setWeatherErr(null);
-    if (!navigator.geolocation) { setWeatherErr("Location isn't available on this device. You can still browse your closet."); setLoadingW(false); return; }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try {
-        const { latitude, longitude } = pos.coords;
-        const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`);
-        const d = await r.json();
-        setWeather({
-          temp: Math.round(d.current.temperature_2m),
-          code: d.current.weather_code,
-          wind: Math.round(d.current.wind_speed_10m),
-        });
-      } catch { setWeatherErr("Couldn't reach the weather service. Check your connection and try again."); }
-      setLoadingW(false);
-    }, () => { setWeatherErr("Location access was blocked. Allow it in your browser to get weather-based picks."); setLoadingW(false); }, { timeout: 10000 });
+    try {
+      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`);
+      const d = await r.json();
+      setWeather({
+        temp: Math.round(d.current.temperature_2m),
+        code: d.current.weather_code,
+        wind: Math.round(d.current.wind_speed_10m),
+      });
+    } catch { setWeatherErr("Couldn't reach the weather service. Check your connection and try again."); }
+    setLoadingW(false);
   }
-  useEffect(() => { getWeather(); }, []);
+  // Look up a place the user typed, remember it, and get its weather.
+  async function chooseLocation(name) {
+    const q = (name || "").trim();
+    if (!q) return;
+    setLocBusy(true); setWeatherErr(null);
+    try {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
+      const d = await r.json();
+      const g = d.results?.[0];
+      if (!g) { setWeatherErr(`Couldn't find “${q}”. Try a city or town name.`); setLocBusy(false); return; }
+      const loc = { name: [g.name, g.admin1, g.country_code].filter(Boolean).join(", "), lat: g.latitude, lon: g.longitude };
+      setLocation(loc);
+      await fetchWeather(loc);
+    } catch { setWeatherErr("Couldn't look up that place — check your connection and try again."); }
+    setLocBusy(false);
+  }
+  function refreshWeather() { if (location) fetchWeather(location); }
+  // Remember the chosen location and load its weather on next open (no GPS prompt).
+  useEffect(() => { if (ready && location) idbSet("location", location).catch(() => {}); }, [location, ready]);
 
   // ----- Upload (wardrobe pieces) -----
   async function handleFiles(e) {
@@ -641,6 +677,19 @@ export default function App() {
     setRecs(list);
     setOutfit(list[0] || composeOutfit(items, weather, occasion));
   }
+  // Deselect a piece in a recommended look and swap in an alternative (or drop it
+  // if the closet has no other match). Keeps the look's stable key in sync.
+  function swapPiece(recIndex, pieceId) {
+    setRecs(prev => prev.map((o, i) => {
+      if (i !== recIndex) return o;
+      const piece = o.pieces.find(p => p.id === pieceId);
+      if (!piece) return o;
+      const alt = pickAlternative(items, weather, occasion, piece, o.pieces);
+      const pieces = alt ? o.pieces.map(p => p.id === pieceId ? alt : p) : o.pieces.filter(p => p.id !== pieceId);
+      if (!alt) flash(`No other ${piece.category.toLowerCase()} for this look — removed it`);
+      return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(",") };
+    }));
+  }
 
   // ---------- Render ----------
   return (
@@ -684,9 +733,10 @@ export default function App() {
 
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "26px 20px 60px" }}>
         {view === "today" && (
-          <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} getWeather={getWeather}
+          <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW}
+            location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
-            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks}
+            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece}
             disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
@@ -738,25 +788,49 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, disliked, onDislike }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, disliked, onDislike }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
+  const [locInput, setLocInput] = useState("");
+  const [editingLoc, setEditingLoc] = useState(false);
   const savedKeys = new Set([...(looks || []).map(l => l.key), ...saved]);
   const saveRec = (o) => { const k = onSaveLook(o.pieces); if (k) setSaved(s => new Set(s).add(k)); };
   const recKey = (o) => "ai|" + occasion + "|" + o.pieces.map(p => p.id).sort().join(",");
+  const submitLoc = () => { if (locInput.trim()) { onChooseLocation(locInput); setEditingLoc(false); } };
+  const showLocInput = editingLoc || !location;
 
   return (
     <div>
-      {/* Weather strip */}
+      {/* Weather strip — manual location only (no GPS) */}
       <div className="card" style={{ padding: 18, marginBottom: 22, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "#B5654A", marginBottom: 4 }}>Right now, where you are</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "#B5654A", marginBottom: 4 }}>Weather where you're dressing</div>
           {loadingW && <div>Checking the sky…</div>}
-          {weatherErr && <div style={{ fontFamily:"system-ui,sans-serif", fontSize:13, color:"#8a4a3a" }}>{weatherErr}</div>}
           {weather && !loadingW && (
-            <div style={{ fontSize: 26 }}>{weather.temp}°C · <span style={{ fontSize: 18 }}>{weatherLabel(weather.code)}</span>{weather.wind>25?`  ·  windy`:""}</div>
+            <div style={{ fontSize: 26 }}>{weather.temp}°C · <span style={{ fontSize: 18 }}>{weatherLabel(weather.code)}</span>{weather.wind > 25 ? "  ·  windy" : ""}</div>
+          )}
+          {location && !loadingW && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginTop: 2 }}>{location.name}</div>
+          )}
+          {!location && !loadingW && !weatherErr && (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66" }}>Choose your location to get weather-based picks.</div>
+          )}
+          {weatherErr && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a4a3a", marginTop: 4 }}>{weatherErr}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          {showLocInput ? (
+            <>
+              <input value={locInput} onChange={e => setLocInput(e.target.value)} placeholder="City, e.g. London"
+                onKeyDown={e => { if (e.key === "Enter") submitLoc(); }} style={{ width: 180 }} />
+              <button className="btn btn-primary" style={{ padding: "9px 14px" }} onClick={submitLoc} disabled={locBusy || !locInput.trim()}>{locBusy ? "…" : "Set"}</button>
+              {location && <button className="btn btn-ghost" style={{ padding: "9px 12px" }} onClick={() => setEditingLoc(false)}>Cancel</button>}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost" onClick={refreshWeather} disabled={loadingW}>Refresh</button>
+              <button className="btn btn-ghost" onClick={() => { setEditingLoc(true); setLocInput(""); }}>Change location</button>
+            </>
           )}
         </div>
-        <button className="btn btn-ghost" onClick={getWeather}>Refresh</button>
       </div>
 
       {/* AI stylist chat — moved above Today's Look */}
@@ -804,15 +878,18 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
                     {o.pieces.map(p => (
                       <div key={p.id} style={{ minWidth: 0 }}>
-                        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12` }}>
+                        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
                           <Thumb src={p.img} alt={p.name} />
+                          <button onClick={() => onSwapPiece(idx, p.id)} title="Swap for another piece"
+                            style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
                         </div>
                         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
                       </div>
                     ))}
                   </div>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Tap ↻ on any piece to swap it for an alternative.</div>
                   {o.notes.length > 0 && (
-                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 10, lineHeight: 1.4 }}>{o.notes[0]}</div>
+                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 6, lineHeight: 1.4 }}>{o.notes[0]}</div>
                   )}
                   <button className="btn btn-primary" style={{ marginTop: 12, padding: "8px 14px" }} disabled={isSaved} onClick={() => saveRec(o)}>
                     {isSaved ? "Saved ✓" : "♥ Save look"}
@@ -828,45 +905,49 @@ function Today({ weather, weatherErr, loadingW, getWeather, occasion, setOccasio
 }
 
 // ---------- Closet-style piece picker (used in the stylist's Q2) ----------
+// Shows about two rows and scrolls vertically for the rest, so it stays compact.
 function PiecePicker({ items, picked, onToggle }) {
   const [filter, setFilter] = useState("All");
   const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
   const shown = filter === "All" ? items : items.filter(i => i.category === filter);
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {cats.map(c => (
           <button key={c} type="button" className="chip"
             style={{ cursor: "pointer", touchAction: "manipulation", background: filter === c ? S.aubergine : "#fff", color: filter === c ? S.blush : S.ink }}
             onClick={() => setFilter(c)}>{c}</button>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
-        {shown.map(i => {
-          const on = picked.includes(i.id);
-          return (
-            <button key={i.id} type="button" onClick={() => onToggle(i.id)} className="card"
-              style={{
-                textAlign: "left", padding: 0, cursor: "pointer", touchAction: "manipulation",
-                border: `${on ? 2 : 1}px solid ${on ? S.aubergine : S.aubergine + "18"}`,
-                boxShadow: on ? `0 0 0 1px ${S.aubergine}` : "none",
-              }}>
-              <div style={{ aspectRatio: "1", background: S.blushSoft, position: "relative" }}>
-                {i.img
-                  ? <img src={i.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
-                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a76", fontFamily: "system-ui,sans-serif", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase" }}>No photo</div>}
-                {on && (
-                  <div style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: S.aubergine, color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, boxShadow: "0 1px 4px #0004" }}>✓</div>
-                )}
-              </div>
-              <div style={{ padding: "9px 11px" }}>
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 14, color: S.ink }}>{i.name}</div>
-                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 2 }}>{i.category}{i.color ? ` · ${i.color}` : ""}{i.tone ? ` · ${i.tone}` : ""}</div>
-              </div>
-            </button>
-          );
-        })}
+      <div style={{ maxHeight: 340, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: 8, border: `1px solid ${S.aubergine}18`, borderRadius: 8, background: S.blushSoft }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(128px,1fr))", gap: 12 }}>
+          {shown.map(i => {
+            const on = picked.includes(i.id);
+            return (
+              <button key={i.id} type="button" onClick={() => onToggle(i.id)} className="card"
+                style={{
+                  textAlign: "left", padding: 0, cursor: "pointer", touchAction: "manipulation",
+                  border: `${on ? 2 : 1}px solid ${on ? S.aubergine : S.aubergine + "18"}`,
+                  boxShadow: on ? `0 0 0 1px ${S.aubergine}` : "none",
+                }}>
+                <div style={{ aspectRatio: "1", background: "#fff", position: "relative" }}>
+                  {i.img
+                    ? <img src={i.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
+                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a76", fontFamily: "system-ui,sans-serif", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase" }}>No photo</div>}
+                  {on && (
+                    <div style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: S.aubergine, color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, boxShadow: "0 1px 4px #0004" }}>✓</div>
+                  )}
+                </div>
+                <div style={{ padding: "8px 10px" }}>
+                  <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13.5, color: S.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i.name}</div>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 2 }}>{i.category}{i.color ? ` · ${i.color}` : ""}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
+      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 6 }}>Scroll to see more · {picked.length} selected</div>
     </div>
   );
 }
