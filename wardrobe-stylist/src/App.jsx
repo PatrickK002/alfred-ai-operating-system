@@ -46,6 +46,29 @@ function dayLabel(iso) {
   try { return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
   catch { return iso; }
 }
+
+// ---------- Saved-look season / temperature range ----------
+// A rough °C each warmth level suits, used to estimate a look's climate when it has
+// no weather stamp (e.g. holiday-plan looks). The warmest piece sets the coldest
+// temperature the outfit is built for — a coat means winter.
+const WARMTH_TEMP = { "Very warm": 4, "Warm": 11, "Medium": 18, "Light": 24, "Very light": 28 };
+function estTempFromPieces(pieces, byId) {
+  const ts = (pieces || []).map(p => WARMTH_TEMP[p.warmth || byId?.get?.(p.id)?.warmth]).filter(v => v != null);
+  return ts.length ? Math.min(...ts) : null;
+}
+// Wearing-season + appropriate temperature range for a temperature (°C).
+function climateFor(temp) {
+  if (temp == null) return { season: "Any season", range: "any temp", emoji: "🧥" };
+  if (temp >= 22) return { season: "Summer", range: "22°C +", emoji: "☀️" };
+  if (temp >= 12) return { season: "Spring / Autumn", range: "12–21°C", emoji: "🍃" };
+  if (temp >= 5) return { season: "Winter", range: "5–11°C", emoji: "❄️" };
+  return { season: "Deep winter", range: "under 5°C", emoji: "🧣" };
+}
+const SEASON_ORDER = ["Summer", "Spring / Autumn", "Winter", "Deep winter", "Any season"];
+function lookClimate(look, byId) {
+  const temp = look?.weather?.temp != null ? look.weather.temp : estTempFromPieces(look?.pieces, byId);
+  return { temp, ...climateFor(temp) };
+}
 // Map temperature (°C) to needed warmth levels
 function warmthForTemp(t) {
   if (t >= 26) return ["Very light", "Light"];
@@ -256,7 +279,7 @@ const TRIP_SLOTS = [
   { slot: "Evening", label: "Dinner", occ: ["Going out", "Work", "Casual"] },
   { slot: "Night", label: "Drinks", occ: ["Going out", "Casual", "Work"] },
 ];
-function snapshotPiece(p) { return { id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img }; }
+function snapshotPiece(p) { return { id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img }; }
 // Compose an outfit for a slot, trying its preferred occasions until one lands.
 function composeForSlot(items, weather, occasions) {
   for (const occ of occasions) {
@@ -647,7 +670,7 @@ export default function App() {
       weather: weather ? { temp: weather.temp, code: weather.code } : null,
       // snapshot the pieces so the saved look is independent of later edits/deletes
       pieces: outfit.pieces.map(p => ({
-        id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img,
+        id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img,
       })),
     };
     setLooks(prev => [look, ...prev]);
@@ -668,7 +691,7 @@ export default function App() {
         id: crypto.randomUUID(), key, occasion: occ,
         note: opts.note || undefined,
         weather: opts.weather !== undefined ? opts.weather : (weather ? { temp: weather.temp, code: weather.code } : null),
-        pieces: pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, img: p.img })),
+        pieces: pieces.map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img })),
       };
       setLooks(prev => [look, ...prev]);
     }
@@ -2414,7 +2437,8 @@ function DislikedList({ disliked, removeDislike, items }) {
 // ---------- Saved looks view (kept looks + blocked combinations) ----------
 function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
   const hasDisliked = disliked && disliked.length > 0;
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState("All");    // by occasion
+  const [season, setSeason] = useState("All");    // by wearing-season
   if (!looks.length) return (
     <div>
       <Empty title="No saved looks yet"
@@ -2424,32 +2448,49 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items }) {
     </div>
   );
 
-  // Categorise saved looks by occasion so they're easy to filter and find.
+  // Tag every look with its occasion and its wearing-season + temperature range.
+  const byId = new Map(items.map(i => [i.id, i]));
+  const withClimate = looks.map(l => ({ ...l, climate: lookClimate(l, byId) }));
+
   const occasions = FORMALITY.filter(f => looks.some(l => l.occasion === f));
-  const cats = ["All", ...occasions];
-  const count = (c) => c === "All" ? looks.length : looks.filter(l => l.occasion === c).length;
-  const shown = filter === "All" ? looks : looks.filter(l => l.occasion === filter);
+  const occCats = ["All", ...occasions];
+  const seasons = SEASON_ORDER.filter(s => withClimate.some(l => l.climate.season === s));
+  const seasonCats = ["All", ...seasons];
+
+  const matches = (l) => (filter === "All" || l.occasion === filter) && (season === "All" || l.climate.season === season);
+  const occCount = (c) => c === "All" ? looks.length : withClimate.filter(l => l.occasion === c && (season === "All" || l.climate.season === season)).length;
+  const seasonCount = (s) => (s === "All" ? withClimate.filter(l => filter === "All" || l.occasion === filter).length : withClimate.filter(l => l.climate.season === s && (filter === "All" || l.occasion === filter)).length);
+  const shown = withClimate.filter(matches);
+
+  const chip = (label, active, onClick) => (
+    <button key={label} className="chip" style={{ cursor: "pointer", background: active ? S.aubergine : "#fff", color: active ? S.blush : S.ink }} onClick={onClick}>{label}</button>
+  );
 
   return (
     <div>
       <h2 style={{ fontWeight: 400, fontSize: 22, borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8, marginTop: 0 }}>
         Saved looks ({looks.length})
       </h2>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0 4px" }}>
-        {cats.map(c => (
-          <button key={c} className="chip" style={{ cursor: "pointer", background: filter===c?S.aubergine:"#fff", color: filter===c?S.blush:S.ink }} onClick={()=>setFilter(c)}>
-            {c} ({count(c)})
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "16px 0 6px" }}>
+        <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Occasion</span>
+        {occCats.map(c => chip(`${c} (${occCount(c)})`, filter === c, () => setFilter(c)))}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "4px 0" }}>
+        <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Season</span>
+        {seasonCats.map(s => chip(`${s} (${seasonCount(s)})`, season === s, () => setSeason(s)))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
         {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: l.note ? 4 : 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
               <div style={{ fontSize: 17 }}>{l.occasion}</div>
               <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>
                 {l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : ""}
               </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: l.note ? 6 : 12 }}>
+              <span className="chip" style={{ background: S.blushSoft, borderColor: `${S.aubergine}22` }}>{l.climate.emoji} {l.climate.season}</span>
+              <span style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>{l.climate.range}</span>
             </div>
             {l.note && <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11.5, color: S.clay, marginBottom: 12 }}>✈ {l.note}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 8 }}>
