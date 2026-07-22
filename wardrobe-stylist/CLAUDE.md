@@ -79,6 +79,14 @@ into modules is explicitly requested.
   `pickAlternative`), **× remove** (`boardRemove`, which calls `onNotePieceRemoved`),
   and **⤢ Expand** (opens the shared `LookDetail` modal). Board actions: "Save look",
   "Don't suggest again" (`onDislike` → `dislikeCombo`), "Suggest another" (`regenerate`).
+- **Stylist memory**: the conversation is persisted (IDB key `stylistchat`) so it
+  resumes across reloads (restored on mount before the save effect arms). Across
+  conversations, `memory` (App state, key `wardrobe_memory_v1`, in backup — `{ notes,
+  styles }`) accumulates what the user tells the stylist: `onRemember` is called from
+  `begin` (style + occasion) and every follow-up message. `systemPrompt` injects a
+  "what you remember about them from earlier conversations" digest. A "🧠 Remembers…"
+  line in the stylist header offers **Forget** (`clearMemory`). "Start over" clears the
+  visible transcript but keeps memory.
 - **Learning (`prefs`)**: `prefs.removed` (key `wardrobe_prefs_v1`, in backup) counts
   how often each piece is removed from a look. Pieces removed ≥2× go into `avoidIds`
   (leaned away from by `composeOutfit`/`pickAlternative`) and `removedNames` (listed in

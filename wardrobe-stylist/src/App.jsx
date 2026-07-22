@@ -281,6 +281,7 @@ const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist 
 const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for the personal shopper)
 const TRIPS_KEY = "wardrobe_trips_v1"; // planned holidays (Travel page)
 const PREFS_KEY = "wardrobe_prefs_v1"; // learned style signals (e.g. pieces the user removes)
+const MEMORY_KEY = "wardrobe_memory_v1"; // what the stylist remembers across conversations
 
 const DB_NAME = "wardrobe";
 const STORE = "kv";
@@ -428,6 +429,7 @@ export default function App() {
   const [brands, setBrands] = useState([]); // saved stores/brands for the personal shopper
   const [trips, setTrips] = useState([]); // planned holidays
   const [prefs, setPrefs] = useState({ removed: {} }); // learned signals: { removed: { pieceId: {name, count} } }
+  const [memory, setMemory] = useState({ notes: [], styles: [] }); // stylist's cross-conversation memory
   const [ready, setReady] = useState(false); // true once data has loaded from storage
   const [view, setView] = useState("today"); // today | looks | mystyle | closet | shop | insights | travel | add
   const [weather, setWeather] = useState(null);
@@ -457,13 +459,14 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di, br, tr, loc, pf] = await Promise.all([
+      const [it, lk, ip, li, di, br, tr, loc, pf, me] = await Promise.all([
         loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY), loadStore("trips", TRIPS_KEY),
-        idbGet("location").catch(() => null), idbGet("prefs").catch(() => null),
+        idbGet("location").catch(() => null), idbGet("prefs").catch(() => null), idbGet("memory").catch(() => null),
       ]);
       if (!alive) return;
       setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setTrips(tr); setReady(true);
       if (pf && typeof pf === "object") setPrefs({ removed: pf.removed || {} });
+      if (me && typeof me === "object") setMemory({ notes: Array.isArray(me.notes) ? me.notes : [], styles: Array.isArray(me.styles) ? me.styles : [] });
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
@@ -504,6 +507,22 @@ export default function App() {
   const avoidIds = new Set(Object.entries(prefs.removed || {}).filter(([, r]) => (r.count || 0) >= 2).map(([id]) => id));
   const removedNames = Object.values(prefs.removed || {}).filter(r => (r.count || 0) >= 2).map(r => r.name);
 
+  // ----- Stylist memory (carried across conversations) -----
+  useEffect(() => { if (ready) idbSet("memory", memory).catch(() => {}); }, [memory, ready]);
+  // Remember something the user told the stylist (a request/question) and/or a style
+  // they went for, so future conversations can reference it. Deduped and capped.
+  function remember({ note, style } = {}) {
+    setMemory(prev => {
+      let notes = prev.notes || [], styles = prev.styles || [];
+      const n = (note || "").trim();
+      if (n && n.length <= 240) notes = [n, ...notes.filter(x => x.toLowerCase() !== n.toLowerCase())].slice(0, 24);
+      const s = (style || "").trim();
+      if (s) styles = [s, ...styles.filter(x => x.toLowerCase() !== s.toLowerCase())].slice(0, 8);
+      return { notes, styles };
+    });
+  }
+  function clearMemory() { setMemory({ notes: [], styles: [] }); }
+
   // ----- Saved stores/brands (personal shopper) -----
   function addBrand(b) {
     const name = (b.name || "").trim();
@@ -531,7 +550,7 @@ export default function App() {
   // ----- Backup (optional; move your wardrobe between devices/links) -----
   function exportData() {
     try {
-      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands, trips, prefs };
+      const data = { app: "the-wardrobe", version: 1, items, looks, inspo, liked, disliked, brands, trips, prefs, memory };
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -551,6 +570,7 @@ export default function App() {
       if (Array.isArray(data.brands)) setBrands(data.brands);
       if (Array.isArray(data.trips)) setTrips(data.trips);
       if (data.prefs && typeof data.prefs === "object") setPrefs({ removed: data.prefs.removed || {} });
+      if (data.memory && typeof data.memory === "object") setMemory({ notes: data.memory.notes || [], styles: data.memory.styles || [] });
       alert("Backup restored.");
     } catch { alert("That file didn't look like a wardrobe backup."); }
   }
@@ -860,7 +880,8 @@ export default function App() {
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
-            disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved} />
+            disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved}
+            memory={memory} onRemember={remember} onForget={clearMemory} />
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView}
@@ -911,7 +932,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -958,7 +979,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
       </div>
 
       {/* AI stylist chat — moved above Today's Look */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} />
+      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} />
 
       {/* Today Look Recommendations (carousel) */}
       <div style={{ marginTop: 34 }}>
@@ -1152,7 +1173,7 @@ function PiecePicker({ items, picked, onToggle }) {
 }
 
 // ---------- AI Stylist chat ----------
-function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike, removedNames, onNotePieceRemoved }) {
+function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSaveLook, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
   const dislikedKeys = new Set((disliked || []).map(d => d.key));
   const comboKey = (pcs) => pcs.map(p => p.id).sort().join(",");
   const [step, setStep] = useState("q1"); // q1 | q2 | chat
@@ -1169,7 +1190,28 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   const [boards, setBoards] = useState({});   // per-message edited outfit boards
   const [boardSwapping, setBoardSwapping] = useState(null); // "msgIndex:pieceId" being AI-swapped
   const [expanded, setExpanded] = useState(null); // message index shown in the big view
+  const [restored, setRestored] = useState(false); // true once a saved thread has loaded
   const endRef = useRef(null);
+
+  // Resume the conversation from durable storage so it survives reloads.
+  useEffect(() => {
+    let alive = true;
+    idbGet("stylistchat").then(t => {
+      if (alive && t && typeof t === "object") {
+        if (t.step) setStep(t.step);
+        if (t.style) setStyle(t.style);
+        if (typeof t.piecesUsed === "string") setPiecesUsed(t.piecesUsed);
+        if (Array.isArray(t.chat)) setChat(t.chat);
+      }
+      if (alive) setRestored(true);
+    }).catch(() => { if (alive) setRestored(true); });
+    return () => { alive = false; };
+  }, []);
+  // Persist the thread as it changes (only after the initial restore).
+  useEffect(() => {
+    if (!restored) return;
+    idbSet("stylistchat", { step, style, piecesUsed, chat }).catch(() => {});
+  }, [step, style, piecesUsed, chat, restored]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
 
@@ -1199,6 +1241,9 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       `- Their closet:\n${closet}\n` +
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
       (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "") +
+      ((memory && (memory.styles?.length || memory.notes?.length)) ? `\n\nWhat you remember about them from earlier conversations (use it naturally; don't recite it back):` +
+        (memory.styles?.length ? `\n- Styles they've asked for before: ${memory.styles.slice(0, 6).join(", ")}.` : "") +
+        (memory.notes?.length ? `\n- Things they've said/requested:\n${memory.notes.slice(0, 10).map(n => `  · ${n}`).join("\n")}` : "") : "") +
       ((removedNames && removedNames.length) ? `\n\nThe user often REMOVES these pieces from suggested looks — lean away from them unless they're clearly ideal: ${removedNames.join(", ")}.` : "") +
       ((disliked && disliked.length) ? `\n\nNEVER suggest these exact combinations again — the user disliked them:\n${disliked.map(d => `- ${d.names.join(" + ")}`).join("\n")}` : "");
   }
@@ -1255,6 +1300,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   function begin(piecesTextValue) {
     setStep("chat");
     setPiecesUsed(piecesTextValue);
+    onRemember?.({ style, note: `Dressed for ${occasion.toLowerCase()}, wanted a "${style}" look${piecesTextValue ? ` built around ${piecesTextValue}` : ""}.` });
     const opener = `I'm dressing for ${occasion.toLowerCase()}. The style I'm after is "${style}". ` +
       (piecesTextValue ? `I'd like to build it around: ${piecesTextValue}. ` : `I don't have specific pieces in mind. `) +
       `Please style a full outfit from my closet and tell me why it works.`;
@@ -1264,10 +1310,12 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const t = input.trim();
     if (!t || busy) return;
     setInput("");
+    onRemember?.({ note: t }); // remember what they ask, across conversations
     send(t, style, false, piecesUsed);
   }
   function reset() {
-    setStep("q1"); setStyle(""); setStyleOther(""); setPieces(""); setPicked([]); setPiecesUsed(""); setChat([]); setInput(""); setErr(null);
+    setStep("q1"); setStyle(""); setStyleOther(""); setPieces(""); setPicked([]); setPiecesUsed(""); setChat([]); setInput(""); setErr(null); setBoards({});
+    idbSet("stylistchat", null).catch(() => {}); // clear the saved thread, keep memory
   }
 
   // Which closet pieces does a stylist reply name? (so we can show their photos)
@@ -1466,7 +1514,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
 
   return (
     <div className="card" style={{ marginTop: 30, padding: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <div>
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>Ask your stylist</div>
           <div style={{ fontSize: 19 }}>AI Stylist</div>
@@ -1475,6 +1523,15 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
           <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={reset}>Start over</button>
         )}
       </div>
+      {(memory?.notes?.length > 0 || memory?.styles?.length > 0) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14, fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76" }}>
+          <span title={[...(memory.styles || []), ...(memory.notes || [])].slice(0, 8).join(" · ")}>
+            🧠 Remembers your last {Math.min(memory.notes.length, 10) || memory.styles.length} note{(memory.notes.length || memory.styles.length) > 1 ? "s" : ""} from past chats
+          </span>
+          <button onClick={() => { if (confirm("Forget everything the stylist remembers from past conversations?")) onForget?.(); }}
+            style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>Forget</button>
+        </div>
+      )}
 
       {/* Q1 — what style */}
       {step === "q1" && (
