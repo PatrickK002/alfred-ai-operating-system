@@ -88,8 +88,9 @@ into modules is explicitly requested.
   styles }`) accumulates what the user tells the stylist: `onRemember` is called from
   `begin` (style + occasion), every follow-up message, and every outfit the stylist
   proposes (parsed from the reply in `send`). `systemPrompt` injects a
-  "what you remember about them from earlier conversations" digest. A "🧠 Remembers…"
-  line in the stylist header offers **Forget** (`clearMemory`). "Start over" clears the
+  "what you remember about them from earlier conversations" digest. Memory works
+  silently — the note contents/history are not shown; the stylist header only offers a
+  **Forget memory** button (`clearMemory`) when memory exists. "Start over" clears the
   visible transcript but keeps memory.
 - **Learning from saved looks (`savedTaste`)**: the looks the user saves are a
   positive signal. `savedTaste(looks)` returns `favorIds` (piece ids that appear in

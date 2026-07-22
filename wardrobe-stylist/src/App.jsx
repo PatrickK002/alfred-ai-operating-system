@@ -1606,24 +1606,21 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
 
   return (
     <div className="card" style={{ marginTop: 30, padding: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <div>
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>Ask your stylist</div>
           <div style={{ fontSize: 19 }}>AI Stylist</div>
         </div>
-        {(step !== "q1" || chat.length > 0) && (
-          <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={reset}>Start over</button>
-        )}
-      </div>
-      {(memory?.notes?.length > 0 || memory?.styles?.length > 0) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14, fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76" }}>
-          <span title={[...(memory.styles || []), ...(memory.notes || [])].slice(0, 8).join(" · ")}>
-            🧠 Remembers your last {Math.min(memory.notes.length, 10) || memory.styles.length} note{(memory.notes.length || memory.styles.length) > 1 ? "s" : ""} from past chats
-          </span>
-          <button onClick={() => { if (confirm("Forget everything the stylist remembers from past conversations?")) onForget?.(); }}
-            style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>Forget</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {(memory?.notes?.length > 0 || memory?.styles?.length > 0) && (
+            <button className="btn btn-ghost" style={{ padding: "6px 12px" }}
+              onClick={() => { if (confirm("Forget everything the stylist remembers from past conversations?")) onForget?.(); }}>Forget memory</button>
+          )}
+          {(step !== "q1" || chat.length > 0) && (
+            <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={reset}>Start over</button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Q1 — what style */}
       {step === "q1" && (
