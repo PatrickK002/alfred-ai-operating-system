@@ -549,6 +549,7 @@ export default function App() {
   const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
   const [autoTagging, setAutoTagging] = useState(false);
+  const [scanning, setScanning] = useState(null); // { done, total } while scanning the closet for brands
   const [lightbox, setLightbox] = useState(null); // src of enlarged photo
   const [notice, setNotice] = useState(null); // transient toast message
   const noticeTimer = useRef();
@@ -868,10 +869,29 @@ export default function App() {
       seen.add(nkey);
       toAdd.push({ id: crypto.randomUUID(), name, url, note: "Spotted in your closet" });
     }
-    if (toAdd.length) {
-      setBrands(prev => [...toAdd, ...prev]);
-      flash(`Added ${toAdd.length} brand${toAdd.length > 1 ? "s" : ""} to your shops`);
+    if (toAdd.length) setBrands(prev => [...toAdd, ...prev]);
+    return toAdd.length;
+  }
+  // Scan the photos of pieces already in the closet for brands (retroactive).
+  async function scanClosetBrands() {
+    const withImg = items.filter(i => typeof i.img === "string" && i.img.startsWith("data:"));
+    if (!withImg.length) { flash("No piece photos to scan yet"); return; }
+    setScanning({ done: 0, total: withImg.length });
+    const found = [];
+    for (let k = 0; k < withImg.length; k++) {
+      const it = withImg[k];
+      try {
+        const comma = it.img.indexOf(",");
+        const mediaType = (it.img.slice(0, comma).match(/data:(.*?);/) || [])[1] || "image/jpeg";
+        const res = await fetch("/api/brand", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64: it.img.slice(comma + 1), mediaType }) });
+        if (res.status === 503) { setScanning(null); flash("Brand scanning needs your hosted app (Render)"); return; }
+        if (res.ok) { const d = await res.json(); if (d.brand) found.push({ name: d.brand, url: d.brandUrl }); }
+      } catch {}
+      setScanning({ done: k + 1, total: withImg.length });
     }
+    setScanning(null);
+    const added = autoSaveBrands(found);
+    flash(added ? `Added ${added} brand${added > 1 ? "s" : ""} to your shops` : (found.length ? "Those brands are already saved" : "No brands recognised in your closet photos"));
   }
 
   function commitQueue() {
@@ -885,7 +905,8 @@ export default function App() {
     }));
     setItems(prev => [...committed, ...prev]);
     // Any brands the vision tagger identified go straight to Saved Shops.
-    autoSaveBrands(ready.map(q => ({ name: q.tags.brand, url: q.tags.brandUrl })).filter(b => b.name));
+    const added = autoSaveBrands(ready.map(q => ({ name: q.tags.brand, url: q.tags.brandUrl })).filter(b => b.name));
+    if (added) flash(`Added ${added} brand${added > 1 ? "s" : ""} to your shops`);
     // keep any still-untagged items in the queue
     setQueue(prev => prev.filter(q => !q.tags?.category));
     if (ready.length && ready.length === queue.length) setView("closet");
@@ -1069,7 +1090,7 @@ export default function App() {
         )}
         {view === "shop" && (
           <Shopper items={items} brands={brands} addBrand={addBrand} removeBrand={removeBrand}
-            inspo={inspo} liked={liked} setView={setView} />
+            inspo={inspo} liked={liked} setView={setView} onScanCloset={scanClosetBrands} scanning={scanning} />
         )}
         {view === "add" && (
           <Add fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
@@ -1862,7 +1883,8 @@ function splitBrandLines(text) {
   return { text: kept.join("\n").trim(), brands: found };
 }
 
-function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView }) {
+function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, onScanCloset, scanning }) {
+  const scannable = items.filter(i => typeof i.img === "string" && i.img.startsWith("data:")).length;
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
@@ -1996,7 +2018,17 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView }
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Link (e.g. aritzia.com)" onKeyDown={e => { if (e.key === "Enter") addStore(); }} style={{ minWidth: 0 }} />
         </div>
         <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional — what you buy there)" onKeyDown={e => { if (e.key === "Enter") addStore(); }} style={{ width: "100%", marginBottom: 10 }} />
-        <button className="btn btn-primary" onClick={addStore} disabled={!name.trim() && !url.trim()}>Add store</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-primary" onClick={addStore} disabled={!name.trim() && !url.trim()}>Add store</button>
+          {scannable > 0 && (
+            <button className="btn btn-ghost" onClick={onScanCloset} disabled={!!scanning}>
+              {scanning ? `Scanning ${scanning.done}/${scanning.total}…` : `Scan closet for brands (${scannable})`}
+            </button>
+          )}
+        </div>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 8 }}>
+          New pieces you add have their brand saved automatically. Use <em>Scan closet for brands</em> to find brands in pieces you've already added.
+        </div>
 
         {brands.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10, marginTop: 16 }}>
