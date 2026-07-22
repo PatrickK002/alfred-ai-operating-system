@@ -53,11 +53,14 @@ into modules is explicitly requested.
 - **saveLookPieces(pieces, opts)**: the shared save-a-look helper takes optional
   `{ occasion, note, weather }` so Today, the stylist, and the travel planner can all
   save into the one Saved Looks collection with the right label.
-- **Per-piece controls (hover reveal)**: on the compact piece tiles (Today carousel
-  and chat boards) the ✨/↻/× buttons live in a `.pieceActions` bar along the bottom
-  of the photo, hidden by default and revealed on `.piece:hover`/`:focus-within` (CSS
-  in the global `<style>`). `@media (hover: none)` keeps them visible on pure-touch
-  devices so they stay reachable without a pointer.
+- **Per-piece controls (hover / tap reveal)**: on the compact piece tiles (Today
+  carousel and chat boards) the ✨/↻/× buttons live in a `.pieceActions` bar along the
+  bottom of the photo, hidden by default. Pointer devices reveal on
+  `.piece:hover`/`:focus-within`; touch devices use `useTapReveal()` — an
+  `onClickCapture` on each `.piece` that (only when `matchMedia("(hover: none)")`)
+  stops the tap from opening the lightbox and toggles a `.revealed` class, with a
+  document listener that hides it when you tap outside any `.piece`. Taps on the
+  control buttons pass through.
 - **Grid overflow**: piece grids inside fixed/scrolling cards (Today carousel, travel
   mini-boards) use `repeat(N, minmax(0,1fr))` + `minWidth:0` so photos can't spill
   past the card edge (a plain `1fr` track floors at the image's min-content width).

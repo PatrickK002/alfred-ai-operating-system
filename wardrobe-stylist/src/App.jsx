@@ -425,6 +425,28 @@ const S = {
   paper: "#FBF7F5",
 };
 
+// Tap-to-reveal for per-piece controls on touch. Pointer devices use CSS :hover;
+// on a touch device (no hover), tapping a piece reveals its controls (and marks it
+// `.revealed`), tapping elsewhere hides them. Returns the revealed key + a capture
+// handler to attach to each `.piece` element.
+function useTapReveal() {
+  const [revealed, setRevealed] = useState(null);
+  useEffect(() => {
+    if (revealed == null) return;
+    const onDoc = (e) => { if (!(e.target.closest && e.target.closest(".piece"))) setRevealed(null); };
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, [revealed]);
+  const isTouch = () => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
+  const tapReveal = (key) => (e) => {
+    if (!isTouch()) return;                       // pointer: hover handles it, taps zoom
+    if (e.target.closest && e.target.closest("button")) return; // let control taps through
+    e.stopPropagation();                          // don't open the lightbox
+    setRevealed(cur => (cur === key ? null : key));
+  };
+  return { revealed, tapReveal };
+}
+
 export default function App() {
   const [items, setItems] = useState([]);
   const [looks, setLooks] = useState([]);
@@ -868,10 +890,10 @@ export default function App() {
         .navbtn { background:none; border:none; cursor:pointer; font-family:system-ui,sans-serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding:8px 4px; color:${S.blush}99; border-bottom:2px solid transparent; }
         .navbtn.active { color:${S.blush}; border-bottom-color:${S.gold}; }
         .card { background:#fff; border:1px solid ${S.aubergine}18; border-radius:4px; overflow:hidden; }
-        /* Per-piece controls: a bar along the bottom of the photo, revealed on hover. */
+        /* Per-piece controls: a bar along the bottom of the photo. Revealed on hover
+           with a pointer, or by tapping the piece on touch (adds .revealed). */
         .pieceActions { position:absolute; left:0; right:0; bottom:0; display:flex; gap:5px; justify-content:center; padding:6px; background:linear-gradient(to top, #000000b0, #00000000); opacity:0; transform:translateY(4px); transition:opacity .15s, transform .15s; pointer-events:none; }
-        .piece:hover .pieceActions, .piece:focus-within .pieceActions { opacity:1; transform:translateY(0); pointer-events:auto; }
-        @media (hover: none) { .pieceActions { opacity:1; transform:none; pointer-events:auto; } }
+        .piece:hover .pieceActions, .piece:focus-within .pieceActions, .piece.revealed .pieceActions { opacity:1; transform:translateY(0); pointer-events:auto; }
         .pieceBtn { width:26px; height:26px; border-radius:50%; border:none; color:#fff; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; touch-action:manipulation; box-shadow:0 1px 4px #0005; }
         .pieceBtn:disabled { cursor:default; opacity:.6; }
         @media (prefers-reduced-motion: reduce){ .btn, .pieceActions {transition:none;} }
@@ -959,6 +981,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
   const [expanded, setExpanded] = useState(null); // index of the look shown in the big view
+  const { revealed, tapReveal } = useTapReveal();  // touch: tap a piece to show controls
   const savedKeys = new Set([...(looks || []).map(l => l.key), ...saved]);
   const saveRec = (o) => { const k = onSaveLook(o.pieces); if (k) setSaved(s => new Set(s).add(k)); };
   const recKey = (o) => "ai|" + occasion + "|" + o.pieces.map(p => p.id).sort().join(",");
@@ -1060,7 +1083,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                       const isAiSwapping = swapping === idx + ":" + p.id;
                       return (
                       <div key={p.id} style={{ minWidth: 0 }}>
-                        <div className="piece" style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
+                        <div className={"piece" + (revealed === idx + ":" + p.id ? " revealed" : "")} onClickCapture={tapReveal(idx + ":" + p.id)} style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
                           <Thumb src={p.img} alt={p.name} />
                           <div className="pieceActions">
                             <button className="pieceBtn" style={{ background: S.clay, fontSize: 12 }} onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} title="Ask the stylist to swap this (with a reason)">{isAiSwapping ? "…" : "✨"}</button>
@@ -1075,7 +1098,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                   </div>
                   {o.swapNote
                     ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "7px 10px", marginTop: 8, lineHeight: 1.4 }}>✨ {o.swapNote}</div>
-                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Hover a piece for ✨ stylist swap · ↻ quick swap · × remove</div>}
+                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Tap or hover a piece for ✨ stylist swap · ↻ quick swap · × remove</div>}
                   {o.notes.length > 0 && (
                     <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 6, lineHeight: 1.4 }}>{o.notes[0]}</div>
                   )}
@@ -1222,6 +1245,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
   const [boardSwapping, setBoardSwapping] = useState(null); // "msgIndex:pieceId" being AI-swapped
   const [expanded, setExpanded] = useState(null); // message index shown in the big view
   const [restored, setRestored] = useState(false); // true once a saved thread has loaded
+  const { revealed, tapReveal } = useTapReveal();  // touch: tap a piece to show controls
   const endRef = useRef(null);
 
   // Resume the conversation from durable storage so it survives reloads.
@@ -1450,7 +1474,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const isAiSwapping = boardSwapping === i + ":" + p.id;
     return (
       <div key={p.id} style={{ minWidth: 0 }}>
-        <div className="piece" style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
+        <div className={"piece" + (revealed === i + ":" + p.id ? " revealed" : "")} onClickCapture={tapReveal(i + ":" + p.id)} style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
           <Thumb src={p.img} alt={p.name} />
           {p.role === "optional" && (
             <div style={{ position: "absolute", top: 4, left: 4, background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 10 }}>Optional</div>
