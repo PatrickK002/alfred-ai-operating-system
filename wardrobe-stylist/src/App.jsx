@@ -827,7 +827,13 @@ export default function App() {
         .navbtn { background:none; border:none; cursor:pointer; font-family:system-ui,sans-serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding:8px 4px; color:${S.blush}99; border-bottom:2px solid transparent; }
         .navbtn.active { color:${S.blush}; border-bottom-color:${S.gold}; }
         .card { background:#fff; border:1px solid ${S.aubergine}18; border-radius:4px; overflow:hidden; }
-        @media (prefers-reduced-motion: reduce){ .btn{transition:none;} }
+        /* Per-piece controls: a bar along the bottom of the photo, revealed on hover. */
+        .pieceActions { position:absolute; left:0; right:0; bottom:0; display:flex; gap:5px; justify-content:center; padding:6px; background:linear-gradient(to top, #000000b0, #00000000); opacity:0; transform:translateY(4px); transition:opacity .15s, transform .15s; pointer-events:none; }
+        .piece:hover .pieceActions, .piece:focus-within .pieceActions { opacity:1; transform:translateY(0); pointer-events:auto; }
+        @media (hover: none) { .pieceActions { opacity:1; transform:none; pointer-events:auto; } }
+        .pieceBtn { width:26px; height:26px; border-radius:50%; border:none; color:#fff; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; touch-action:manipulation; box-shadow:0 1px 4px #0005; }
+        .pieceBtn:disabled { cursor:default; opacity:.6; }
+        @media (prefers-reduced-motion: reduce){ .btn, .pieceActions {transition:none;} }
       `}</style>
 
       {/* Header */}
@@ -1002,15 +1008,12 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                       const isAiSwapping = swapping === idx + ":" + p.id;
                       return (
                       <div key={p.id} style={{ minWidth: 0 }}>
-                        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
+                        <div className="piece" style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
                           <Thumb src={p.img} alt={p.name} />
-                          <button onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} title="Ask the stylist to swap this (with a reason)"
-                            style={{ position: "absolute", top: 4, left: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#B5654Ad9", color: "#fff", cursor: swapping ? "default" : "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>{isAiSwapping ? "…" : "✨"}</button>
-                          <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 4 }}>
-                            <button onClick={() => onSwapPiece(idx, p.id)} title="Quick swap for another piece"
-                              style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
-                            <button onClick={() => onRemovePiece(idx, p.id)} title="Remove this piece from the look"
-                              style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#8a4a3ad9", color: "#fff", cursor: "pointer", fontSize: 15, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>×</button>
+                          <div className="pieceActions">
+                            <button className="pieceBtn" style={{ background: S.clay, fontSize: 12 }} onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} title="Ask the stylist to swap this (with a reason)">{isAiSwapping ? "…" : "✨"}</button>
+                            <button className="pieceBtn" style={{ background: S.aubergine, fontSize: 13 }} onClick={() => onSwapPiece(idx, p.id)} title="Quick swap for another piece">↻</button>
+                            <button className="pieceBtn" style={{ background: "#8a4a3a", fontSize: 15 }} onClick={() => onRemovePiece(idx, p.id)} title="Remove this piece from the look">×</button>
                           </div>
                         </div>
                         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
@@ -1020,7 +1023,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                   </div>
                   {o.swapNote
                     ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "7px 10px", marginTop: 8, lineHeight: 1.4 }}>✨ {o.swapNote}</div>
-                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>✨ stylist swap · ↻ quick swap · × remove</div>}
+                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Hover a piece for ✨ stylist swap · ↻ quick swap · × remove</div>}
                   {o.notes.length > 0 && (
                     <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 6, lineHeight: 1.4 }}>{o.notes[0]}</div>
                   )}
@@ -1356,22 +1359,22 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     setBoardSwapping(null);
   }
 
-  // A small piece tile with per-piece controls (✨ stylist swap / ↻ swap / × remove).
+  // A small piece tile: the controls (✨ stylist swap / ↻ swap / × remove) sit in a
+  // bar along the bottom of the photo and appear on hover.
   const pieceTile = (i, p) => {
     const isAiSwapping = boardSwapping === i + ":" + p.id;
     return (
       <div key={p.id} style={{ minWidth: 0 }}>
-        <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
+        <div className="piece" style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
           <Thumb src={p.img} alt={p.name} />
-          <button onClick={() => boardAiSwap(i, p.id)} disabled={!!boardSwapping} title="Ask the stylist to swap this (with a reason)"
-            style={{ position: "absolute", top: 4, left: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "#B5654Ad9", color: "#fff", cursor: boardSwapping ? "default" : "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>{isAiSwapping ? "…" : "✨"}</button>
-          <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 3 }}>
-            <button onClick={() => boardSwap(i, p.id)} title="Quick swap" style={{ width: 22, height: 22, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
-            <button onClick={() => boardRemove(i, p.id)} title="Remove from look" style={{ width: 22, height: 22, borderRadius: "50%", border: "none", background: "#8a4a3ad9", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>×</button>
-          </div>
           {p.role === "optional" && (
-            <div style={{ position: "absolute", bottom: 4, left: 4, background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 10 }}>Optional</div>
+            <div style={{ position: "absolute", top: 4, left: 4, background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 10 }}>Optional</div>
           )}
+          <div className="pieceActions">
+            <button className="pieceBtn" style={{ background: S.clay, width: 24, height: 24, fontSize: 11 }} onClick={() => boardAiSwap(i, p.id)} disabled={!!boardSwapping} title="Ask the stylist to swap this (with a reason)">{isAiSwapping ? "…" : "✨"}</button>
+            <button className="pieceBtn" style={{ background: S.aubergine, width: 24, height: 24, fontSize: 12 }} onClick={() => boardSwap(i, p.id)} title="Quick swap">↻</button>
+            <button className="pieceBtn" style={{ background: "#8a4a3a", width: 24, height: 24, fontSize: 14 }} onClick={() => boardRemove(i, p.id)} title="Remove from look">×</button>
+          </div>
         </div>
         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
       </div>
