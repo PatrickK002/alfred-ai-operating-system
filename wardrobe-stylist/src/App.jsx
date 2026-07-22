@@ -1462,7 +1462,8 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
 
   function regenerate() {
     if (busy) return;
-    send("Not quite — please suggest a different outfit from my closet.", style, false, piecesUsed);
+    // Asking for another option is not a rejection — make that clear to the stylist.
+    send("Could you show me another option from my closet? I'd just like to see more looks — I'm not rejecting this one.", style, false, piecesUsed);
   }
 
   // ----- Editable outfit boards (per assistant message) -----
