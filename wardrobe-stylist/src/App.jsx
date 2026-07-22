@@ -543,6 +543,7 @@ export default function App() {
   const [currentWx, setCurrentWx] = useState(null); // live "now" conditions
   const [dayIndex, setDayIndex] = useState(0); // which forecast day the weather reflects
   const [occasion, setOccasion] = useState("Casual");
+  const [tempOverride, setTempOverride] = useState(""); // optional "dress for this °C" override
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
   const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
@@ -614,6 +615,13 @@ export default function App() {
 
   // Positive taste signal from the looks the user has saved.
   const taste = savedTaste(looks);
+
+  // Optional "dress for this temperature" override — when the user types a value it's
+  // used for styling (recommendations + AI stylist) instead of the actual temperature.
+  const overrideTemp = tempOverride !== "" && !isNaN(Number(tempOverride)) ? Number(tempOverride) : null;
+  const styleWeather = overrideTemp != null
+    ? { temp: overrideTemp, code: weather?.code ?? 0, wind: weather?.wind ?? 0, override: true, dayLabel: weather?.dayLabel }
+    : weather;
 
   // ----- Stylist memory (carried across conversations) -----
   useEffect(() => { if (ready) idbSet("memory", memory).catch(() => {}); }, [memory, ready]);
@@ -886,10 +894,10 @@ export default function App() {
   // ----- Outfit builder -----
   // Build a fresh set of recommended looks for the Today carousel.
   function buildOutfit() {
-    if (!weather) return;
-    const list = recommendOutfits(items, weather, occasion, 6, avoidIds, taste.favorIds);
+    if (!styleWeather) return;
+    const list = recommendOutfits(items, styleWeather, occasion, 6, avoidIds, taste.favorIds);
     setRecs(list);
-    setOutfit(list[0] || composeOutfit(items, weather, occasion, avoidIds, taste.favorIds));
+    setOutfit(list[0] || composeOutfit(items, styleWeather, occasion, avoidIds, taste.favorIds));
   }
   // Deselect a piece in a recommended look and swap in an alternative (or drop it
   // if the closet has no other match). Keeps the look's stable key in sync.
@@ -898,7 +906,7 @@ export default function App() {
       if (i !== recIndex) return o;
       const piece = o.pieces.find(p => p.id === pieceId);
       if (!piece) return o;
-      const alt = pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
+      const alt = pickAlternative(items, styleWeather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
       const pieces = alt ? o.pieces.map(p => p.id === pieceId ? alt : p) : o.pieces.filter(p => p.id !== pieceId);
       if (!alt) flash(`No other ${piece.category.toLowerCase()} for this look — removed it`);
       return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
@@ -929,7 +937,7 @@ export default function App() {
     try {
       const lookDesc = o.pieces.map(p => `${p.name} (${p.category}, ${p.color})`).join("; ");
       const options = alts.map(a => `- ${a.name} (${a.color}, ${a.tone} tone, warmth ${a.warmth})`).join("\n");
-      const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}` : "unknown";
+      const w = styleWeather ? `${styleWeather.temp}°C${styleWeather.override ? " (a temperature they chose to dress for)" : ""}, ${weatherLabel(styleWeather.code)}` : "unknown";
       const sys = "You are a personal stylist. The user wants to replace ONE piece in an outfit built from their own closet. Pick the single best replacement from the provided options ONLY. Reply with ONE line in EXACTLY this format, nothing else:\nSwap: <exact option name> | <one short sentence on why it works>";
       const msg = `Occasion: ${occasion}. Weather: ${w}.\nThe outfit: ${lookDesc}.\nReplace this piece: ${piece.name} (${piece.category}).\nChoose from these options:\n${options}`;
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system: sys, messages: [{ role: "user", content: msg }], max_tokens: 200 }) });
@@ -943,7 +951,7 @@ export default function App() {
         const low = nm.toLowerCase();
         chosen = alts.find(a => a.name.toLowerCase() === low) || alts.find(a => low.includes(a.name.toLowerCase()));
       }
-      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
+      const alt = chosen || pickAlternative(items, styleWeather, occasion, piece, o.pieces, avoidIds, taste.favorIds);
       if (!alt) { flash("Couldn't find an alternative"); setSwapping(null); return; }
       setRecs(prev => prev.map((r, i) => {
         if (i !== recIndex) return r;
@@ -1004,7 +1012,8 @@ export default function App() {
 
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "26px 20px 60px" }}>
         {view === "today" && (
-          <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW}
+          <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} styleWeather={styleWeather}
+            tempOverride={tempOverride} setTempOverride={setTempOverride}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             forecast={forecast} currentWx={currentWx} dayIndex={dayIndex} onSelectDay={setDayIndex}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
@@ -1061,7 +1070,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
+function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setTempOverride, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -1117,23 +1126,30 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
         </div>
       </div>
 
-      {/* AI stylist chat — moved above Today's Look */}
-      <Stylist items={items} weather={weather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} savedTaste={savedTaste} />
+      {/* AI stylist chat — moved above Today's Look (uses the chosen temperature if set) */}
+      <Stylist items={items} weather={styleWeather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} savedTaste={savedTaste} />
 
       {/* Today Look Recommendations (carousel) */}
       <div style={{ marginTop: 34 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8 }}>
           <div>
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>For {weather?.dayLabel && dayIndex !== 0 ? weather.dayLabel : "today"}'s weather</div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>
+              {styleWeather?.override ? `For ${styleWeather.temp}°C (your chosen temperature)` : `For ${weather?.dayLabel && dayIndex !== 0 ? weather.dayLabel : "today"}'s weather`}
+            </div>
             <h2 style={{ fontWeight: 400, fontSize: 22, margin: 0 }}>Look recommendations</h2>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }} title="Optional — leave blank to use the actual temperature">
+              Dress for:
+              <input type="number" inputMode="numeric" value={tempOverride} onChange={e => setTempOverride(e.target.value)} placeholder={weather ? `${weather.temp}` : "°C"} style={{ width: 62 }} />°C
+              {tempOverride !== "" && <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setTempOverride("")} title="Use the actual temperature">Clear</button>}
+            </label>
             <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13 }}>For:&nbsp;
               <select value={occasion} onChange={e=>setOccasion(e.target.value)}>
                 {FORMALITY.map(f => <option key={f}>{f}</option>)}
               </select>
             </label>
-            <button className="btn btn-primary" onClick={buildOutfit} disabled={!weather || !items.length}>
+            <button className="btn btn-primary" onClick={buildOutfit} disabled={!styleWeather || !items.length}>
               {recs.length ? "Refresh looks" : "Style me"}
             </button>
           </div>
@@ -1146,7 +1162,7 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
 
         {items.length > 0 && recs.length === 0 && (
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66", background: S.blushSoft, borderRadius: 10, padding: "16px 18px", marginTop: 16 }}>
-            Tap <strong>{weather ? "Style me" : "…once the weather loads"}</strong> and I'll line up a few looks for {occasion.toLowerCase()} in today's weather — swipe through and save the ones you love.
+            Tap <strong>{styleWeather ? "Style me" : "…once you set a location or a temperature"}</strong> and I'll line up a few looks for {occasion.toLowerCase()}{styleWeather?.override ? ` at ${styleWeather.temp}°C` : " in today's weather"} — swipe through and save the ones you love.
           </div>
         )}
 
@@ -1362,7 +1378,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const suggestion = outfit?.pieces?.length
       ? outfit.pieces.map(p => `${p.name} (${p.category}, ${p.color})`).join("; ")
       : "(none generated yet)";
-    const w = weather ? `${weather.dayLabel && weather.dayLabel !== "Today" ? weather.dayLabel + ", " : ""}${weather.temp}°C, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
+    const w = weather ? `${weather.dayLabel && weather.dayLabel !== "Today" ? weather.dayLabel + ", " : ""}${weather.temp}°C${weather.override ? " (a temperature they've chosen to dress for)" : ""}, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
     return `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
       `Build looks ONLY from the pieces in their closet below; if something useful is missing, say so briefly. ` +
       `Reference pieces by their exact names. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers).\n\n` +
