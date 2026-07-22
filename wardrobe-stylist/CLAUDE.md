@@ -34,8 +34,14 @@ into modules is explicitly requested.
   pure module-level `composeOutfit(items, weather, occasion)` so it can be reused by
   both the Today carousel and the travel planner (which passes a synthetic weather
   from the trip's temperature).
-- **Saved looks filtering**: the `Looks` view has occasion filter chips (from each
-  look's `occasion`) so saved looks are categorised and findable.
+- **Saved looks filtering**: the `Looks` view has two filter-chip rows — **Occasion**
+  (from each look's `occasion`) and **Season**. Each look is tagged with a wearing-season
+  + temperature range via `lookClimate(look, byId)`: from `look.weather.temp` if the
+  look was styled for real weather, else estimated from the warmest piece's `warmth`
+  (`WARMTH_TEMP`/`estTempFromPieces` — a coat ⇒ winter). Bands: Summer (22°C+),
+  Spring/Autumn (12–21°C), Winter (5–11°C), Deep winter (<5°C), or "Any season" when
+  unknown. The band + range shows as a chip on each card. Piece snapshots now include
+  `warmth` so the estimate works for weather-less looks (holiday plans, etc.).
 - **Insights** (`insights` view): a computed style profile — colour palette (swatches
   + a proportion bar, using `COLOR_HEX`/`colorHex`), category and tone/occasion
   `Meter` bars, a neutrals-vs-colour split, and a one-line summary. An optional
