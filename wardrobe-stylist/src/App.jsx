@@ -1515,7 +1515,9 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     setPiecesUsed(piecesTextValue);
     onRemember?.({ style, note: `Dressed for ${occasion.toLowerCase()}, wanted a "${style}" look${piecesTextValue ? ` built around ${piecesTextValue}` : ""}.` });
     const tempLine = weather
-      ? `It's ${weather.temp}°C${weather.override ? " (the temperature I want to dress for)" : ""}, ${weatherLabel(weather.code).toLowerCase()}. `
+      ? (weather.override
+          ? `I want to dress for ${weather.temp}°C. `
+          : `It's ${weather.temp}°C, ${weatherLabel(weather.code).toLowerCase()}. `)
       : "";
     const opener = `I'm dressing for ${occasion.toLowerCase()}. The style I'm after is "${style}". ` +
       (piecesTextValue ? `I'd like to build it around: ${piecesTextValue}. ` : `I don't have specific pieces in mind. `) +
