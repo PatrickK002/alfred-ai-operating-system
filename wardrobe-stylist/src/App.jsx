@@ -41,6 +41,11 @@ function weatherLabel(code) {
 function isWet(code) {
   return [51,53,55,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(code);
 }
+// "Tue 22 Jul" style label for a forecast day (YYYY-MM-DD).
+function dayLabel(iso) {
+  try { return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
+  catch { return iso; }
+}
 // Map temperature (°C) to needed warmth levels
 function warmthForTemp(t) {
   if (t >= 26) return ["Very light", "Light"];
@@ -437,6 +442,9 @@ export default function App() {
   const [loadingW, setLoadingW] = useState(false);
   const [location, setLocation] = useState(null); // { name, lat, lon } — manually chosen
   const [locBusy, setLocBusy] = useState(false);
+  const [forecast, setForecast] = useState(null); // [{date, tmax, tmin, code, wind}] up to 7 days
+  const [currentWx, setCurrentWx] = useState(null); // live "now" conditions
+  const [dayIndex, setDayIndex] = useState(0); // which forecast day the weather reflects
   const [occasion, setOccasion] = useState("Casual");
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
@@ -639,21 +647,34 @@ export default function App() {
   const deleteInspo = (id) => setInspo(prev => prev.filter(p => p.id !== id));
   const deleteLiked = (id) => setLiked(prev => prev.filter(p => p.id !== id));
 
-  // ----- Weather (manual location only — no GPS) -----
+  // ----- Weather (manual location only — no GPS; pick any day this week) -----
   async function fetchWeather(loc) {
     if (!loc) return;
     setLoadingW(true); setWeatherErr(null);
     try {
-      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`);
+      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,wind_speed_10m_max&forecast_days=7&timezone=auto`);
       const d = await r.json();
-      setWeather({
-        temp: Math.round(d.current.temperature_2m),
-        code: d.current.weather_code,
-        wind: Math.round(d.current.wind_speed_10m),
-      });
+      setCurrentWx(d.current ? { temp: Math.round(d.current.temperature_2m), code: d.current.weather_code, wind: Math.round(d.current.wind_speed_10m) } : null);
+      const days = (d.daily?.time || []).map((date, i) => ({
+        date,
+        tmax: Math.round(d.daily.temperature_2m_max[i]),
+        tmin: Math.round(d.daily.temperature_2m_min[i]),
+        code: d.daily.weather_code[i],
+        wind: Math.round(d.daily.wind_speed_10m_max[i]),
+      }));
+      setForecast(days.length ? days : null);
+      setDayIndex(0);
     } catch { setWeatherErr("Couldn't reach the weather service. Check your connection and try again."); }
     setLoadingW(false);
   }
+  // Weather reflects the selected day: "today" uses live conditions; other days use
+  // that day's forecast (a mid-point of the high/low for dressing).
+  useEffect(() => {
+    if (dayIndex === 0 && currentWx) { setWeather({ ...currentWx, dayLabel: "Today" }); return; }
+    const dd = forecast?.[dayIndex];
+    if (dd) setWeather({ temp: Math.round((dd.tmax + dd.tmin) / 2), code: dd.code, wind: dd.wind, tmax: dd.tmax, tmin: dd.tmin, dayLabel: dayIndex === 0 ? "Today" : dayLabel(dd.date) });
+    else if (dayIndex === 0 && !currentWx && !forecast) setWeather(null);
+  }, [forecast, currentWx, dayIndex]);
   // Look up a place the user typed, remember it, and get its weather.
   async function chooseLocation(name) {
     const q = (name || "").trim();
@@ -878,6 +899,7 @@ export default function App() {
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
+            forecast={forecast} currentWx={currentWx} dayIndex={dayIndex} onSelectDay={setDayIndex}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved}
@@ -932,7 +954,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -951,10 +973,12 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "#B5654A", marginBottom: 4 }}>Weather where you're dressing</div>
           {loadingW && <div>Checking the sky…</div>}
           {weather && !loadingW && (
-            <div style={{ fontSize: 26 }}>{weather.temp}°C · <span style={{ fontSize: 18 }}>{weatherLabel(weather.code)}</span>{weather.wind > 25 ? "  ·  windy" : ""}</div>
+            <div style={{ fontSize: 26 }}>{weather.temp}°C · <span style={{ fontSize: 18 }}>{weatherLabel(weather.code)}</span>{weather.wind > 25 ? "  ·  windy" : ""}
+              {weather.tmax != null && dayIndex !== 0 && <span style={{ fontSize: 14, color: "#8a6a76" }}>  ·  {weather.tmin}–{weather.tmax}°</span>}
+            </div>
           )}
           {location && !loadingW && (
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginTop: 2 }}>{location.name}</div>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginTop: 2 }}>{location.name}{weather?.dayLabel ? ` · ${weather.dayLabel}` : ""}</div>
           )}
           {!location && !loadingW && !weatherErr && (
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66" }}>Choose your location to get weather-based picks.</div>
@@ -971,6 +995,13 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
             </>
           ) : (
             <>
+              {forecast && forecast.length > 1 && (
+                <label style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66" }}>Day:&nbsp;
+                  <select value={dayIndex} onChange={e => onSelectDay(Number(e.target.value))}>
+                    {forecast.map((d, i) => <option key={d.date} value={i}>{i === 0 ? "Today" : dayLabel(d.date)}</option>)}
+                  </select>
+                </label>
+              )}
               <button className="btn btn-ghost" onClick={refreshWeather} disabled={loadingW}>Refresh</button>
               <button className="btn btn-ghost" onClick={() => { setEditingLoc(true); setLocInput(""); }}>Change location</button>
             </>
@@ -985,8 +1016,8 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
       <div style={{ marginTop: 34 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8 }}>
           <div>
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>For today's weather</div>
-            <h2 style={{ fontWeight: 400, fontSize: 22, margin: 0 }}>Today look recommendations</h2>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>For {weather?.dayLabel && dayIndex !== 0 ? weather.dayLabel : "today"}'s weather</div>
+            <h2 style={{ fontWeight: 400, fontSize: 22, margin: 0 }}>Look recommendations</h2>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <label style={{ fontFamily:"system-ui,sans-serif", fontSize: 13 }}>For:&nbsp;
@@ -1222,7 +1253,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const suggestion = outfit?.pieces?.length
       ? outfit.pieces.map(p => `${p.name} (${p.category}, ${p.color})`).join("; ")
       : "(none generated yet)";
-    const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
+    const w = weather ? `${weather.dayLabel && weather.dayLabel !== "Today" ? weather.dayLabel + ", " : ""}${weather.temp}°C, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
     return `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
       `Build looks ONLY from the pieces in their closet below; if something useful is missing, say so briefly. ` +
       `Reference pieces by their exact names. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers).\n\n` +
@@ -1274,7 +1305,13 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       });
       if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
       const data = await res.json();
-      setChat(c => [...c, { role: "assistant", content: data.text || "(no reply)" }]);
+      const reply = data.text || "(no reply)";
+      setChat(c => [...c, { role: "assistant", content: reply }]);
+      // Remember the outfits the stylist proposes, so later chats recall them.
+      const proposed = parseOutfitReply(reply, items);
+      if (proposed.pieces.length >= 2) {
+        onRemember?.({ note: `You suggested ${proposed.title ? `"${proposed.title}"` : "a look"}: ${proposed.pieces.map(p => p.name).join(", ")}.` });
+      }
     } catch (e) {
       setErr(e.message === "needs-key"
         ? "The AI stylist needs the hosted app that holds your API key (your Render deployment). The weather-based “Style me” above works everywhere."
