@@ -4,7 +4,7 @@ Tag the clothes and accessories you already own, and get outfit suggestions base
 
 ## What it does
 
-- **Add pieces** — upload photos and tag them by category, colour, tone, warmth, and occasion (fast tap-buttons). If you set up an API key, uploads are pre-tagged automatically and you just confirm.
+- **Add pieces** — upload photos and tag them by category, colour, tone, warmth, and occasion (fast tap-buttons). If you set up an API key, uploads are pre-tagged automatically and you just confirm — and any brand the photo clearly shows is added to your saved shops for the Personal Shopper.
 - **Closet** — browse and edit everything, filterable by category.
 - **Today's look** — set your location (you choose the city — no GPS) and the **day of the week** (uses that day's forecast), optionally type a **specific temperature to dress for** (overrides the actual temp for the suggestions), pick the occasion, and it lines up a **carousel of recommended looks** to swipe through and save (each favouring one bold statement piece and avoiding clashing colours). Don't like a piece in a look? Tap **↻** for an instant swap, or **✨** to have the AI stylist pick the best alternative and tell you why. The AI stylist chat sits right at the top.
 - **Insights** — a read on your style drawn from your tagged pieces: your colour palette, the balance of your wardrobe (neutrals vs colour, tone, categories, occasions), and an optional written stylist's take.

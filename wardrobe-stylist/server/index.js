@@ -99,7 +99,7 @@ function handleTag(req, res) {
     try {
       const { base64, mediaType, categories, colors, tones, warmth, formality } = JSON.parse(raw);
       const prompt = `You are a fashion cataloguer. Look at this single clothing/accessory item and return ONLY a JSON object, no markdown, no prose. Schema:
-{"category": one of ${JSON.stringify(categories)}, "color": one of ${JSON.stringify(colors)} (use "Multicolour" for patterned items, "Floral" for florals, "Black & White" for monochrome), "tone": one of ${JSON.stringify(tones)} ("Muted"=soft/dusty/pastel, "Classic"=standard, "Bold"=bright/vivid), "warmth": one of ${JSON.stringify(warmth)} (use "Not applicable" for jewellery), "formality": array from ${JSON.stringify(formality)}, "name": very short 2-4 word description}
+{"category": one of ${JSON.stringify(categories)}, "color": one of ${JSON.stringify(colors)} (use "Multicolour" for patterned items, "Floral" for florals, "Black & White" for monochrome), "tone": one of ${JSON.stringify(tones)} ("Muted"=soft/dusty/pastel, "Classic"=standard, "Bold"=bright/vivid), "warmth": one of ${JSON.stringify(warmth)} (use "Not applicable" for jewellery), "formality": array from ${JSON.stringify(formality)}, "name": very short 2-4 word description, "brand": the brand/label name ONLY if you can clearly identify it from a visible logo, tag, or an unmistakable signature design — otherwise "" (do not guess), "brandUrl": that brand's official website homepage (e.g. "gucci.com") ONLY if you are confident and only when brand is set — otherwise ""}
 Respond with JSON only.`;
 
       const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -111,7 +111,7 @@ Respond with JSON only.`;
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 400,
+          max_tokens: 500,
           messages: [{
             role: "user",
             content: [

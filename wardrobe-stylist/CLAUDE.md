@@ -143,6 +143,10 @@ into modules is explicitly requested.
   edits/deletes. The `Looks` view lists and removes them.
 - **Auto-tagging**: `autoTag()` posts to `/api/tag` (the Node proxy in
   `server/index.js`). Failures fall back to manual tagging; never invent tag defaults.
+  The tagger also returns `brand` (+ `brandUrl`) when it can clearly identify a label
+  from the photo; on commit, `autoSaveBrands` adds any spotted brands to the Personal
+  Shopper's saved brands (deduped by name/host, note "Spotted in your closet"), and the
+  brand is stored on the item.
 - **Styling engine**: `buildOutfit()` filters by occasion + weather-appropriate
   warmth, builds a dress/jumpsuit or top+bottom silhouette, adds outerwear when
   cool/wet, then shoes and accessories. It favours a single "Bold" tone piece and
