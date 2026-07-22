@@ -91,6 +91,12 @@ into modules is explicitly requested.
   "what you remember about them from earlier conversations" digest. A "🧠 Remembers…"
   line in the stylist header offers **Forget** (`clearMemory`). "Start over" clears the
   visible transcript but keeps memory.
+- **Learning from saved looks (`savedTaste`)**: the looks the user saves are a
+  positive signal. `savedTaste(looks)` returns `favorIds` (piece ids that appear in
+  saved looks) — passed to `composeOutfit`/`pickAlternative`, which lean toward those
+  pieces ~60% of the time — plus a text digest (most-saved pieces + recent saved
+  combos) injected into the stylist's system prompt so it leans into pairings the user
+  loves. Recomputed from `looks` each render (cheap).
 - **Learning (`prefs`)**: `prefs.removed` (key `wardrobe_prefs_v1`, in backup) counts
   how often each piece is removed from a look. Pieces removed ≥2× go into `avoidIds`
   (leaned away from by `composeOutfit`/`pickAlternative`) and `removedNames` (listed in
