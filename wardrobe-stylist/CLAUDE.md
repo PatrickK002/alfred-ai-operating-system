@@ -106,10 +106,14 @@ into modules is explicitly requested.
   `fetchWeather(loc)` gets its current weather; the chosen `location` ({name,lat,lon})
   is persisted to IndexedDB (`idbSet("location")`) and reloaded on open. `warmthForTemp()`
   maps °C → allowed warmth levels; `"Not applicable"` warmth is always allowed.
-- **Swap a piece**: each piece in a Today recommendation has a ↻ button;
-  `swapPiece(recIndex, pieceId)` replaces it via `pickAlternative` (same category,
-  right occasion/warmth, avoids clashes, excludes pieces already in the look) or drops
-  it if the closet has no other match.
+- **Swap a piece**: each piece in a Today recommendation has two buttons — ↻ (quick)
+  and ✨ (AI). `swapPiece(recIndex, pieceId)` does the instant, deterministic pick via
+  `pickAlternative` (same category, right occasion/warmth, avoids clashes, excludes
+  pieces already in the look) or drops it if there's no other match. `aiSwapPiece`
+  asks the stylist (`/api/chat`) to choose the best replacement from the same-category
+  options and return `Swap: <name> | <why>`; the chosen piece is swapped in and the
+  reason is shown on the card as `swapNote` (falls back to `pickAlternative` / degrades
+  without a key). `swapping` holds the `"recIndex:pieceId"` being AI-swapped.
 - **Piece picker**: the stylist Q2 `PiecePicker` shows ~two rows in a `maxHeight`
   scroll container (compact) rather than the full closet.
 

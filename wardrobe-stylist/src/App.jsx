@@ -392,6 +392,7 @@ export default function App() {
   const [occasion, setOccasion] = useState("Casual");
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
+  const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
   const [autoTagging, setAutoTagging] = useState(false);
   const [lightbox, setLightbox] = useState(null); // src of enlarged photo
@@ -687,8 +688,48 @@ export default function App() {
       const alt = pickAlternative(items, weather, occasion, piece, o.pieces);
       const pieces = alt ? o.pieces.map(p => p.id === pieceId ? alt : p) : o.pieces.filter(p => p.id !== pieceId);
       if (!alt) flash(`No other ${piece.category.toLowerCase()} for this look — removed it`);
-      return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(",") };
+      return { ...o, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: undefined };
     }));
+  }
+  // AI-reasoned swap: ask the stylist to pick the best replacement from the closet
+  // for one piece, and explain why. Falls back to the deterministic pick if needed.
+  async function aiSwapPiece(recIndex, pieceId) {
+    if (swapping) return;
+    const o = recs[recIndex];
+    const piece = o?.pieces.find(p => p.id === pieceId);
+    if (!piece) return;
+    const usedIds = new Set(o.pieces.map(p => p.id));
+    const alts = items.filter(i => i.category === piece.category && i.formality?.includes(occasion) && !usedIds.has(i.id));
+    if (!alts.length) { flash(`No other ${piece.category.toLowerCase()} to swap in`); return; }
+    setSwapping(recIndex + ":" + pieceId);
+    try {
+      const lookDesc = o.pieces.map(p => `${p.name} (${p.category}, ${p.color})`).join("; ");
+      const options = alts.map(a => `- ${a.name} (${a.color}, ${a.tone} tone, warmth ${a.warmth})`).join("\n");
+      const w = weather ? `${weather.temp}°C, ${weatherLabel(weather.code)}` : "unknown";
+      const sys = "You are a personal stylist. The user wants to replace ONE piece in an outfit built from their own closet. Pick the single best replacement from the provided options ONLY. Reply with ONE line in EXACTLY this format, nothing else:\nSwap: <exact option name> | <one short sentence on why it works>";
+      const msg = `Occasion: ${occasion}. Weather: ${w}.\nThe outfit: ${lookDesc}.\nReplace this piece: ${piece.name} (${piece.category}).\nChoose from these options:\n${options}`;
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system: sys, messages: [{ role: "user", content: msg }], max_tokens: 200 }) });
+      if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
+      const data = await res.json();
+      const m = (data.text || "").match(/^\s*swap\s*:\s*(.+)$/im);
+      let chosen = null, reason = "";
+      if (m) {
+        const [nm, ...rest] = m[1].split("|").map(s => s.trim());
+        reason = rest.join(" | ");
+        const low = nm.toLowerCase();
+        chosen = alts.find(a => a.name.toLowerCase() === low) || alts.find(a => low.includes(a.name.toLowerCase()));
+      }
+      const alt = chosen || pickAlternative(items, weather, occasion, piece, o.pieces);
+      if (!alt) { flash("Couldn't find an alternative"); setSwapping(null); return; }
+      setRecs(prev => prev.map((r, i) => {
+        if (i !== recIndex) return r;
+        const pieces = r.pieces.map(p => p.id === pieceId ? alt : p);
+        return { ...r, pieces, key: occasion + "|" + pieces.map(p => p.id).sort().join(","), swapNote: `${piece.name} → ${alt.name}${reason ? " — " + reason : ""}` };
+      }));
+    } catch (e) {
+      flash(e.message === "needs-key" ? "AI swap needs your hosted app (Render)" : "Couldn't reach the stylist — try again");
+    }
+    setSwapping(null);
   }
 
   // ---------- Render ----------
@@ -736,7 +777,7 @@ export default function App() {
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
-            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece}
+            inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} />
         )}
         {view === "looks" && (
@@ -788,7 +829,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, disliked, onDislike }) {
+function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refreshWeather, locBusy, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, swapping, disliked, onDislike }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -876,18 +917,25 @@ function Today({ weather, weatherErr, loadingW, location, onChooseLocation, refr
                     Look {idx + 1}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                    {o.pieces.map(p => (
+                    {o.pieces.map(p => {
+                      const isAiSwapping = swapping === idx + ":" + p.id;
+                      return (
                       <div key={p.id} style={{ minWidth: 0 }}>
                         <div style={{ aspectRatio: "1", background: "#fff", borderRadius: 8, overflow: "hidden", border: `1px solid ${S.aubergine}12`, position: "relative" }}>
                           <Thumb src={p.img} alt={p.name} />
-                          <button onClick={() => onSwapPiece(idx, p.id)} title="Swap for another piece"
+                          <button onClick={() => onAiSwapPiece(idx, p.id)} disabled={!!swapping} title="Ask the stylist to swap this (with a reason)"
+                            style={{ position: "absolute", top: 4, left: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#B5654Ad9", color: "#fff", cursor: swapping ? "default" : "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>{isAiSwapping ? "…" : "✨"}</button>
+                          <button onClick={() => onSwapPiece(idx, p.id)} title="Quick swap for another piece"
                             style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#3B2233cc", color: S.blush, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation" }}>↻</button>
                         </div>
                         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.name}>{p.name}</div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Tap ↻ on any piece to swap it for an alternative.</div>
+                  {o.swapNote
+                    ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: S.ink, background: "#fff", border: `1px solid ${S.aubergine}18`, borderLeft: `3px solid ${S.gold}`, borderRadius: 4, padding: "7px 10px", marginTop: 8, lineHeight: 1.4 }}>✨ {o.swapNote}</div>
+                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, color: "#8a6a76", marginTop: 8 }}>Tap ✨ for a stylist swap (with why), or ↻ for a quick one.</div>}
                   {o.notes.length > 0 && (
                     <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#7a5a66", marginTop: 6, lineHeight: 1.4 }}>{o.notes[0]}</div>
                   )}
