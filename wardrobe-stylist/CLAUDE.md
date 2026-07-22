@@ -83,7 +83,8 @@ into modules is explicitly requested.
   resumes across reloads (restored on mount before the save effect arms). Across
   conversations, `memory` (App state, key `wardrobe_memory_v1`, in backup — `{ notes,
   styles }`) accumulates what the user tells the stylist: `onRemember` is called from
-  `begin` (style + occasion) and every follow-up message. `systemPrompt` injects a
+  `begin` (style + occasion), every follow-up message, and every outfit the stylist
+  proposes (parsed from the reply in `send`). `systemPrompt` injects a
   "what you remember about them from earlier conversations" digest. A "🧠 Remembers…"
   line in the stylist header offers **Forget** (`clearMemory`). "Start over" clears the
   visible transcript but keeps memory.
@@ -123,10 +124,13 @@ into modules is explicitly requested.
   cool/wet, then shoes and accessories. It favours a single "Bold" tone piece and
   avoids clashing two saturated colours (`colorsClash`, `NEUTRALS`).
 - **Weather**: Open-Meteo, no API key, **manual location only** (no geolocation/GPS).
-  `chooseLocation(name)` geocodes the typed city via Open-Meteo's geocoding API and
-  `fetchWeather(loc)` gets its current weather; the chosen `location` ({name,lat,lon})
-  is persisted to IndexedDB (`idbSet("location")`) and reloaded on open. `warmthForTemp()`
-  maps °C → allowed warmth levels; `"Not applicable"` warmth is always allowed.
+  `chooseLocation(name)` geocodes the typed city and `fetchWeather(loc)` pulls current
+  conditions **plus a 7-day daily forecast**. A **Day** selector in the weather strip
+  sets `dayIndex`; a derived effect makes `weather` reflect that day (today = live
+  conditions; other days = a mid-point of the forecast high/low, with `dayLabel`,
+  `tmax`, `tmin`). The chosen `location` is persisted (`idbSet("location")`) and
+  reloaded on open. `warmthForTemp()` maps °C → allowed warmth; `"Not applicable"`
+  warmth is always allowed.
 - **Swap a piece**: each piece in a Today recommendation has two buttons — ↻ (quick)
   and ✨ (AI). `swapPiece(recIndex, pieceId)` does the instant, deterministic pick via
   `pickAlternative` (same category, right occasion/warmth, avoids clashes, excludes
