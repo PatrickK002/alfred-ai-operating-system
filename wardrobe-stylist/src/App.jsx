@@ -164,6 +164,13 @@ function composeOutfit(items, weather, occasion, avoidIds, favorIds) {
       const kept = cand.filter(i => !avoidIds.has(i.id));
       if (kept.length) cand = kept;
     }
+    // Palette discipline: once the look has a saturated (non-neutral) colour, prefer
+    // pieces that are neutral or share that colour, so brights don't stack up.
+    const sat = result.pieces.map(p => p.color).filter(c => c && !NEUTRALS.includes(c));
+    if (sat.length) {
+      const calm = cand.filter(i => NEUTRALS.includes(i.color) || sat.includes(i.color));
+      if (calm.length) cand = calm;
+    }
     if (hasBold()) {
       const quiet = cand.filter(i => i.tone !== "Bold");
       if (quiet.length) cand = quiet;
@@ -197,10 +204,17 @@ function composeOutfit(items, weather, occasion, avoidIds, favorIds) {
   }
   const shoes = pick("Shoes", { avoidColor: baseColor });
   if (shoes) result.pieces.push(shoes);
-  const bag = pick("Bags"); if (bag) result.pieces.push(bag);
-  const belt = pick("Belts"); if (belt && !useOnePiece) result.pieces.push(belt);
-  const acc = pick("Accessories"); if (acc) result.pieces.push(acc);
-  JEWELRY.forEach(j => { const p = pick(j); if (p && Math.random() < 0.6) result.pieces.push(p); });
+  // Accessories, all colour-coordinated and kept deliberately restrained so the look
+  // reads as styled, not piled on: one bag, sometimes a belt, sometimes one accessory,
+  // and at most a single piece of jewellery.
+  const bag = pick("Bags", { avoidColor: baseColor }); if (bag) result.pieces.push(bag);
+  if (!useOnePiece && Math.random() < 0.5) { const belt = pick("Belts", { avoidColor: baseColor }); if (belt) result.pieces.push(belt); }
+  if (Math.random() < 0.6) { const acc = pick("Accessories", { avoidColor: baseColor }); if (acc) result.pieces.push(acc); }
+  const jcats = JEWELRY.filter(j => pool.some(i => i.category === j));
+  if (jcats.length && Math.random() < 0.7) {
+    const jp = pick(jcats[Math.floor(Math.random() * jcats.length)], { avoidColor: baseColor });
+    if (jp) result.pieces.push(jp);
+  }
 
   if (wet) result.notes.push("Rain expected — closed shoes and a jacket recommended.");
   if (weather.wind > 30) result.notes.push("Windy out — a fitted layer beats anything loose.");
