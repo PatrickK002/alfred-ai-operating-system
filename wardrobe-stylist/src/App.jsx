@@ -319,6 +319,34 @@ function parseOutfitReply(text, items) {
   return { title, prose: kept.join("\n").trim(), pieces };
 }
 
+// Parse a multi-outfit AI reply into carousel looks (same shape composeOutfit
+// returns: { pieces, notes, key, ... }). The stylist is asked to separate looks
+// with a "===" line and precede the pieces with a one-line "Why:" overview.
+function parseMultiOutfits(text, items, occasion) {
+  const blocks = (text || "").split(/^\s*={2,}\s*$/m).map(b => b.trim()).filter(Boolean);
+  const looks = [];
+  const seen = new Set();
+  for (const b of blocks) {
+    const wm = b.match(/^\s*why\s*:\s*(.+)$/im);
+    const why = wm ? wm[1].trim() : "";
+    const body = b.replace(/^\s*why\s*:.*$/im, "");
+    const parsed = parseOutfitReply(body, items);
+    if (parsed.pieces.length < 2) continue; // skip stray/incomplete blocks
+    const ids = parsed.pieces.map(p => p.id).sort().join(",");
+    if (seen.has(ids)) continue; // drop duplicate looks
+    seen.add(ids);
+    const overview = why || parsed.prose || "";
+    looks.push({
+      pieces: parsed.pieces,
+      notes: overview ? [overview] : [],
+      title: parsed.title || "",
+      key: occasion + "|" + ids,
+      swapNote: undefined,
+    });
+  }
+  return looks;
+}
+
 // ---------- Travel / holiday planning ----------
 const PACK_GROUPS = {
   Clothing: ["Tops", "Bottoms", "Dresses", "Jumpsuits", "Outerwear"],
@@ -578,6 +606,8 @@ export default function App() {
   const [tempOverride, setTempOverride] = useState(""); // optional "dress for this °C" override
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
+  const [recsSource, setRecsSource] = useState("rule"); // "rule" | "ai" — which engine built the current carousel
+  const [aiBusy, setAiBusy] = useState(false); // an AI-looks request is in flight
   const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
   const [autoTagging, setAutoTagging] = useState(false);
@@ -972,12 +1002,70 @@ export default function App() {
   }
 
   // ----- Outfit builder -----
-  // Build a fresh set of recommended looks for the Today carousel.
+  // Build a fresh set of recommended looks for the Today carousel (rule engine).
   function buildOutfit() {
     if (!styleWeather) return;
     const list = recommendOutfits(items, styleWeather, occasion, 6, avoidIds, taste.favorIds);
     setRecs(list);
+    setRecsSource("rule");
     setOutfit(list[0] || composeOutfit(items, styleWeather, occasion, avoidIds, taste.favorIds));
+  }
+  // Build the carousel with the AI stylist instead of the rule engine: one API call
+  // reasons out several complete, coordinated looks from the closet, each with a
+  // "why" overview and per-piece reasons. The closet is sent as a cache_control
+  // block so repeat taps read it from cache. Falls back to the rule engine on any
+  // failure (no key / offline / unparseable) so the user always gets looks.
+  const AI_LOOK_COUNT = 4;
+  async function buildAiOutfit() {
+    if (!styleWeather || !items.length || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const closet = items.map(i => `- ${i.name} (${i.category}, ${i.color}, ${i.tone} tone, warmth ${i.warmth}, for ${(i.formality || []).join("/") || "any"})`).join("\n");
+      const w = `${styleWeather.temp}°C${styleWeather.override ? " (a temperature they've chosen to dress for)" : ""}, ${weatherLabel(styleWeather.code)}${styleWeather.wind > 25 ? ", windy" : ""}`;
+      const persona =
+        `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
+        `Build ${AI_LOOK_COUNT} DISTINCT, complete, genuinely wearable outfits using ONLY the pieces in their closet. ` +
+        `For each look: choose a considered silhouette for the occasion and weather, keep a colour story that works (don't stack clashing brights — let neutrals carry, allow at most one bold statement piece), and coordinate accessories rather than piling them on. ` +
+        `Rotate through the wardrobe so the ${AI_LOOK_COUNT} looks feel different from one another — don't reuse the same hero piece in every look. Reference pieces by their EXACT closet names.\n\n` +
+        `Return ONLY the ${AI_LOOK_COUNT} outfits and nothing else. Separate each outfit with a line containing exactly "===". Format each outfit EXACTLY as:\n` +
+        `Look: <2-4 word name>\n` +
+        `Why: <one short sentence on why this outfit works together>\n` +
+        `Pieces:\n- <exact closet piece name> | core|optional | <one short reason you chose it>\n` +
+        `Mark a piece "optional" ONLY when it's a just-in-case layer (e.g. a jacket if it turns cooler); everything actually worn is "core". No markdown, no preamble.`;
+      const extra = [
+        taste.text || "",
+        (removedNames && removedNames.length) ? `They often remove these pieces from looks — lean away unless a piece is clearly ideal: ${removedNames.join(", ")}.` : "",
+        (disliked && disliked.length) ? `Never suggest these exact combinations again (they were disliked): ${disliked.map(d => (d.names || []).join(" + ")).join("; ")}.` : "",
+      ].filter(Boolean).join("\n\n");
+      // System = stable persona + cached closet block (the big, repeat-stable prefix).
+      const system = [
+        { type: "text", text: persona },
+        { type: "text", text: `Their closet:\n${closet}`, cache_control: { type: "ephemeral" } },
+      ];
+      const userMsg = `Style ${AI_LOOK_COUNT} outfits for me now.\n- Occasion: ${occasion}\n- Weather: ${w}` + (extra ? `\n\n${extra}` : "");
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system, messages: [{ role: "user", content: userMsg }], max_tokens: 1600 }),
+      });
+      if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
+      const data = await res.json();
+      const looks = parseMultiOutfits(data.text || "", items, occasion);
+      if (!looks.length) throw new Error("empty");
+      setRecs(looks);
+      setRecsSource("ai");
+      setOutfit(looks[0]);
+      flash(`✨ ${looks.length} AI-styled look${looks.length > 1 ? "s" : ""}`);
+    } catch (e) {
+      // Always leave the user with looks: fall back to the free rule engine.
+      const list = recommendOutfits(items, styleWeather, occasion, 6, avoidIds, taste.favorIds);
+      setRecs(list);
+      setRecsSource("rule");
+      setOutfit(list[0] || null);
+      flash(e.message === "needs-key" ? "AI looks need your hosted app (Render) — showing rule-based looks"
+        : e.message === "empty" ? "Couldn't style AI looks just now — showing rule-based looks"
+        : "Couldn't reach the stylist — showing rule-based looks");
+    }
+    setAiBusy(false);
   }
   // Deselect a piece in a recommended look and swap in an alternative (or drop it
   // if the closet has no other match). Keeps the look's stable key in sync.
@@ -1096,7 +1184,7 @@ export default function App() {
             tempOverride={tempOverride} setTempOverride={setTempOverride}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             forecast={forecast} currentWx={currentWx} dayIndex={dayIndex} onSelectDay={setDayIndex}
-            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} outfit={outfit} recs={recs} items={items} setView={setView}
+            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} buildAiOutfit={buildAiOutfit} aiBusy={aiBusy} recsSource={recsSource} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved}
             memory={memory} onRemember={remember} onForget={clearMemory} savedTaste={taste.text} />
@@ -1150,7 +1238,7 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setTempOverride, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
+function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setTempOverride, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, buildAiOutfit, aiBusy, recsSource, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -1232,10 +1320,19 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
                 {FORMALITY.map(f => <option key={f}>{f}</option>)}
               </select>
             </label>
-            <button className="btn btn-primary" onClick={buildOutfit} disabled={!styleWeather || !items.length}>
-              {recs.length ? "Refresh looks" : "Style me"}
+            <button className="btn btn-primary" onClick={buildOutfit} disabled={!styleWeather || !items.length || aiBusy}
+              title="Instant looks from the built-in rules — free, works offline">
+              {recs.length && recsSource === "rule" ? "Refresh looks" : "Style me"}
+            </button>
+            <button className="btn btn-ghost" onClick={buildAiOutfit} disabled={!styleWeather || !items.length || aiBusy}
+              title="Let the AI stylist reason out coordinated looks (uses your hosted app; ~3¢ per tap)"
+              style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {aiBusy ? "Styling…" : (recs.length && recsSource === "ai" ? "✨ Restyle with AI" : "✨ AI looks")}
             </button>
           </div>
+        </div>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 6 }}>
+          <strong style={{ color: S.clay }}>Style me</strong> is instant &amp; free (built-in rules). <strong style={{ color: S.clay }}>✨ AI looks</strong> asks the stylist to reason out coordinated outfits — richer picks, ~3¢ a tap, needs your hosted app.
         </div>
 
         {items.length > 0 && (() => {
@@ -1302,9 +1399,14 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
               const isSaved = savedKeys.has(recKey(o));
               return (
                 <div key={o.key} style={{ flex: "0 0 auto", width: "min(300px, 82vw)", scrollSnapAlign: "start", background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 14, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4 }}>
-                      Look {idx + 1}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <div style={{ display: "inline-block", background: "#fff", color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={o.title || `Look ${idx + 1}`}>
+                        {recsSource === "ai" && o.title ? o.title : `Look ${idx + 1}`}
+                      </div>
+                      {recsSource === "ai" && (
+                        <span title="Reasoned by the AI stylist" style={{ background: S.gold, color: S.ink, fontFamily: "system-ui,sans-serif", fontSize: 9.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "3px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>✨ AI</span>
+                      )}
                     </div>
                     <button onClick={() => setExpanded(idx)} title="Expand this look"
                       style={{ border: `1px solid ${S.aubergine}33`, background: "#fff", color: S.aubergine, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}>⤢ Expand</button>
@@ -1346,6 +1448,7 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
       {expanded != null && recs[expanded] && (
         <LookDetail
           look={recs[expanded]} idx={expanded}
+          title={recsSource === "ai" ? (recs[expanded].title || undefined) : undefined}
           saved={savedKeys.has(recKey(recs[expanded]))} swapping={swapping}
           onSwapPiece={onSwapPiece} onAiSwapPiece={onAiSwapPiece} onRemovePiece={onRemovePiece}
           onSave={() => saveRec(recs[expanded])} onClose={() => setExpanded(null)} />
