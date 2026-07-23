@@ -157,10 +157,16 @@ into modules is explicitly requested.
   brands** button on the Personal Shopper runs `scanClosetBrands`, which POSTs each
   existing piece's photo to the lightweight `/api/brand` endpoint (brand-only vision)
   to back-fill brands from pieces added before the feature.
-- **Styling engine**: `buildOutfit()` filters by occasion + weather-appropriate
-  warmth, builds a dress/jumpsuit or top+bottom silhouette, adds outerwear when
-  cool/wet, then shoes and accessories. It favours a single "Bold" tone piece and
-  avoids clashing two saturated colours (`colorsClash`, `NEUTRALS`).
+- **Styling engine (two of them)**: the quick "Style me" carousel is the *rule-based*
+  `composeOutfit()` — it filters by occasion + weather-appropriate warmth, builds a
+  dress/jumpsuit or top+bottom silhouette, adds outerwear when cool/wet, then shoes and
+  restrained accessories. Coherence rules: one "Bold" tone statement piece; **palette
+  discipline** (once a saturated non-neutral colour is in the look, further picks prefer
+  neutrals or that same colour); colour-coordinated, capped accessories (one bag,
+  sometimes a belt/accessory, at most one jewellery piece). It's a heuristic, not real
+  fashion reasoning — that lives in the **AI Stylist chat** (`/api/chat`), which reasons
+  over the closet, weather, taste signals and My Style photos and gives per-piece
+  rationale.
 - **Weather**: Open-Meteo, no API key, **manual location only** (no geolocation/GPS).
   `chooseLocation(name)` geocodes the typed city and `fetchWeather(loc)` pulls current
   conditions **plus a 7-day daily forecast**. A **Day** selector in the weather strip
