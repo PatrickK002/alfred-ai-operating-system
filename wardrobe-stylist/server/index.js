@@ -226,6 +226,62 @@ function handleBrand(req, res) {
   });
 }
 
+// Outfit-palette vision: read the overall colour story + vibe from a full-outfit
+// photo (a look the user LIKES / aspires to, on the My Style page). Used to turn
+// those photos into lightweight tags so the free rule-based engine can lean toward
+// the colours/tone the user is drawn to. Returns { colors: [...], tone }.
+function handlePalette(req, res) {
+  if (!API_KEY) {
+    return send(res, 503, { error: "ANTHROPIC_API_KEY is not set. Taste-learning from liked outfits is disabled." });
+  }
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", async () => {
+    try {
+      const { base64, mediaType, colors, tones } = JSON.parse(raw);
+      if (!base64) return send(res, 400, { error: "base64 required" });
+      const colorList = Array.isArray(colors) && colors.length ? colors : ["Black", "White", "Grey", "Beige", "Cream", "Navy", "Blue", "Green", "Red", "Pink", "Purple", "Yellow", "Brown"];
+      const toneList = Array.isArray(tones) && tones.length ? tones : ["Muted", "Classic", "Bold"];
+      const prompt = `Look at this outfit photo — a look the user likes and wants to lean toward. Read its overall colour story and vibe. Return ONLY JSON, no prose: {"colors": array of the 1-3 most dominant colours, each chosen from ${JSON.stringify(colorList)} (pick the closest match from that list), "tone": one of ${JSON.stringify(toneList)} ("Muted"=soft/dusty/pastel, "Classic"=standard, "Bold"=bright/vivid/high-contrast)}.`;
+
+      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 150,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: base64 } },
+              { type: "text", text: prompt },
+            ],
+          }],
+        }),
+      });
+
+      const data = await anthropicRes.json();
+      if (!anthropicRes.ok) return send(res, anthropicRes.status, { error: data?.error?.message || "Anthropic API error" });
+      const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
+      const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      let out = { colors: [], tone: "" };
+      try {
+        const j = JSON.parse(clean);
+        const cs = Array.isArray(j.colors) ? j.colors.filter((c) => colorList.includes(c)).slice(0, 3) : [];
+        const tone = toneList.includes(j.tone) ? j.tone : "";
+        out = { colors: cs, tone };
+      } catch {}
+      send(res, 200, out);
+    } catch (err) {
+      send(res, 500, { error: String(err?.message || err) });
+    }
+  });
+}
+
 // Personal shopper. Like /api/chat, but with the Anthropic web-search server tool
 // enabled so the shopper can look up brands, specific items, and current sales on
 // the live web. The search runs server-side inside the same request; we return the
@@ -285,6 +341,10 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/brand") {
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
     return handleBrand(req, res);
+  }
+  if (req.url === "/api/palette") {
+    if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
+    return handlePalette(req, res);
   }
   if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
   return send(res, 404, { error: "Not found" });

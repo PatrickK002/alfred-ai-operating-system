@@ -167,6 +167,17 @@ into modules is explicitly requested.
   fashion reasoning — that lives in the **AI Stylist chat** (`/api/chat`), which reasons
   over the closet, weather, taste signals and My Style photos and gives per-piece
   rationale.
+- **Liked-outfit taste in the free engine**: My Style "liked" photos are turned into a
+  lightweight taste signal the *rule* engine can use. Each liked photo is read once by
+  `/api/palette` (outfit-level vision → `{colors:[…up to 3], tone}`), tagged onto the
+  liked item — automatically on add (`addLiked` → `analyzeTaste`) and retroactively via
+  **Learn my taste** on My Style (`scanLikedTaste`, reuses the `scanning` progress
+  state). `styleTasteFromLiked(liked)` tallies those into `{colors:Set, tone, text}`;
+  `styleTaste` threads into `recommendOutfits`/`composeOutfit`/`pickAlternative` as a
+  `stylePref` arg, which biases `pick()` toward candidates whose colour is in the liked
+  palette (~55%) and, before any bold is placed, toward the liked tone (~40%). The digest
+  `text` is also injected into the AI carousel prompt. All best-effort: no key/offline →
+  photos stay untagged and the bias is simply absent (Style me still works offline/free).
 - **AI carousel (`✨ AI looks`)**: an opt-in *second* engine for the Today carousel that
   fills the same `recs` array with model-reasoned looks instead of rule-based ones.
   `buildAiOutfit()` (in `App`) makes ONE `/api/chat` call whose `system` is an **array
