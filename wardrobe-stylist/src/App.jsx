@@ -3029,12 +3029,18 @@ function Backup({ exportData, importData }) {
 // ---------- Closet view ----------
 function Closet({ items, deleteItem, updateItem, setView, exportData, importData }) {
   const [filter, setFilter] = useState("All");
-  const [warmthFilter, setWarmthFilter] = useState("All");
+  // Warmth is multi-select: an empty set means "All"; otherwise show any selected level.
+  const [warmthSel, setWarmthSel] = useState(() => new Set());
   const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
-  const warmths = ["All", ...WARMTH.filter(w => items.some(i => i.warmth === w))];
+  const warmths = WARMTH.filter(w => items.some(i => i.warmth === w));
+  const toggleWarmth = (w) => setWarmthSel(prev => {
+    const next = new Set(prev);
+    next.has(w) ? next.delete(w) : next.add(w);
+    return next;
+  });
   const shown = items.filter(i =>
     (filter === "All" || i.category === filter) &&
-    (warmthFilter === "All" || i.warmth === warmthFilter));
+    (warmthSel.size === 0 || warmthSel.has(i.warmth)));
   const [editId, setEditId] = useState(null);
 
   if (!items.length) return (
@@ -3055,19 +3061,25 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
           ))}
         </div>
       </div>
-      {warmths.length > 1 && (
+      {warmths.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>Warmth</div>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>
+            Warmth{warmthSel.size > 0 ? ` · ${warmthSel.size} selected` : ""} <span style={{ textTransform: "none", letterSpacing: 0, color: "#a58a94" }}>(pick any)</span>
+          </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {warmths.map(w => (
-              <button key={w} className="chip" style={{ cursor:"pointer", background: warmthFilter===w?S.aubergine:"#fff", color: warmthFilter===w?S.blush:S.ink }} onClick={()=>setWarmthFilter(w)}>{w}</button>
-            ))}
+            <button className="chip" style={{ cursor:"pointer", background: warmthSel.size===0?S.aubergine:"#fff", color: warmthSel.size===0?S.blush:S.ink }} onClick={()=>setWarmthSel(new Set())}>All</button>
+            {warmths.map(w => {
+              const on = warmthSel.has(w);
+              return (
+                <button key={w} className="chip" aria-pressed={on} style={{ cursor:"pointer", background: on?S.aubergine:"#fff", color: on?S.blush:S.ink }} onClick={()=>toggleWarmth(w)}>{on ? "✓ " : ""}{w}</button>
+              );
+            })}
           </div>
         </div>
       )}
       {shown.length === 0 && (
         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", background: S.blushSoft, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
-          No pieces match {filter !== "All" ? filter.toLowerCase() : "any category"}{warmthFilter !== "All" ? ` · ${warmthFilter.toLowerCase()}` : ""}. <button onClick={() => { setFilter("All"); setWarmthFilter("All"); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
+          No pieces match {filter !== "All" ? filter.toLowerCase() : "any category"}{warmthSel.size > 0 ? ` · ${[...warmthSel].map(w => w.toLowerCase()).join(" / ")}` : ""}. <button onClick={() => { setFilter("All"); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
