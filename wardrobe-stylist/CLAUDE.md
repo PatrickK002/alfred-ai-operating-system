@@ -34,6 +34,12 @@ into modules is explicitly requested.
   pure module-level `composeOutfit(items, weather, occasion)` so it can be reused by
   both the Today carousel and the travel planner (which passes a synthetic weather
   from the trip's temperature).
+- **Eligible pieces panel**: Today shows how many pieces can be styled for the current
+  occasion + temperature ("N of M …"), with a "See which pieces" toggle that grids the
+  eligible items and the not-eligible ones tagged with a reason ("Not for work", "Too
+  warm/cool") — driven by `eligibilityFor(item, occasion, styleWeather)` (occasion must
+  match; warmth, unless "Not applicable", must suit `warmthForTemp`). Updates live with
+  the occasion and the "dress for" override; links to the Closet to edit tags.
 - **Temperature override**: an optional "Dress for … °C" input on Today sets
   `tempOverride`. When non-empty, `styleWeather` replaces the actual temp with the
   chosen one (keeping the real code/wind) and is passed to `buildOutfit`, the swap
