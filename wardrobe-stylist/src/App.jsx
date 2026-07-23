@@ -3029,8 +3029,12 @@ function Backup({ exportData, importData }) {
 // ---------- Closet view ----------
 function Closet({ items, deleteItem, updateItem, setView, exportData, importData }) {
   const [filter, setFilter] = useState("All");
+  const [warmthFilter, setWarmthFilter] = useState("All");
   const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
-  const shown = filter === "All" ? items : items.filter(i => i.category === filter);
+  const warmths = ["All", ...WARMTH.filter(w => items.some(i => i.warmth === w))];
+  const shown = items.filter(i =>
+    (filter === "All" || i.category === filter) &&
+    (warmthFilter === "All" || i.warmth === warmthFilter));
   const [editId, setEditId] = useState(null);
 
   if (!items.length) return (
@@ -3043,11 +3047,29 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-        {cats.map(c => (
-          <button key={c} className="chip" style={{ cursor:"pointer", background: filter===c?S.aubergine:"#fff", color: filter===c?S.blush:S.ink }} onClick={()=>setFilter(c)}>{c}</button>
-        ))}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>Category</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {cats.map(c => (
+            <button key={c} className="chip" style={{ cursor:"pointer", background: filter===c?S.aubergine:"#fff", color: filter===c?S.blush:S.ink }} onClick={()=>setFilter(c)}>{c}</button>
+          ))}
+        </div>
       </div>
+      {warmths.length > 1 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>Warmth</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {warmths.map(w => (
+              <button key={w} className="chip" style={{ cursor:"pointer", background: warmthFilter===w?S.aubergine:"#fff", color: warmthFilter===w?S.blush:S.ink }} onClick={()=>setWarmthFilter(w)}>{w}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {shown.length === 0 && (
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", background: S.blushSoft, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+          No pieces match {filter !== "All" ? filter.toLowerCase() : "any category"}{warmthFilter !== "All" ? ` · ${warmthFilter.toLowerCase()}` : ""}. <button onClick={() => { setFilter("All"); setWarmthFilter("All"); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
         {shown.map(i => (
           <div key={i.id} className="card">
