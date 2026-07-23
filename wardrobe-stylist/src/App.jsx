@@ -102,6 +102,24 @@ function warmthForTemp(t) {
   if (t >= 6) return ["Medium", "Warm", "Very warm"];
   return ["Warm", "Very warm"];
 }
+// Whether a piece can be styled for the given occasion + weather right now, and why
+// not. Occasion must match; warmth (unless "Not applicable") must suit the temperature.
+const WARMTH_ORDER = ["Very light", "Light", "Medium", "Warm", "Very warm"];
+function eligibilityFor(item, occasion, weather) {
+  const occOk = (item.formality || []).includes(occasion);
+  let warmthOk = true, warmthNote = "";
+  if (weather && item.warmth && item.warmth !== "Not applicable") {
+    const needed = warmthForTemp(weather.temp);
+    warmthOk = needed.includes(item.warmth);
+    if (!warmthOk) {
+      const idx = WARMTH_ORDER.indexOf(item.warmth);
+      const maxNeeded = Math.max(...needed.map(w => WARMTH_ORDER.indexOf(w)));
+      warmthNote = idx > maxNeeded ? "Too warm" : "Too cool";
+    }
+  }
+  const reason = !occOk ? `Not for ${occasion.toLowerCase()}` : (!warmthOk ? warmthNote : "");
+  return { occOk, warmthOk, eligible: occOk && warmthOk, reason };
+}
 
 // ---------- Color coordination ----------
 const NEUTRALS = ["Black", "White", "Black & White", "Grey", "Beige", "Navy", "Brown", "Cream", "Tan", "Denim", "Multicolour", "Floral"];
@@ -1123,6 +1141,7 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
   const [expanded, setExpanded] = useState(null); // index of the look shown in the big view
+  const [showEligible, setShowEligible] = useState(false); // eligible-pieces panel toggle
   const { revealed, tapReveal } = useTapReveal();  // touch: tap a piece to show controls
   const savedKeys = new Set([...(looks || []).map(l => l.key), ...saved]);
   const saveRec = (o) => { const k = onSaveLook(o.pieces); if (k) setSaved(s => new Set(s).add(k)); };
@@ -1204,6 +1223,53 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
             </button>
           </div>
         </div>
+
+        {items.length > 0 && (() => {
+          const rows = items.map(i => ({ item: i, ...eligibilityFor(i, occasion, styleWeather) }));
+          const eligible = rows.filter(r => r.eligible);
+          const ineligible = rows.filter(r => !r.eligible);
+          const noOcc = ineligible.filter(r => !r.occOk).length;
+          const warmthN = ineligible.filter(r => r.occOk && !r.warmthOk).length;
+          const tile = (r, showReason) => (
+            <div key={r.item.id} title={r.item.name} style={{ opacity: r.eligible ? 1 : 0.85 }}>
+              <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 6, overflow: "hidden", position: "relative", border: `1px solid ${S.aubergine}14` }}>
+                <Thumb src={r.item.img} alt={r.item.name} />
+                {showReason && r.reason && (
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "#8a4a3ad9", color: "#fff", fontFamily: "system-ui,sans-serif", fontSize: 9.5, textAlign: "center", padding: "2px 3px" }}>{r.reason}</div>
+                )}
+              </div>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.item.name}</div>
+            </div>
+          );
+          return (
+            <div className="card" style={{ padding: 14, marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: S.ink }}>
+                  <strong>{eligible.length}</strong> of {items.length} pieces can be styled for {occasion.toLowerCase()}{styleWeather ? ` at ${styleWeather.temp}°C` : ""}.
+                </div>
+                <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={() => setShowEligible(v => !v)}>{showEligible ? "Hide" : "See which pieces"}</button>
+              </div>
+              {showEligible && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6a8a6a", marginBottom: 8 }}>Eligible now ({eligible.length})</div>
+                  {eligible.length
+                    ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>{eligible.map(r => tile(r, false))}</div>
+                    : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76" }}>Nothing qualifies yet — widen the occasion or warmth on some pieces.</div>}
+                  {ineligible.length > 0 && (
+                    <>
+                      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: S.clay, margin: "16px 0 4px" }}>Not eligible ({ineligible.length})</div>
+                      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginBottom: 8 }}>
+                        {[noOcc ? `${noOcc} not tagged for ${occasion.toLowerCase()}` : "", warmthN ? `${warmthN} not suited to ${styleWeather ? styleWeather.temp + "°C" : "the temperature"}` : ""].filter(Boolean).join(" · ")}. Fix a piece's tags to bring it into play.
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(84px,1fr))", gap: 10 }}>{ineligible.map(r => tile(r, true))}</div>
+                      <button className="btn btn-ghost" style={{ marginTop: 12, padding: "6px 12px" }} onClick={() => setView("closet")}>Edit tags in Closet →</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {!items.length && (
           <Empty title="Your closet is empty" body="Add a few pieces and I'll start putting looks together for the weather outside."
