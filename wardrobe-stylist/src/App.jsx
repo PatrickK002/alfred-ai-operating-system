@@ -3028,20 +3028,38 @@ function Backup({ exportData, importData }) {
 
 // ---------- Closet view ----------
 function Closet({ items, deleteItem, updateItem, setView, exportData, importData }) {
-  const [filter, setFilter] = useState("All");
-  // Warmth is multi-select: an empty set means "All"; otherwise show any selected level.
+  // Both filters are multi-select: an empty set means "All"; otherwise show any match.
+  const [catSel, setCatSel] = useState(() => new Set());
   const [warmthSel, setWarmthSel] = useState(() => new Set());
-  const cats = ["All", ...CATEGORIES.filter(c => items.some(i => i.category === c))];
+  const cats = CATEGORIES.filter(c => items.some(i => i.category === c));
   const warmths = WARMTH.filter(w => items.some(i => i.warmth === w));
-  const toggleWarmth = (w) => setWarmthSel(prev => {
+  const toggle = (setter) => (v) => setter(prev => {
     const next = new Set(prev);
-    next.has(w) ? next.delete(w) : next.add(w);
+    next.has(v) ? next.delete(v) : next.add(v);
     return next;
   });
+  const toggleCat = toggle(setCatSel);
+  const toggleWarmth = toggle(setWarmthSel);
   const shown = items.filter(i =>
-    (filter === "All" || i.category === filter) &&
+    (catSel.size === 0 || catSel.has(i.category)) &&
     (warmthSel.size === 0 || warmthSel.has(i.warmth)));
   const [editId, setEditId] = useState(null);
+
+  // One multi-select filter group (an "All" chip + a toggle chip per value).
+  const filterGroup = (label, values, sel, setSel, onToggle) => (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 8 }}>
+        {label}{sel.size > 0 ? ` · ${sel.size}` : ""} <span style={{ textTransform: "none", letterSpacing: 0, color: "#a58a94" }}>(pick any)</span>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="chip" style={{ cursor:"pointer", background: sel.size===0?S.aubergine:"#fff", color: sel.size===0?S.blush:S.ink }} onClick={()=>setSel(new Set())}>All</button>
+        {values.map(v => {
+          const on = sel.has(v);
+          return <button key={v} className="chip" aria-pressed={on} style={{ cursor:"pointer", background: on?S.aubergine:"#fff", color: on?S.blush:S.ink }} onClick={()=>onToggle(v)}>{on ? "✓ " : ""}{v}</button>;
+        })}
+      </div>
+    </div>
+  );
 
   if (!items.length) return (
     <div>
@@ -3051,39 +3069,32 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
     </div>
   );
 
+  const anyFilter = catSel.size > 0 || warmthSel.size > 0;
   return (
-    <div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>Category</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {cats.map(c => (
-            <button key={c} className="chip" style={{ cursor:"pointer", background: filter===c?S.aubergine:"#fff", color: filter===c?S.blush:S.ink }} onClick={()=>setFilter(c)}>{c}</button>
-          ))}
+    <>
+    <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+      {/* Filters — pinned to the left; wraps above the grid on narrow screens. */}
+      <aside style={{ flex: "1 1 170px", maxWidth: 220, minWidth: 150, position: "sticky", top: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: S.aubergine }}>Filter</div>
+          {anyFilter && <button onClick={() => { setCatSel(new Set()); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui,sans-serif", fontSize:12, padding:0 }}>Clear</button>}
         </div>
-      </div>
-      {warmths.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 6 }}>
-            Warmth{warmthSel.size > 0 ? ` · ${warmthSel.size} selected` : ""} <span style={{ textTransform: "none", letterSpacing: 0, color: "#a58a94" }}>(pick any)</span>
+        {filterGroup("Category", cats, catSel, setCatSel, toggleCat)}
+        {warmths.length > 0 && filterGroup("Warmth", warmths, warmthSel, setWarmthSel, toggleWarmth)}
+      </aside>
+
+      {/* Grid */}
+      <div style={{ flex: "999 1 320px", minWidth: 0 }}>
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 14 }}>
+          Showing {shown.length} of {items.length} piece{items.length === 1 ? "" : "s"}.
+        </div>
+        {shown.length === 0 && (
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", background: S.blushSoft, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+            No pieces match the selected filters. <button onClick={() => { setCatSel(new Set()); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="chip" style={{ cursor:"pointer", background: warmthSel.size===0?S.aubergine:"#fff", color: warmthSel.size===0?S.blush:S.ink }} onClick={()=>setWarmthSel(new Set())}>All</button>
-            {warmths.map(w => {
-              const on = warmthSel.has(w);
-              return (
-                <button key={w} className="chip" aria-pressed={on} style={{ cursor:"pointer", background: on?S.aubergine:"#fff", color: on?S.blush:S.ink }} onClick={()=>toggleWarmth(w)}>{on ? "✓ " : ""}{w}</button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {shown.length === 0 && (
-        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", background: S.blushSoft, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
-          No pieces match {filter !== "All" ? filter.toLowerCase() : "any category"}{warmthSel.size > 0 ? ` · ${[...warmthSel].map(w => w.toLowerCase()).join(" / ")}` : ""}. <button onClick={() => { setFilter("All"); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
-        </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
-        {shown.map(i => (
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
+          {shown.map(i => (
           <div key={i.id} className="card">
             <div style={{ aspectRatio: "1", background: S.blushSoft, position: "relative" }}>
               <Thumb src={i.img} alt={i.name} />
@@ -3102,17 +3113,19 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
             </div>
           </div>
         ))}
+        </div>
       </div>
-      <Backup exportData={exportData} importData={importData} />
-      {editId != null && items.some(i => i.id === editId) && (
-        <EditPanel
-          item={items.find(i => i.id === editId)}
-          updateItem={updateItem}
-          deleteItem={(id)=>{ deleteItem(id); setEditId(null); }}
-          onClose={()=>setEditId(null)}
-        />
-      )}
     </div>
+    <Backup exportData={exportData} importData={importData} />
+    {editId != null && items.some(i => i.id === editId) && (
+      <EditPanel
+        item={items.find(i => i.id === editId)}
+        updateItem={updateItem}
+        deleteItem={(id)=>{ deleteItem(id); setEditId(null); }}
+        onClose={()=>setEditId(null)}
+      />
+    )}
+    </>
   );
 }
 
