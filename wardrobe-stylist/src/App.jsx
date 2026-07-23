@@ -632,9 +632,9 @@ export default function App() {
     setMemory(prev => {
       let notes = prev.notes || [], styles = prev.styles || [];
       const n = (note || "").trim();
-      if (n && n.length <= 240) notes = [n, ...notes.filter(x => x.toLowerCase() !== n.toLowerCase())].slice(0, 24);
+      if (n && n.length <= 240) notes = [n, ...notes.filter(x => x.toLowerCase() !== n.toLowerCase())].slice(0, 40);
       const s = (style || "").trim();
-      if (s) styles = [s, ...styles.filter(x => x.toLowerCase() !== s.toLowerCase())].slice(0, 8);
+      if (s) styles = [s, ...styles.filter(x => x.toLowerCase() !== s.toLowerCase())].slice(0, 10);
       return { notes, styles };
     });
   }
@@ -1448,9 +1448,9 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
       (inspo.length ? `\nThey've shared ${inspo.length} photo(s) of outfits they've WORN (their usual style — match what suits them).` : "") +
       (liked.length ? `\nThey've also shared ${liked.length} photo(s) of outfits they LIKE and want to lean toward (aspiration — nudge the look in this direction, while only using pieces from their closet).` : "") +
       (savedTaste ? `\n\n${savedTaste}` : "") +
-      ((memory && (memory.styles?.length || memory.notes?.length)) ? `\n\nWhat you remember about them from earlier conversations (use it naturally; don't recite it back):` +
-        (memory.styles?.length ? `\n- Styles they've asked for before: ${memory.styles.slice(0, 6).join(", ")}.` : "") +
-        (memory.notes?.length ? `\n- Things they've said/requested:\n${memory.notes.slice(0, 10).map(n => `  · ${n}`).join("\n")}` : "") : "") +
+      ((memory && (memory.styles?.length || memory.notes?.length)) ? `\n\nCARRY OVER what you've learned about them from earlier conversations — actively take these requests, comments and past suggestions into account (honour what they asked for, don't repeat looks you've already suggested unless they ask, and keep continuity with their taste). Weave it in naturally; don't recite it back:` +
+        (memory.styles?.length ? `\n- Styles they've asked for before: ${memory.styles.slice(0, 8).join(", ")}.` : "") +
+        (memory.notes?.length ? `\n- Their past requests, comments and looks you've already suggested (most recent first):\n${memory.notes.slice(0, 24).map(n => `  · ${n}`).join("\n")}` : "") : "") +
       ((removedNames && removedNames.length) ? `\n\nThe user often REMOVES these pieces from suggested looks — lean away from them unless they're clearly ideal: ${removedNames.join(", ")}.` : "") +
       ((disliked && disliked.length) ? `\n\nNEVER suggest these exact combinations again — the user disliked them:\n${disliked.map(d => `- ${d.names.join(" + ")}`).join("\n")}` : "");
   }
