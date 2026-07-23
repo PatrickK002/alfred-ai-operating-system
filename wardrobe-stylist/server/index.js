@@ -159,7 +159,10 @@ function handleChat(req, res) {
         body: JSON.stringify({
           model: MODEL,
           max_tokens: Math.min(Math.max(Number(max_tokens) || 700, 1), 2000),
-          system: typeof system === "string" ? system : undefined,
+          // Accept either a plain string or an array of system blocks (the latter
+          // lets the client mark a large, stable prefix — e.g. the closet — with
+          // cache_control so repeat calls read it from cache instead of re-billing).
+          system: (typeof system === "string" || Array.isArray(system)) ? system : undefined,
           messages,
         }),
       });

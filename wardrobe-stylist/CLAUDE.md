@@ -167,6 +167,21 @@ into modules is explicitly requested.
   fashion reasoning — that lives in the **AI Stylist chat** (`/api/chat`), which reasons
   over the closet, weather, taste signals and My Style photos and gives per-piece
   rationale.
+- **AI carousel (`✨ AI looks`)**: an opt-in *second* engine for the Today carousel that
+  fills the same `recs` array with model-reasoned looks instead of rule-based ones.
+  `buildAiOutfit()` (in `App`) makes ONE `/api/chat` call whose `system` is an **array
+  of blocks** — a stable persona block + a `cache_control: {type:"ephemeral"}` closet
+  block, so the big repeat-stable prefix (persona + inventory) is prompt-cached and
+  repeat taps re-read it cheaply; occasion/weather/taste/avoid/disliked ride in the user
+  message. The model returns `AI_LOOK_COUNT` (4) outfits separated by `===`, each a
+  `Look:`/`Why:`/`Pieces:` block; `parseMultiOutfits()` splits them and reuses
+  `parseOutfitReply()` per block, producing looks in composeOutfit's shape
+  (`{pieces, notes, key, title}`) with per-piece `role`/`reason`. `recsSource`
+  (`"rule"|"ai"`) drives the UI (an `✨ AI` pill + look name on each card, the AI
+  title in the expanded view). The server (`handleChat`) now passes `system` through
+  when it's a string **or** an array. On any failure (503/offline/unparseable) it falls
+  back to `recommendOutfits` so the carousel is never empty. Swaps/removes on AI looks
+  reuse the rule-based `swapPiece`/`aiSwapPiece`/`removePiece`.
 - **Weather**: Open-Meteo, no API key, **manual location only** (no geolocation/GPS).
   `chooseLocation(name)` geocodes the typed city and `fetchWeather(loc)` pulls current
   conditions **plus a 7-day daily forecast**. A **Day** selector in the weather strip
