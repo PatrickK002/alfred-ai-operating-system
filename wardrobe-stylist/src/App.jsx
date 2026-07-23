@@ -1431,6 +1431,7 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     const w = weather ? `${weather.dayLabel && weather.dayLabel !== "Today" ? weather.dayLabel + ", " : ""}${weather.temp}°C${weather.override ? " (a temperature they've chosen to dress for)" : ""}, ${weatherLabel(weather.code)}${weather.wind > 25 ? ", windy" : ""}` : "unknown";
     return `You are a warm, sharp personal stylist working inside the user's own wardrobe app. ` +
       `Build looks ONLY from the pieces in their closet below; if something useful is missing, say so briefly. ` +
+      `Make FULL use of their closet: consider every eligible piece for the occasion and weather, and rotate through their wardrobe across suggestions — don't lean on the same few items each time. When you offer another option, deliberately reach for pieces you haven't used yet unless one is genuinely the best choice or they've asked for it. ` +
       `Reference pieces by their exact names. Keep replies concise and friendly — a few sentences, not an essay. Use plain text (no markdown headers).\n\n` +
       `When you propose a full outfit, format your reply as:\n` +
       `1. A first line: "Look: <2-4 word name>".\n` +
@@ -1566,8 +1567,19 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
 
   function regenerate() {
     if (busy) return;
-    // Asking for another option is not a rejection — make that clear to the stylist.
-    send("Could you show me another option from my closet? I'd just like to see more looks — I'm not rejecting this one.", style, false, piecesUsed);
+    // Tell the stylist which pieces it's already shown, so it reaches into the rest of
+    // the closet instead of repeating the same items. (Not a rejection of the last one.)
+    const used = new Set();
+    chat.forEach((m, i) => {
+      if (m.role !== "assistant") return;
+      boardBase(i).forEach(p => used.add(p.name));
+      (boards[i]?.pieces || []).forEach(p => used.add(p.name));
+    });
+    const names = [...used].filter(Boolean);
+    const avoid = names.length
+      ? ` So far you've shown me: ${names.join(", ")}. Please build this one around DIFFERENT pieces from my closet and make use of more of my wardrobe.`
+      : "";
+    send(`Could you show me another option from my closet? I'd like to see more of my wardrobe — I'm not rejecting the last one.${avoid}`, style, false, piecesUsed);
   }
 
   // ----- Editable outfit boards (per assistant message) -----
