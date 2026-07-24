@@ -651,6 +651,7 @@ export default function App() {
   const [outfit, setOutfit] = useState(null);
   const [recs, setRecs] = useState([]); // carousel of recommended looks
   const [recsSource, setRecsSource] = useState("rule"); // "rule" | "ai" — which engine built the current carousel
+  const [lastEngine, setLastEngine] = useState("rule"); // remembered preferred engine for the one-tap "Today's outfit"
   const [aiBusy, setAiBusy] = useState(false); // an AI-looks request is in flight
   const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
@@ -672,14 +673,19 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [it, lk, ip, li, di, br, tr, loc, pf, me] = await Promise.all([
+      const [it, lk, ip, li, di, br, tr, loc, pf, me, st] = await Promise.all([
         loadStore("items", KEY), loadStore("looks", LOOKS_KEY), loadStore("inspo", INSPO_KEY), loadStore("liked", LIKED_KEY), loadStore("disliked", DISLIKED_KEY), loadStore("brands", BRANDS_KEY), loadStore("trips", TRIPS_KEY),
-        idbGet("location").catch(() => null), idbGet("prefs").catch(() => null), idbGet("memory").catch(() => null),
+        idbGet("location").catch(() => null), idbGet("prefs").catch(() => null), idbGet("memory").catch(() => null), idbGet("settings").catch(() => null),
       ]);
       if (!alive) return;
       setItems(foldJewellery(it)); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(dedupeBrands(br)); setTrips(tr); setReady(true);
       if (pf && typeof pf === "object") setPrefs({ removed: pf.removed || {} });
       if (me && typeof me === "object") setMemory({ notes: Array.isArray(me.notes) ? me.notes : [], styles: Array.isArray(me.styles) ? me.styles : [] });
+      // Restore the small UI settings the app opens with (saves repeated taps daily).
+      if (st && typeof st === "object") {
+        if (st.occasion && FORMALITY.includes(st.occasion)) setOccasion(st.occasion);
+        if (st.lastEngine === "ai" || st.lastEngine === "rule") setLastEngine(st.lastEngine);
+      }
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
@@ -692,6 +698,8 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("disliked", DISLIKED_KEY, disliked); }, [disliked, ready]);
   useEffect(() => { if (ready) saveStore("brands", BRANDS_KEY, brands); }, [brands, ready]);
   useEffect(() => { if (ready) saveStore("trips", TRIPS_KEY, trips); }, [trips, ready]);
+  // Remember the occasion + preferred engine so the app opens where you left off.
+  useEffect(() => { if (ready) idbSet("settings", { occasion, lastEngine }).catch(() => {}); }, [occasion, lastEngine, ready]);
 
   // ----- Trips (Travel page) -----
   function saveTrip(trip) {
@@ -1107,6 +1115,7 @@ export default function App() {
     const list = recommendOutfits(items, styleWeather, occasion, 6, avoidIds, taste.favorIds, styleTaste);
     setRecs(list);
     setRecsSource("rule");
+    setLastEngine("rule");
     setOutfit(list[0] || composeOutfit(items, styleWeather, occasion, avoidIds, taste.favorIds, styleTaste));
   }
   // Build the carousel with the AI stylist instead of the rule engine: one API call
@@ -1118,6 +1127,7 @@ export default function App() {
   async function buildAiOutfit() {
     if (!styleWeather || !items.length || aiBusy) return;
     setAiBusy(true);
+    setLastEngine("ai");
     try {
       const closet = items.map(i => `- ${i.name} (${i.category}, ${i.color}, ${i.tone} tone, warmth ${i.warmth}, for ${(i.formality || []).join("/") || "any"})`).join("\n");
       const w = `${styleWeather.temp}°C${styleWeather.override ? " (a temperature they've chosen to dress for)" : ""}, ${weatherLabel(styleWeather.code)}${styleWeather.wind > 25 ? ", windy" : ""}`;
@@ -1181,6 +1191,11 @@ export default function App() {
         : "Couldn't reach the stylist — showing rule-based looks");
     }
     setAiBusy(false);
+  }
+  // One-tap "Today's outfit": build the day's looks straight away using whichever
+  // engine you last used (rule = instant/free by default, AI if you prefer it).
+  function dressForToday() {
+    if (lastEngine === "ai") buildAiOutfit(); else buildOutfit();
   }
   // Deselect a piece in a recommended look and swap in an alternative (or drop it
   // if the closet has no other match). Keeps the look's stable key in sync.
@@ -1299,7 +1314,7 @@ export default function App() {
             tempOverride={tempOverride} setTempOverride={setTempOverride}
             location={location} onChooseLocation={chooseLocation} refreshWeather={refreshWeather} locBusy={locBusy}
             forecast={forecast} currentWx={currentWx} dayIndex={dayIndex} onSelectDay={setDayIndex}
-            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} buildAiOutfit={buildAiOutfit} aiBusy={aiBusy} recsSource={recsSource} outfit={outfit} recs={recs} items={items} setView={setView}
+            occasion={occasion} setOccasion={setOccasion} buildOutfit={buildOutfit} buildAiOutfit={buildAiOutfit} dressForToday={dressForToday} lastEngine={lastEngine} aiBusy={aiBusy} recsSource={recsSource} outfit={outfit} recs={recs} items={items} setView={setView}
             inspo={inspo} liked={liked} onSaveLook={saveLookPieces} looks={looks} onSwapPiece={swapPiece} onAiSwapPiece={aiSwapPiece} onRemovePiece={removePiece} swapping={swapping}
             disliked={disliked} onDislike={dislikeCombo} removedNames={removedNames} onNotePieceRemoved={notePieceRemoved}
             memory={memory} onRemember={remember} onForget={clearMemory} savedTaste={taste.text} />
@@ -1354,7 +1369,9 @@ export default function App() {
 }
 
 // ---------- Today view ----------
-function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setTempOverride, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, buildAiOutfit, aiBusy, recsSource, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
+function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setTempOverride, location, onChooseLocation, refreshWeather, locBusy, forecast, currentWx, dayIndex, onSelectDay, occasion, setOccasion, buildOutfit, buildAiOutfit, dressForToday, lastEngine, aiBusy, recsSource, outfit, recs, items, setView, inspo, liked, onSaveLook, looks, onSwapPiece, onAiSwapPiece, onRemovePiece, swapping, disliked, onDislike, removedNames, onNotePieceRemoved, memory, onRemember, onForget, savedTaste }) {
+  const recsRef = useRef(null); // to scroll straight to the recommendations from the top
+  const dressToday = () => { dressForToday(); setTimeout(() => recsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
   const [saved, setSaved] = useState(() => new Set()); // look keys saved this session
   const [locInput, setLocInput] = useState("");
   const [editingLoc, setEditingLoc] = useState(false);
@@ -1418,11 +1435,20 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
         </div>
       </div>
 
+      {/* One-tap fast path to the day's look (styles with your last engine, jumps to it) */}
+      {items.length > 0 && (
+        <button className="btn btn-primary" onClick={dressToday} disabled={!styleWeather || aiBusy}
+          title={styleWeather ? "" : "Set a location or a temperature first"}
+          style={{ width: "100%", padding: "13px 18px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13 }}>
+          {aiBusy ? "Styling…" : `🪄 Dress me for ${occasion.toLowerCase()} today${lastEngine === "ai" ? " ✨" : ""}`}
+        </button>
+      )}
+
       {/* AI stylist chat — moved above Today's Look (uses the chosen temperature if set) */}
       <Stylist items={items} weather={styleWeather} occasion={occasion} outfit={outfit} inspo={inspo} liked={liked} setView={setView} onSaveLook={onSaveLook} disliked={disliked} onDislike={onDislike} removedNames={removedNames} onNotePieceRemoved={onNotePieceRemoved} memory={memory} onRemember={onRemember} onForget={onForget} savedTaste={savedTaste} />
 
       {/* Today Look Recommendations (carousel) */}
-      <div style={{ marginTop: 34 }}>
+      <div ref={recsRef} style={{ marginTop: 34 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${S.aubergine}22`, paddingBottom: 8 }}>
           <div>
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>
@@ -2206,6 +2232,9 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [saleSel, setSaleSel] = useState(() => new Set()); // brand ids to check for sales; empty = all
+  const saleLoaded = useRef(false); // remember the sale-store selection across visits
+  useEffect(() => { idbGet("salesel").then(v => { if (Array.isArray(v)) setSaleSel(new Set(v)); }).catch(() => {}).finally(() => { saleLoaded.current = true; }); }, []);
+  useEffect(() => { if (saleLoaded.current) idbSet("salesel", [...saleSel]).catch(() => {}); }, [saleSel]);
   const [chat, setChat] = useState([]); // {role, content}
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2628,6 +2657,9 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const [pickTripId, setPickTripId] = useState(null); // which other trip to copy outfits from
   const [confirmDel, setConfirmDel] = useState(null); // id of a trip pending delete confirmation
   const [packView, setPackView] = useState("checklist"); // packing overview: "checklist" | "photos"
+  const packLoaded = useRef(false); // remember the packing view across visits
+  useEffect(() => { idbGet("packview").then(v => { if (v === "photos" || v === "checklist") setPackView(v); }).catch(() => {}).finally(() => { packLoaded.current = true; }); }, []);
+  useEffect(() => { if (packLoaded.current) idbSet("packview", packView).catch(() => {}); }, [packView]);
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
 
