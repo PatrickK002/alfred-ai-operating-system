@@ -300,23 +300,24 @@ function savedTaste(looks) {
   return { favorIds, text };
 }
 
-// Turn the user's LIKED My Style outfits (aspiration photos) into a lightweight taste
+// Turn the user's My Style outfit photos (both WORN and LIKED) into a lightweight taste
 // signal the FREE rule engine can act on: the colours that recur across those looks and
-// the dominant vibe. Each liked photo is tagged with { colors, tone } by a one-time
-// vision scan; this just tallies them. `colors` is a Set of the top colour tags; `tone`
-// is the most common vibe; `text` is a short digest for the AI engines.
-function styleTasteFromLiked(liked) {
+// the dominant vibe. Each photo is tagged with { colors, tone } by a one-time vision
+// scan; this just tallies them across every list passed in. `colors` is a Set of the top
+// colour tags; `tone` is the most common vibe; `text` is a short digest for the AI engines.
+function styleTasteFromPhotos(...lists) {
+  const all = lists.flat().filter(Boolean);
   const colorCounts = {}, toneCounts = {};
-  (liked || []).forEach(p => {
+  all.forEach(p => {
     (p.colors || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; });
     if (p.tone) toneCounts[p.tone] = (toneCounts[p.tone] || 0) + 1;
   });
   const rankedColors = Object.entries(colorCounts).sort((a, b) => b[1] - a[1]).map(([c]) => c);
   const colors = new Set(rankedColors.slice(0, 5));
   const tone = Object.entries(toneCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-  const analysed = (liked || []).filter(p => p.colors && p.colors.length).length;
+  const analysed = all.filter(p => p.colors && p.colors.length).length;
   const text = colors.size
-    ? `Colours and vibe they're drawn to (learned from ${analysed} outfit(s) they like — lean toward this palette when it fits):\n- Colours: ${rankedColors.slice(0, 5).join(", ")}.` + (tone ? `\n- Overall vibe: ${tone}.` : "")
+    ? `Colours and vibe they gravitate to (learned from ${analysed} outfit(s) they wear and like — lean toward this palette when it fits):\n- Colours: ${rankedColors.slice(0, 5).join(", ")}.` + (tone ? `\n- Overall vibe: ${tone}.` : "")
     : "";
   return { colors, tone, text, analysed };
 }
@@ -722,7 +723,7 @@ export default function App() {
   // Positive taste signal from the looks the user has saved.
   const taste = savedTaste(looks);
   // Taste signal from the outfits the user LIKES (My Style) — colours/vibe they lean to.
-  const styleTaste = styleTasteFromLiked(liked);
+  const styleTaste = styleTasteFromPhotos(inspo, liked);
 
   // Optional "dress for this temperature" override — when the user types a value it's
   // used for styling (recommendations + AI stylist) instead of the actual temperature.
@@ -867,7 +868,7 @@ export default function App() {
     }
     e.target.value = ""; // allow re-selecting the same file
   }
-  const addInspo = (e) => addPhotos(setInspo, inspo, e);
+  const addInspo = (e) => addPhotos(setInspo, inspo, e, true);
   const addLiked = (e) => addPhotos(setLiked, liked, e, true);
   const deleteInspo = (id) => setInspo(prev => prev.filter(p => p.id !== id));
   const deleteLiked = (id) => setLiked(prev => prev.filter(p => p.id !== id));
@@ -892,13 +893,15 @@ export default function App() {
       } catch {}
     }
   }
-  // Backfill: analyse liked outfits added before this feature (or that failed to tag).
+  // Backfill: analyse any My Style outfit (worn OR liked) added before this feature or
+  // that failed to tag, so both feed the colour/vibe taste.
   async function scanLikedTaste() {
-    const todo = liked.filter(p => typeof p.img === "string" && p.img.startsWith("data:") && !(p.colors && p.colors.length));
-    if (!todo.length) { flash("Taste already learned from your liked outfits"); return; }
+    const unscanned = (list, setter) => list.filter(p => typeof p.img === "string" && p.img.startsWith("data:") && !(p.colors && p.colors.length)).map(p => ({ p, setter }));
+    const todo = [...unscanned(inspo, setInspo), ...unscanned(liked, setLiked)];
+    if (!todo.length) { flash("Taste already learned from your outfits"); return; }
     setScanning({ done: 0, total: todo.length });
     for (let k = 0; k < todo.length; k++) {
-      const p = todo[k];
+      const { p, setter } = todo[k];
       try {
         const comma = p.img.indexOf(",");
         const mediaType = (p.img.slice(0, comma).match(/data:(.*?);/) || [])[1] || "image/jpeg";
@@ -906,13 +909,13 @@ export default function App() {
         if (res.status === 503) { setScanning(null); flash("Taste-learning needs your hosted app (Render)"); return; }
         if (res.ok) {
           const d = await res.json();
-          if ((d.colors && d.colors.length) || d.tone) setLiked(prev => prev.map(x => x.id === p.id ? { ...x, colors: d.colors || x.colors, tone: d.tone || x.tone } : x));
+          if ((d.colors && d.colors.length) || d.tone) setter(prev => prev.map(x => x.id === p.id ? { ...x, colors: d.colors || x.colors, tone: d.tone || x.tone } : x));
         }
       } catch {}
       setScanning({ done: k + 1, total: todo.length });
     }
     setScanning(null);
-    flash(`Learned your taste from ${todo.length} liked outfit${todo.length > 1 ? "s" : ""}`);
+    flash(`Learned your taste from ${todo.length} outfit${todo.length > 1 ? "s" : ""}`);
   }
 
   // ----- Weather (manual location only — no GPS; pick any day this week) -----
@@ -1123,6 +1126,7 @@ export default function App() {
         `Build ${AI_LOOK_COUNT} DISTINCT, complete, genuinely wearable outfits using ONLY the pieces in their closet. ` +
         `For each look: choose a considered silhouette for the occasion and weather, keep a colour story that works (don't stack clashing brights — let neutrals carry, allow at most one bold statement piece), and coordinate accessories rather than piling them on. ` +
         `Rotate through the wardrobe so the ${AI_LOOK_COUNT} looks feel different from one another — don't reuse the same hero piece in every look. Reference pieces by their EXACT closet names.\n\n` +
+        `If photos of the user's own outfits are attached, use them as taste context — the WORN photos show what suits them and what they actually wear, the LIKED photos show the direction they want to lean — while still building every look only from the closet list below.\n\n` +
         `Return ONLY the ${AI_LOOK_COUNT} outfits and nothing else. Separate each outfit with a line containing exactly "===". Format each outfit EXACTLY as:\n` +
         `Look: <2-4 word name>\n` +
         `Why: <one short sentence on why this outfit works together>\n` +
@@ -1140,9 +1144,23 @@ export default function App() {
         { type: "text", text: `Their closet:\n${closet}`, cache_control: { type: "ephemeral" } },
       ];
       const userMsg = `Style ${AI_LOOK_COUNT} outfits for me now.\n- Occasion: ${occasion}\n- Weather: ${w}` + (extra ? `\n\n${extra}` : "");
+      // Attach a couple of My Style photos (worn + liked) so the AI carousel can SEE the
+      // user's taste, like the chat does. This makes it a vision call (a little pricier).
+      const MAX_IMG = 2;
+      const blocks = [];
+      const pushImg = (p) => {
+        if (!(typeof p.img === "string" && p.img.startsWith("data:"))) return;
+        const comma = p.img.indexOf(",");
+        const mt = (p.img.slice(0, comma).match(/data:(.*?);/) || [])[1] || "image/jpeg";
+        blocks.push({ type: "image", source: { type: "base64", media_type: mt, data: p.img.slice(comma + 1) } });
+      };
+      if (inspo.length) { blocks.push({ type: "text", text: "Photos of outfits I've WORN (what suits me / my usual style):" }); inspo.slice(0, MAX_IMG).forEach(pushImg); }
+      if (liked.length) { blocks.push({ type: "text", text: "Photos of outfits I LIKE and want to lean toward:" }); liked.slice(0, MAX_IMG).forEach(pushImg); }
+      blocks.push({ type: "text", text: userMsg });
+      const content = (inspo.length || liked.length) ? blocks : userMsg;
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system, messages: [{ role: "user", content: userMsg }], max_tokens: 1600 }),
+        body: JSON.stringify({ system, messages: [{ role: "user", content }], max_tokens: 1600 }),
       });
       if (!res.ok) throw new Error(res.status === 503 ? "needs-key" : "failed");
       const data = await res.json();
@@ -3213,7 +3231,7 @@ function PhotoSection({ title, blurb, cta, photos, onAdd, onRemove }) {
 // ---------- My Style view (worn outfits + liked/inspiration outfits) ----------
 function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, setView, styleTaste, onScanTaste, scanning }) {
   const learned = styleTaste?.colors ? [...styleTaste.colors] : [];
-  const unscanned = liked.filter(p => !(p.colors && p.colors.length)).length;
+  const unscanned = [...inspo, ...liked].filter(p => !(p.colors && p.colors.length)).length;
   return (
     <div>
       <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", maxWidth: 560, margin: "0 0 22px" }}>
@@ -3221,7 +3239,7 @@ function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, s
       </p>
       <PhotoSection
         title="Outfits you've worn"
-        blurb="Pictures of yourself in outfits you've worn and loved — so the stylist knows what suits you and what you actually reach for."
+        blurb="Pictures of yourself in outfits you've worn and loved — so the stylist knows what suits you and what you actually reach for. Their colours and vibe also feed your recommendations."
         cta="Add worn outfits"
         photos={inspo} onAdd={addInspo} onRemove={deleteInspo} />
       <PhotoSection
@@ -3230,7 +3248,7 @@ function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, s
         cta="Add liked outfits"
         photos={liked} onAdd={addLiked} onRemove={deleteLiked} />
 
-      {liked.length > 0 && (
+      {(inspo.length > 0 || liked.length > 0) && (
         <div className="card" style={{ padding: 16, margin: "0 0 26px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 0 }}>
@@ -3259,7 +3277,7 @@ function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, s
             )}
           </div>
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 10 }}>
-            New liked outfits are read automatically. Reading a photo uses your hosted app (Render); once learned it works offline and free.
+            New outfits — worn and liked — are read automatically. Reading a photo uses your hosted app (Render); once learned it works offline and free.
           </div>
         </div>
       )}
