@@ -74,11 +74,12 @@ into modules is explicitly requested.
   or missing plan as `{}`); `travelPacking(trip)` aggregates unique pieces across all
   entries for the packing overview. All mutations go through `commitPlan` →
   `saveTrip`. (Removed the old `generateTripPlan`/`composeForSlot`/`packingSummary`/
-  `TRIP_SLOTS`/`SLOT_ICON` auto-planner.) The packing overview also has a **checklist**
-  (names only, grouped Clothing/Shoes/Accessories): `trip.packed` (id→true, in backup)
-  tracks what's ticked via `togglePacked`, `packingText()` builds a `[x]`/`[ ]` plain-
-  text list, `downloadPacking` saves it as a `.txt`, and `copyPacking` writes it to the
-  clipboard.
+  `TRIP_SLOTS`/`SLOT_ICON` auto-planner.) The packing overview also has a **packing
+  list** (grouped Clothing/Shoes/Accessories) with a `packView` toggle between a
+  name-only **checklist** and a **photo** grid — both tick/untick on tap and mark
+  packed pieces. `trip.packed` (id→true, in backup) tracks what's ticked via
+  `togglePacked`, `packingText()` builds a `[x]`/`[ ]` plain-text list, `downloadPacking`
+  saves it as a `.txt`, and `copyPacking` writes it to the clipboard.
 - **saveLookPieces(pieces, opts)**: the shared save-a-look helper takes optional
   `{ occasion, note, weather }` so Today, the stylist, and the travel planner can all
   save into the one Saved Looks collection with the right label.

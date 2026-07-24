@@ -2535,6 +2535,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const [pickSource, setPickSource] = useState("looks"); // "looks" | "trip" — picker source
   const [pickTripId, setPickTripId] = useState(null); // which other trip to copy outfits from
   const [confirmDel, setConfirmDel] = useState(null); // id of a trip pending delete confirmation
+  const [packView, setPackView] = useState("checklist"); // packing overview: "checklist" | "photos"
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
 
@@ -2892,14 +2893,20 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
             <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
           ))}
 
-          {/* Packing checklist — names only, tick as you pack, exportable */}
+          {/* Packing list — toggle between a name-only checklist and a photo grid.
+             Both mark what's packed and tick/untick on tap. Exportable as text. */}
           <div style={{ marginTop: 20, borderTop: `1px solid ${S.aubergine}18`, paddingTop: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
               <div>
-                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay }}>Packing checklist</div>
-                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 2 }}>Tick each piece as it goes in the case.</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay }}>Packing list</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 2 }}>Tap a piece as it goes in the case.</div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "inline-flex", border: `1px solid ${S.aubergine}33`, borderRadius: 20, overflow: "hidden" }}>
+                  {[["checklist", "Checklist"], ["photos", "Photos"]].map(([v, label]) => (
+                    <button key={v} onClick={() => setPackView(v)} style={{ background: packView === v ? S.aubergine : "#fff", color: packView === v ? S.blush : S.ink, border: "none", cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12, padding: "6px 12px" }}>{label}</button>
+                  ))}
+                </div>
                 <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={downloadPacking}>⤓ Download list</button>
                 <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={copyPacking}>{copied ? "Copied ✓" : "Copy"}</button>
               </div>
@@ -2909,17 +2916,39 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
               if (!ps.length) return null;
               return (
                 <div key={g} style={{ marginBottom: 14 }}>
-                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 4 }}>{g} ({ps.length})</div>
-                  {ps.map(p => {
-                    const on = !!packed[p.id];
-                    return (
-                      <button key={p.id} onClick={() => togglePacked(p.id)} aria-pressed={on}
-                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "7px 2px", borderBottom: `1px solid ${S.aubergine}10` }}>
-                        <span style={{ width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${on ? S.aubergine : S.aubergine + "55"}`, background: on ? S.aubergine : "#fff", color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1, flex: "0 0 auto" }}>{on ? "✓" : ""}</span>
-                        <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 14, color: on ? "#a58a94" : S.ink, textDecoration: on ? "line-through" : "none" }}>{p.name}</span>
-                      </button>
-                    );
-                  })}
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: packView === "photos" ? 8 : 4 }}>{g} ({ps.length})</div>
+                  {packView === "checklist" ? (
+                    ps.map(p => {
+                      const on = !!packed[p.id];
+                      return (
+                        <button key={p.id} onClick={() => togglePacked(p.id)} aria-pressed={on}
+                          style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "7px 2px", borderBottom: `1px solid ${S.aubergine}10` }}>
+                          <span style={{ width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${on ? S.aubergine : S.aubergine + "55"}`, background: on ? S.aubergine : "#fff", color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1, flex: "0 0 auto" }}>{on ? "✓" : ""}</span>
+                          <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 14, color: on ? "#a58a94" : S.ink, textDecoration: on ? "line-through" : "none" }}>{p.name}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 10 }}>
+                      {ps.map(p => {
+                        const on = !!packed[p.id];
+                        return (
+                          <button key={p.id} onClick={() => togglePacked(p.id)} aria-pressed={on} title={`${p.name}${on ? " — packed" : ""}`}
+                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "center" }}>
+                            <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden", position: "relative", opacity: on ? 0.5 : 1 }}>
+                              <Thumb src={p.img} alt={p.name} />
+                              {on && (
+                                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#00000026" }}>
+                                  <span style={{ background: S.aubergine, color: S.blush, width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1 }}>✓</span>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: on ? "line-through" : "none" }}>{p.name}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
