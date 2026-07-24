@@ -2261,6 +2261,14 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
       "Do NOT check any other stores. For each one, tell me whether there's a sale on, what's discounted, and include a link. If a store has nothing on, say so briefly.",
       { recordSale: true });
   };
+  // One-tap sale check for a single store (from its card).
+  const checkStoreSales = (b) => {
+    if (busy) return;
+    ask(
+      `Check ONLY this store for any sales, discounts, or promotions happening right now: ${b.name}${b.url ? ` (${b.url})` : ""}. ` +
+      "Do NOT check any other stores. Tell me whether there's a sale on, what's discounted, and include a link. If there's nothing on, say so briefly.",
+      { recordSale: true });
+  };
   const discoverBrands = () => ask(
     "Search the web for a few brands or shops I don't already have saved that fit my taste and closet. " +
     "Give each as a 'Brand:' line so I can save it, with a short reason it suits me.");
@@ -2342,6 +2350,7 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
                 <div style={{ fontSize: 15, paddingRight: 20 }}>{b.name}</div>
                 {b.url && <a href={/^https?:\/\//i.test(b.url) ? b.url : "https://" + b.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: S.clay, wordBreak: "break-word" }}>{brandNorm(b.url)}</a>}
                 {b.note && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 4 }}>{b.note}</div>}
+                <button className="btn btn-ghost" style={{ marginTop: 8, padding: "5px 10px", fontSize: 11 }} onClick={() => checkStoreSales(b)} disabled={busy} title={`Check ${b.name} for sales now`}>🏷️ Check sales</button>
                 <button onClick={() => removeBrand(b.id)} title="Remove" style={{ position: "absolute", top: 6, right: 6, border: "none", background: "transparent", color: "#8a6a76", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>×</button>
               </div>
             ))}
