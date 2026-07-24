@@ -2346,11 +2346,12 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
         {brands.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10, marginTop: 16 }}>
             {brands.map(b => (
-              <div key={b.id} style={{ border: `1px solid ${S.aubergine}18`, borderRadius: 8, padding: "10px 12px", position: "relative" }}>
+              <div key={b.id} style={{ border: `1px solid ${S.aubergine}18`, borderRadius: 8, padding: "10px 12px", position: "relative", display: "flex", flexDirection: "column" }}>
                 <div style={{ fontSize: 15, paddingRight: 20 }}>{b.name}</div>
                 {b.url && <a href={/^https?:\/\//i.test(b.url) ? b.url : "https://" + b.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: S.clay, wordBreak: "break-word" }}>{brandNorm(b.url)}</a>}
                 {b.note && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 4 }}>{b.note}</div>}
-                <button className="btn btn-ghost" style={{ marginTop: 8, padding: "5px 10px", fontSize: 11 }} onClick={() => checkStoreSales(b)} disabled={busy} title={`Check ${b.name} for sales now`}>🏷️ Check sales</button>
+                <div style={{ flex: 1, minHeight: 10 }} />
+                <button className="btn btn-ghost" style={{ padding: "5px 10px", fontSize: 11, alignSelf: "flex-start" }} onClick={() => checkStoreSales(b)} disabled={busy} title={`Check ${b.name} for sales now`}>🏷️ Check sales</button>
                 <button onClick={() => removeBrand(b.id)} title="Remove" style={{ position: "absolute", top: 6, right: 6, border: "none", background: "transparent", color: "#8a6a76", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>×</button>
               </div>
             ))}
