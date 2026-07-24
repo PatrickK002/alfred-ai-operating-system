@@ -76,6 +76,29 @@ vite.config.js      dev server + /api proxy
 .env.example        where your API key goes
 ```
 
+## Architecture
+
+A high-level tour of how the app is built and why.
+
+**Shape**
+- **Front end:** one React component tree in `src/App.jsx` (kept single-file on purpose — easy to read and reason about), built by Vite to a static `dist/`.
+- **Back end:** a zero-dependency Node server (`server/index.js`, built-in `http`/`fs`/`fetch` only) that serves the built app *and* proxies every AI call so the Anthropic API key never reaches the browser.
+- **AI endpoints:** `/api/tag` (auto-tag a piece), `/api/brand` (read a brand from a photo), `/api/palette` (colour/vibe of a My Style outfit), `/api/chat` (the stylist + AI-looks carousel), `/api/shop` (personal shopper, with live web search). All degrade gracefully to a 503 the app handles.
+
+**Two styling engines**
+- **Rule engine** (`composeOutfit`/`recommendOutfits`) — a pure, deterministic function: filters by occasion + weather-appropriate warmth, builds a coherent silhouette, keeps one statement piece, avoids colour clashes, and biases toward learned taste. Free, instant, works offline.
+- **AI engine** (`/api/chat`) — the conversational stylist and the ✨ AI-looks carousel, which reason over the closet, weather, taste signals and My Style photos. The closet is sent as a `cache_control` block for cheap repeat calls; any failure falls back to the rule engine.
+
+**Learning the user**
+- Signals: **saved looks** (favour), **removed** pieces (avoid), **disliked** combos (never repeat), and **My Style** photos (worn + liked) turned into a colour/vibe taste that biases the rule engine and is shown to the AI engines (as text and, for the chat/carousel, as images).
+
+**Data & persistence**
+- Local-first in **IndexedDB** (a tiny `kv` store), auto-migrating from legacy `localStorage`; everything saves/loads automatically. Saved looks and trip outfits are self-contained **snapshots** so they survive edits/deletes of the underlying pieces.
+- **Resilience:** a **save-guard** refuses to overwrite good stored data with an empty/photo-stripped version, and a **backup reminder** nudges an off-device JSON backup (the only thing that survives an iOS storage reset).
+
+**How it was built**
+- Feature-by-feature, each shipped as a small self-contained change: implement → **headless Playwright test** against a production preview build → commit on a fresh branch from `main` → PR → squash-merge → auto-deploy on Render.
+
 ## Build for production
 
 ```bash
