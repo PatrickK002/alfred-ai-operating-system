@@ -436,6 +436,22 @@ const INSPO_KEY = "wardrobe_inspo_v1";   // outfits the user has worn ("My Style
 const LIKED_KEY = "wardrobe_liked_v1";   // outfits the user likes / aspires to (inspiration)
 const DISLIKED_KEY = "wardrobe_disliked_v1"; // outfit combinations the stylist must never suggest again
 const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for the personal shopper)
+
+// ---- Saved brands / shops de-duplication ----
+// Two saved stores are "the same" when their names match (case-insensitive) OR their
+// URLs match once normalised (scheme/www/trailing-slash stripped). dedupeBrands keeps
+// the FIRST occurrence, so the stored list never holds a store or URL twice.
+const brandNameKey = (b) => (b?.name || "").trim().toLowerCase();
+const brandUrlKey = (b) => (b?.url || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+function sameBrand(a, b) {
+  const ua = brandUrlKey(a), ub = brandUrlKey(b), na = brandNameKey(a), nb = brandNameKey(b);
+  return (!!ua && ua === ub) || (!!na && na === nb);
+}
+function dedupeBrands(list) {
+  const out = [];
+  for (const b of (list || [])) if (!out.some(x => sameBrand(x, b))) out.push(b);
+  return out;
+}
 const TRIPS_KEY = "wardrobe_trips_v1"; // planned holidays (Travel page)
 const PREFS_KEY = "wardrobe_prefs_v1"; // learned style signals (e.g. pieces the user removes)
 const MEMORY_KEY = "wardrobe_memory_v1"; // what the stylist remembers across conversations
@@ -650,7 +666,7 @@ export default function App() {
         idbGet("location").catch(() => null), idbGet("prefs").catch(() => null), idbGet("memory").catch(() => null),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(br); setTrips(tr); setReady(true);
+      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(dedupeBrands(br)); setTrips(tr); setReady(true);
       if (pf && typeof pf === "object") setPrefs({ removed: pf.removed || {} });
       if (me && typeof me === "object") setMemory({ notes: Array.isArray(me.notes) ? me.notes : [], styles: Array.isArray(me.styles) ? me.styles : [] });
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
@@ -727,12 +743,11 @@ export default function App() {
     let url = (b.url || "").trim();
     if (!name && !url) return false;
     if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
-    const norm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-    const dup = brands.some(x =>
-      (url && norm(x.url) === norm(url)) ||
-      (name && (x.name || "").toLowerCase() === name.toLowerCase()));
-    if (dup) { flash("That store is already saved"); return false; }
-    setBrands(prev => [{ id: crypto.randomUUID(), name: name || url, url, note: (b.note || "").trim() }, ...prev]);
+    const entry = { id: crypto.randomUUID(), name: name || url, url, note: (b.note || "").trim() };
+    if (brands.some(x => sameBrand(x, entry))) { flash("That store is already saved"); return false; }
+    // Guard against duplicates inside the state updater too, so rapid or overlapping
+    // adds can't slip the same store/URL in twice (the closure check above can be stale).
+    setBrands(prev => prev.some(x => sameBrand(x, entry)) ? prev : [entry, ...prev]);
     return true;
   }
   function removeBrand(id) { setBrands(prev => prev.filter(b => b.id !== id)); }
@@ -765,7 +780,7 @@ export default function App() {
       if (Array.isArray(data.inspo)) setInspo(data.inspo);
       if (Array.isArray(data.liked)) setLiked(data.liked);
       if (Array.isArray(data.disliked)) setDisliked(data.disliked);
-      if (Array.isArray(data.brands)) setBrands(data.brands);
+      if (Array.isArray(data.brands)) setBrands(dedupeBrands(data.brands));
       if (Array.isArray(data.trips)) setTrips(data.trips);
       if (data.prefs && typeof data.prefs === "object") setPrefs({ removed: data.prefs.removed || {} });
       if (data.memory && typeof data.memory === "object") setMemory({ notes: data.memory.notes || [], styles: data.memory.styles || [] });
@@ -981,22 +996,18 @@ export default function App() {
   // Auto-save any brands the auto-tagger spotted in the photos to Saved Shops.
   // Dedupes against existing brands and within the batch; silent when nothing new.
   function autoSaveBrands(found) {
-    const norm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-    const existing = new Set();
-    brands.forEach(x => { existing.add((x.name || "").toLowerCase()); const u = norm(x.url); if (u) existing.add(u); });
     const toAdd = [];
-    const seen = new Set();
     for (const b of found) {
       const name = (b.name || "").trim();
       if (!name) continue;
       let url = (b.url || "").trim();
       if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
-      const nkey = name.toLowerCase(), ukey = norm(url);
-      if (existing.has(nkey) || (ukey && existing.has(ukey)) || seen.has(nkey)) continue;
-      seen.add(nkey);
-      toAdd.push({ id: crypto.randomUUID(), name, url, note: "Spotted in your closet" });
+      const entry = { id: crypto.randomUUID(), name, url, note: "Spotted in your closet" };
+      // Skip anything already saved or already queued in this batch (name OR URL).
+      if (brands.some(x => sameBrand(x, entry)) || toAdd.some(x => sameBrand(x, entry))) continue;
+      toAdd.push(entry);
     }
-    if (toAdd.length) setBrands(prev => [...toAdd, ...prev]);
+    if (toAdd.length) setBrands(prev => dedupeBrands([...toAdd, ...prev]));
     return toAdd.length;
   }
   // A piece is scannable for brands if it has a photo, no brand yet, and hasn't been
@@ -2175,9 +2186,7 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
 
   const saleStale = !news || (Date.now() - Date.parse(news.at || 0)) > SALE_STALE_MS;
   const brandNorm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
-  const isSaved = (b) => brands.some(x =>
-    (b.url && brandNorm(x.url) === brandNorm(b.url)) ||
-    (b.name && (x.name || "").toLowerCase() === b.name.toLowerCase()));
+  const isSaved = (b) => brands.some(x => sameBrand(x, b));
 
   function systemPrompt() {
     const closet = items.length
