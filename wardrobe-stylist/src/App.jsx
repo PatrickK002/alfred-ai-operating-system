@@ -1698,7 +1698,10 @@ function Stylist({ items, weather, occasion, outfit, inspo, liked, setView, onSa
     idbSet("stylistchat", { step, style, piecesUsed, chat }).catch(() => {});
   }, [step, style, piecesUsed, chat, restored]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
+  // Pin the message list to the latest reply by scrolling ONLY the chat's own box.
+  // (scrollIntoView scrolls the window too on iOS Safari, which yanked the page down
+  // and pushed the header/weather off the top when a saved conversation was restored.)
+  useEffect(() => { const box = endRef.current?.parentElement; if (box) box.scrollTop = box.scrollHeight; }, [chat, busy]);
 
   function systemPrompt(chosenStyle, piecesTextValue) {
     const closet = items.length
@@ -2191,7 +2194,10 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
   const endRef = useRef(null);
 
   useEffect(() => { idbGet("shopnews").then(v => { if (v && v.text) setNews(v); }).catch(() => {}); }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest" }); }, [chat, busy]);
+  // Pin the message list to the latest reply by scrolling ONLY the chat's own box.
+  // (scrollIntoView scrolls the window too on iOS Safari, which yanked the page down
+  // and pushed the header/weather off the top when a saved conversation was restored.)
+  useEffect(() => { const box = endRef.current?.parentElement; if (box) box.scrollTop = box.scrollHeight; }, [chat, busy]);
 
   const saleStale = !news || (Date.now() - Date.parse(news.at || 0)) > SALE_STALE_MS;
   const brandNorm = (u) => (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
