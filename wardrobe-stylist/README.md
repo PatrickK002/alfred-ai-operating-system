@@ -62,6 +62,7 @@ The proxy (`server/index.js`) holds your key so it never reaches the browser. If
 
 - Your wardrobe (pieces, saved looks, and My Style photos) is stored on your device in **IndexedDB** — it saves and loads automatically, and is large and durable enough for photos. (Older versions used `localStorage`; that data is migrated in automatically.)
 - Data is kept per browser/app and does not sync to the cloud. On iOS, a site opened in Safari and the same site added to the Home Screen can keep **separate** storage — for the most reliable experience, use one of them consistently (the Home Screen app is recommended).
+- **iOS can clear local storage** (under storage pressure or long inactivity), which can wipe your photos even though they're stored durably. Two safeguards guard against this: a **backup reminder** appears when it's been over a week (or you've never backed up), and a **save-guard** refuses to overwrite your stored pieces with an empty or photo-stripped version — so a transient glitch can't quietly erase your photos. **Keep an off-device backup** (Files/iCloud) — it's the only thing that survives an iOS storage reset.
 - **Backup:** the Closet tab has *Download backup* / *Restore backup* — a single JSON file you can keep as a safety copy or use to move your wardrobe to another device or link.
 
 ## Project layout

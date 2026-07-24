@@ -522,6 +522,31 @@ async function saveStore(idbKey, lsKey, value) {
   }
 }
 
+// A piece counts as "having a photo" when its img is a data URL.
+const hasImg = (i) => typeof i?.img === "string" && i.img.startsWith("data:");
+// Guarded save for the closet: re-reads what's currently stored and REFUSES to overwrite
+// it if the incoming list would wipe the closet or strip its photos while keeping roughly
+// the same number of pieces. This blocks the catastrophic case where a transient empty/
+// degraded read makes the app re-save blank data over good data (how photos were lost).
+async function saveItemsGuarded(items) {
+  try {
+    const prev = await idbGet("items").catch(() => null);
+    if (Array.isArray(prev) && prev.length) {
+      const prevImgs = prev.filter(hasImg).length;
+      const nextImgs = (items || []).filter(hasImg).length;
+      const emptying = (!items || items.length === 0);                 // everything about to vanish
+      const losingPhotos = prevImgs >= 3 && nextImgs < prevImgs / 2      // most photos gone…
+        && (items?.length || 0) >= prev.length * 0.7;                    // …but piece count barely changed
+      if (prevImgs >= 1 && (emptying || losingPhotos)) {
+        console.warn(`saveItemsGuarded: blocked overwrite of ${prev.length} pieces / ${prevImgs} photos with ${items?.length ?? 0} / ${nextImgs}`);
+        return { blocked: true };
+      }
+    }
+  } catch {}
+  await saveStore("items", KEY, items);
+  return { blocked: false };
+}
+
 // ---------- Image helpers ----------
 function readFileAsDataURL(file) {
   return new Promise((res, rej) => {
@@ -652,6 +677,8 @@ export default function App() {
   const [recs, setRecs] = useState([]); // carousel of recommended looks
   const [recsSource, setRecsSource] = useState("rule"); // "rule" | "ai" — which engine built the current carousel
   const [lastEngine, setLastEngine] = useState("rule"); // remembered preferred engine for the one-tap "Today's outfit"
+  const [lastBackupAt, setLastBackupAt] = useState(0); // epoch ms of the last backup download (0 = never)
+  const [backupNudgeHidden, setBackupNudgeHidden] = useState(false); // dismissed this session
   const [aiBusy, setAiBusy] = useState(false); // an AI-looks request is in flight
   const [swapping, setSwapping] = useState(null); // "recIndex:pieceId" being AI-swapped
   const [queue, setQueue] = useState([]); // pending uploads awaiting tags
@@ -685,13 +712,17 @@ export default function App() {
       if (st && typeof st === "object") {
         if (st.occasion && FORMALITY.includes(st.occasion)) setOccasion(st.occasion);
         if (st.lastEngine === "ai" || st.lastEngine === "rule") setLastEngine(st.lastEngine);
+        if (typeof st.lastBackupAt === "number") setLastBackupAt(st.lastBackupAt);
       }
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
       try { navigator.storage?.persist?.(); } catch {} // ask iOS not to evict our data
     })();
     return () => { alive = false; };
   }, []);
-  useEffect(() => { if (ready) saveStore("items", KEY, items); }, [items, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    saveItemsGuarded(items).then(r => { if (r?.blocked) flash("⚠︎ Protected your saved photos — please reopen the app to reload them"); });
+  }, [items, ready]);
   useEffect(() => { if (ready) saveStore("looks", LOOKS_KEY, looks); }, [looks, ready]);
   useEffect(() => { if (ready) saveStore("inspo", INSPO_KEY, inspo); }, [inspo, ready]);
   useEffect(() => { if (ready) saveStore("liked", LIKED_KEY, liked); }, [liked, ready]);
@@ -699,7 +730,7 @@ export default function App() {
   useEffect(() => { if (ready) saveStore("brands", BRANDS_KEY, brands); }, [brands, ready]);
   useEffect(() => { if (ready) saveStore("trips", TRIPS_KEY, trips); }, [trips, ready]);
   // Remember the occasion + preferred engine so the app opens where you left off.
-  useEffect(() => { if (ready) idbSet("settings", { occasion, lastEngine }).catch(() => {}); }, [occasion, lastEngine, ready]);
+  useEffect(() => { if (ready) idbSet("settings", { occasion, lastEngine, lastBackupAt }).catch(() => {}); }, [occasion, lastEngine, lastBackupAt, ready]);
 
   // ----- Trips (Travel page) -----
   function saveTrip(trip) {
@@ -789,6 +820,8 @@ export default function App() {
       a.href = url; a.download = "wardrobe-backup.json";
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setLastBackupAt(new Date().getTime()); // remember so the backup reminder resets
+      setBackupNudgeHidden(true);
     } catch (e) { alert("Couldn't create the backup file."); }
   }
   async function importData(file) {
@@ -1293,6 +1326,25 @@ export default function App() {
       </header>
 
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "26px 20px 60px" }}>
+        {(() => {
+          const photoCount = items.filter(hasImg).length;
+          const days = lastBackupAt ? (new Date().getTime() - lastBackupAt) / 86400000 : Infinity;
+          if (!ready || backupNudgeHidden || photoCount < 1 || days <= 7) return null;
+          return (
+            <div style={{ background: "#fff", border: `1px solid ${S.gold}`, borderLeft: `4px solid ${S.gold}`, borderRadius: 8, padding: "14px 16px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, marginBottom: 2 }}>Back up your wardrobe</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#7a5a66" }}>
+                  Your {photoCount} photo{photoCount === 1 ? "" : "s"} live only on this device — iPad can clear them without warning. {lastBackupAt ? "It's been over a week since your last backup." : "You haven't backed up yet."} Save a copy to Files or iCloud.
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-primary" onClick={exportData}>Download backup</button>
+                <button className="btn btn-ghost" onClick={() => setBackupNudgeHidden(true)}>Later</button>
+              </div>
+            </div>
+          );
+        })()}
         {view === "today" && (
           <Today weather={weather} weatherErr={weatherErr} loadingW={loadingW} styleWeather={styleWeather}
             tempOverride={tempOverride} setTempOverride={setTempOverride}
