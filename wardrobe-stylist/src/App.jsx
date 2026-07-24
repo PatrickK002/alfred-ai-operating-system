@@ -392,46 +392,28 @@ function packGroup(cat) {
   for (const [g, cats] of Object.entries(PACK_GROUPS)) if (cats.includes(cat)) return g;
   return "Accessories";
 }
-// The four day-parts a trip plans for, each with the occasions it prefers.
-const TRIP_SLOTS = [
-  { slot: "Day", label: "Explore & sightseeing", occ: ["Casual", "Work", "Going out"] },
-  { slot: "Afternoon", label: "Afternoon out", occ: ["Casual", "Going out", "Work"] },
-  { slot: "Evening", label: "Dinner", occ: ["Going out", "Work", "Casual"] },
-  { slot: "Night", label: "Drinks", occ: ["Going out", "Casual", "Work"] },
-];
+// You add outfits to each day of a trip from your Saved Looks and tag each one.
+const TRAVEL_TAGS = ["Day look", "Night look", "Other"];
 function snapshotPiece(p) { return { id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img }; }
-// Compose an outfit for a slot, trying its preferred occasions until one lands.
-function composeForSlot(items, weather, occasions) {
-  for (const occ of occasions) {
-    const o = composeOutfit(items, weather, occ);
-    if (o.pieces.length) return { occasion: occ, pieces: o.pieces };
-  }
-  return { occasion: occasions[0], pieces: [] };
-}
 // The list of dates (inclusive) a trip covers, capped for sanity.
 function tripDays(start, end) {
   const s = new Date(start + "T00:00:00"), e = new Date(end + "T00:00:00");
   if (isNaN(s) || isNaN(e) || e < s) return [];
   const out = [];
-  for (let t = new Date(s); t <= e && out.length < 21; t.setDate(t.getDate() + 1)) out.push(new Date(t));
+  for (let t = new Date(s); t <= e && out.length < 30; t.setDate(t.getDate() + 1)) out.push(new Date(t));
   return out;
 }
-// Build a full per-day, per-slot outfit plan from the closet (snapshots pieces).
-function generateTripPlan(items, trip) {
-  const days = tripDays(trip.start, trip.end);
-  const w = { temp: Number(trip.temp) || 24, code: 0, wind: 5 };
-  return days.map(d => ({
-    date: d.toISOString().slice(0, 10),
-    slots: TRIP_SLOTS.map(sd => {
-      const o = composeForSlot(items, w, sd.occ);
-      return { slot: sd.slot, label: sd.label, occasion: o.occasion, pieces: o.pieces.map(snapshotPiece) };
-    }),
-  }));
+// A trip's plan is an object keyed by date ISO → array of outfit entries the user
+// added (each { id, lookId, tag, occasion, pieces:[snapshot] }). Old auto-generated
+// plans were stored as an array; treat those (and missing plans) as an empty plan.
+function tripPlan(trip) {
+  return trip && trip.plan && !Array.isArray(trip.plan) ? trip.plan : {};
 }
-// Unique pieces used across a plan, grouped for the packing overview.
-function packingSummary(plan) {
+// Unique pieces across every outfit added to the trip, grouped for packing.
+function travelPacking(trip) {
+  const plan = tripPlan(trip);
   const byId = new Map();
-  for (const day of plan) for (const slot of day.slots) for (const p of slot.pieces) byId.set(p.id, p);
+  for (const date of Object.keys(plan)) for (const e of (plan[date] || [])) for (const p of (e.pieces || [])) byId.set(p.id, p);
   const pieces = [...byId.values()];
   const groups = { Clothing: 0, Shoes: 0, Accessories: 0 };
   for (const p of pieces) groups[packGroup(p.category)]++;
@@ -2543,13 +2525,13 @@ function Insights({ items, inspo, liked, looks, setView }) {
 
 // ---------- Travel / holiday planner ----------
 const VIBES = ["Relaxed", "Smart casual", "Dressy", "Mixed"];
-const SLOT_ICON = { Day: "☀️", Afternoon: "⛅", Evening: "🍷", Night: "🌙" };
 
 function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLook, looks }) {
   const [activeId, setActiveId] = useState(trips[0]?.id || null);
   const [editing, setEditing] = useState(!trips.length);
   const [dayIdx, setDayIdx] = useState(0);
   const [showPack, setShowPack] = useState(false);
+  const [picking, setPicking] = useState(false); // saved-looks picker open for the active day
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
 
@@ -2558,29 +2540,24 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   function startNew() { setForm(blank); setActiveId(null); setEditing(true); }
   function startEdit() {
     if (!active) return;
-    setForm({ destination: active.destination, start: active.start, end: active.end, temp: active.temp, vibe: active.vibe, notes: active.notes || "" });
+    setForm({ destination: active.destination, start: active.start, end: active.end, temp: active.temp ?? 24, vibe: active.vibe || "Relaxed", notes: active.notes || "" });
     setEditing(true);
   }
   function build() {
-    // Editing the active trip keeps its id; otherwise it's a new trip.
-    const tripId = (active && activeId === active.id) ? active.id : crypto.randomUUID();
+    // Editing the active trip keeps its id (and any outfits already planned).
+    const isEdit = active && activeId === active.id;
+    const tripId = isEdit ? active.id : crypto.randomUUID();
     const trip = {
       id: tripId,
       destination: form.destination.trim() || "My trip",
       start: form.start, end: form.end, temp: Number(form.temp) || 24, vibe: form.vibe, notes: form.notes.trim(),
-      createdAt: new Date().toISOString(),
+      createdAt: (isEdit && active.createdAt) || new Date().toISOString(),
+      plan: isEdit ? tripPlan(active) : {}, // keep outfits already added when editing details
     };
-    trip.plan = generateTripPlan(items, trip);
     saveTrip(trip);
     setActiveId(trip.id);
     setEditing(false);
     setDayIdx(0);
-  }
-  function regenerate() {
-    if (!active) return;
-    const trip = { ...active, plan: generateTripPlan(items, active) };
-    saveTrip(trip);
-    setDayIdx(d => Math.min(d, Math.max(0, trip.plan.length - 1)));
   }
 
   const canBuild = form.destination.trim() && form.start && form.end && tripDays(form.start, form.end).length > 0;
@@ -2592,7 +2569,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h2 style={{ fontWeight: 400, fontSize: 26, margin: 0 }}>Holiday</h2>
-            <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>AI-built outfits and packing for your trip, from your own closet.</p>
+            <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>Plan your own outfits for each day of the trip from your saved looks.</p>
           </div>
           {trips.length > 0 && <button className="btn btn-ghost" onClick={() => setEditing(false)}>Back to trip</button>}
         </div>
@@ -2610,9 +2587,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
           </div>
           <FieldLabel>Notes (optional)</FieldLabel>
           <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Coastal town, fine dining, beach clubs…" style={{ width: "100%", resize: "vertical", marginBottom: 14 }} />
-          {!items.length
-            ? <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a4a3a" }}>Add some pieces to your closet first — the planner builds outfits from what you own.</div>
-            : <button className="btn btn-primary" onClick={build} disabled={!canBuild}>Build my trip</button>}
+          <button className="btn btn-primary" onClick={build} disabled={!canBuild}>{active && activeId === active.id ? "Save details" : "Start planning"}</button>
           {form.start && form.end && !tripDays(form.start, form.end).length && (
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a4a3a", marginTop: 10 }}>Check the dates — the end date should be on or after the start.</div>
           )}
@@ -2621,21 +2596,26 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
     );
   }
 
-  // ----- Trip dashboard -----
-  const days = active.plan || [];
-  const day = days[Math.min(dayIdx, days.length - 1)] || days[0];
-  const pack = packingSummary(days);
-  const vibeText = active.vibe;
-  const summaryBullets = [
-    `${TRIP_SLOTS.length} outfits planned per day`,
-    `${days.length * TRIP_SLOTS.length} outfits across ${days.length} day${days.length > 1 ? "s" : ""}`,
-    `${pack.total} pieces from your closet`,
-    `Day, afternoon, evening & night covered`,
-    `${vibeText} — smart-casual to dressy`,
-  ];
+  // ----- Trip planner -----
+  const dates = tripDays(active.start, active.end).map(d => d.toISOString().slice(0, 10));
+  const plan = tripPlan(active);
+  const dateISO = dates[Math.min(dayIdx, dates.length - 1)] || dates[0];
+  const dayEntries = plan[dateISO] || [];
+  const pack = travelPacking(active);
+  const totalOutfits = dates.reduce((n, d) => n + (plan[d]?.length || 0), 0);
+  const daysCovered = dates.filter(d => (plan[d]?.length || 0) > 0).length;
 
+  const commitPlan = (nextPlan) => saveTrip({ ...active, plan: nextPlan });
+  const addLook = (look) => {
+    const entry = { id: crypto.randomUUID(), lookId: look.id, tag: TRAVEL_TAGS[0], occasion: look.occasion || "", note: look.note || "", pieces: (look.pieces || []).map(snapshotPiece) };
+    commitPlan({ ...plan, [dateISO]: [...dayEntries, entry] });
+  };
+  const removeEntry = (entryId) => commitPlan({ ...plan, [dateISO]: dayEntries.filter(e => e.id !== entryId) });
+  const retag = (entryId, tag) => commitPlan({ ...plan, [dateISO]: dayEntries.map(e => e.id === entryId ? { ...e, tag } : e) });
+
+  const TAG_COLOR = { "Day look": S.gold, "Night look": S.aubergine, "Other": S.clay };
   const miniBoard = (pieces, key) => {
-    const cols = Math.min(3, Math.max(1, pieces.length));
+    const cols = Math.min(4, Math.max(1, pieces.length));
     return (
       <div key={key} style={{ display: "grid", gridTemplateColumns: `repeat(${cols},minmax(0,1fr))`, gap: 6 }}>
         {pieces.map(p => (
@@ -2649,22 +2629,13 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
     );
   };
 
-  // Save a holiday-plan outfit into Saved Looks (tagged with the trip + slot).
-  const savedKeys = new Set((looks || []).map(l => l.key));
-  const slotKey = (slot) => "ai|" + slot.occasion + "|" + slot.pieces.map(p => p.id).sort().join(",");
-  const saveSlot = (slot, di) => onSaveLook(slot.pieces, {
-    occasion: slot.occasion,
-    note: `${active.destination} · Day ${di + 1} · ${slot.slot}`,
-    weather: null,
-  });
-
   return (
     <div>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <h2 style={{ fontWeight: 400, fontSize: 26, margin: 0 }}>Holiday</h2>
-          <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>AI-built outfits and packing for your trip.</p>
+          <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "4px 0 0" }}>Add your saved looks to each day and tag them day, night or other.</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={startNew}>+ New trip</button>
@@ -2690,7 +2661,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
               {fmtDate(active.start, { day: "numeric", month: "short" })} – {fmtDate(active.end, { day: "numeric", month: "short", year: "numeric" })}
             </div>
             <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
-              <div><div style={{ fontSize: 22 }}>{days.length}</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Days</div></div>
+              <div><div style={{ fontSize: 22 }}>{dates.length}</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Days</div></div>
               <div><div style={{ fontSize: 22 }}>{active.temp}°C</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Typical</div></div>
               <div><div style={{ fontSize: 22 }}>{active.vibe}</div><div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>Vibe</div></div>
             </div>
@@ -2701,92 +2672,130 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
             </div>
           </div>
           <div style={{ flex: "0 1 250px", background: S.blushSoft, borderRadius: 10, padding: 16 }}>
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 10 }}>Trip summary</div>
-            {summaryBullets.map((b, i) => (
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 10 }}>Planning progress</div>
+            {[
+              `${totalOutfits} outfit${totalOutfits === 1 ? "" : "s"} planned`,
+              `${daysCovered} of ${dates.length} day${dates.length === 1 ? "" : "s"} covered`,
+              `${pack.total} piece${pack.total === 1 ? "" : "s"} to pack`,
+            ].map((b, i) => (
               <div key={i} style={{ display: "flex", gap: 8, fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, marginBottom: 7 }}>
                 <span style={{ color: S.gold }}>✓</span><span>{b}</span>
               </div>
             ))}
-            <button className="btn btn-primary" style={{ marginTop: 8, padding: "8px 13px" }} onClick={regenerate}>✦ Regenerate outfits</button>
+            {daysCovered < dates.length && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 4 }}>Tip: aim for 2–3 outfits a day.</div>}
           </div>
         </div>
       </div>
 
-      {/* Outfit plan */}
-      <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Outfit plan</h3>
+      {/* Day selector */}
+      <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Plan by day</h3>
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 18 }}>
-        {days.map((d, i) => (
-          <button key={d.date} onClick={() => setDayIdx(i)} className="card"
-            style={{ flex: "0 0 auto", cursor: "pointer", padding: "10px 16px", textAlign: "center", border: `1px solid ${i === dayIdx ? S.aubergine : S.aubergine + "22"}`, background: i === dayIdx ? S.aubergine : "#fff", color: i === dayIdx ? S.blush : S.ink }}>
-            <div style={{ fontSize: 14 }}>Day {i + 1}</div>
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, opacity: .8 }}>{fmtDate(d.date, { weekday: "short", day: "numeric", month: "short" })}</div>
-          </button>
-        ))}
+        {dates.map((d, i) => {
+          const n = plan[d]?.length || 0;
+          const on = i === dayIdx;
+          return (
+            <button key={d} onClick={() => setDayIdx(i)} className="card"
+              style={{ flex: "0 0 auto", cursor: "pointer", padding: "10px 16px", textAlign: "center", border: `1px solid ${on ? S.aubergine : S.aubergine + "22"}`, background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink }}>
+              <div style={{ fontSize: 14 }}>Day {i + 1}</div>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, opacity: .8 }}>{fmtDate(d, { weekday: "short", day: "numeric", month: "short" })}</div>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, marginTop: 3, color: on ? S.gold : (n ? S.clay : "#b9a3ad") }}>{n ? `${n} outfit${n > 1 ? "s" : ""}` : "empty"}</div>
+            </button>
+          );
+        })}
       </div>
 
-      {day && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 14, marginBottom: 28 }}>
-          {day.slots.map(s => {
-            const isSaved = savedKeys.has(slotKey(s));
-            return (
-            <div key={s.slot} className="card" style={{ padding: 14, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 2 }}>{SLOT_ICON[s.slot]} {s.slot}</div>
-              <div style={{ fontSize: 15, marginBottom: 10 }}>{s.label}</div>
-              {s.pieces.length
-                ? miniBoard(s.pieces, s.slot)
-                : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", padding: "18px 4px" }}>No match — add more {s.occasion.toLowerCase()} pieces.</div>}
-              {s.pieces.length > 0 && (
-                <>
-                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0" }}>{s.occasion}</div>
-                  <button className="btn btn-primary" style={{ marginTop: "auto", padding: "7px 12px" }} disabled={isSaved} onClick={() => saveSlot(s, dayIdx)}>
-                    {isSaved ? "Saved ✓" : "♥ Save look"}
-                  </button>
-                </>
-              )}
+      {/* Active day */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 18 }}>Day {Math.min(dayIdx, dates.length - 1) + 1} · {fmtDate(dateISO, { weekday: "long", day: "numeric", month: "long" })}</div>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76" }}>{dayEntries.length} outfit{dayEntries.length === 1 ? "" : "s"} · 2–3 suggested</div>
+        </div>
+        <button className="btn btn-primary" style={{ padding: "9px 15px" }} onClick={() => setPicking(true)}>+ Add outfit</button>
+      </div>
+
+      {!looks.length ? (
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66", background: S.blushSoft, borderRadius: 10, padding: "16px 18px", marginBottom: 28 }}>
+          You have no saved looks yet. Save some outfits from <button onClick={() => setView("today")} style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>Today's Look</button> or the stylist, then add them to your trip days here.
+        </div>
+      ) : dayEntries.length === 0 ? (
+        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66", background: S.blushSoft, borderRadius: 10, padding: "16px 18px", marginBottom: 28 }}>
+          No outfits for this day yet — tap <strong>+ Add outfit</strong> to pick from your saved looks.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 14, marginBottom: 28 }}>
+          {dayEntries.map(e => (
+            <div key={e.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", position: "relative" }}>
+              <button onClick={() => removeEntry(e.id)} title="Remove from this day" style={{ position: "absolute", top: 8, right: 8, border: "none", background: "#00000066", color: "#fff", width: 24, height: 24, borderRadius: "50%", cursor: "pointer", lineHeight: 1 }}>×</button>
+              {e.pieces?.length ? miniBoard(e.pieces, e.id) : <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", padding: "18px 4px" }}>This saved look has no pieces.</div>}
+              {e.occasion && <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginTop: 8 }}>{e.occasion}{e.note ? ` · ${e.note}` : ""}</div>}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                {TRAVEL_TAGS.map(t => {
+                  const on = e.tag === t;
+                  return (
+                    <button key={t} className="chip" aria-pressed={on} onClick={() => retag(e.id, t)}
+                      style={{ cursor: "pointer", background: on ? TAG_COLOR[t] : "#fff", color: on ? (t === "Day look" ? S.ink : S.blush) : S.ink, borderColor: on ? TAG_COLOR[t] : undefined }}>
+                      {on ? "✓ " : ""}{t}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            );
-          })}
+          ))}
+        </div>
+      )}
+
+      {/* Saved-looks picker */}
+      {picking && (
+        <div onClick={() => setPicking(false)} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 56, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+          <div onClick={ev => ev.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(760px, 100%)", margin: "auto", boxShadow: "0 20px 60px #0007", overflow: "hidden" }}>
+            <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontSize: 18 }}>Add a saved look to Day {Math.min(dayIdx, dates.length - 1) + 1}</div>
+              <button onClick={() => setPicking(false)} title="Done" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: 18 }}>
+              {!looks.length ? (
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66" }}>You have no saved looks yet. Save some outfits first, then come back to add them.</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
+                  {looks.map(l => (
+                    <div key={l.id} className="card" style={{ padding: 12 }}>
+                      {miniBoard(l.pieces || [], "pick-" + l.id)}
+                      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0 6px" }}>{l.occasion || "Look"}{l.season ? ` · ${l.season}` : ""}</div>
+                      <button className="btn btn-primary" style={{ padding: "6px 12px", width: "100%" }} onClick={() => addLook(l)}>+ Add</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 14 }}>Add as many as you like — you can reuse a look across days, then tag each one on the day.</div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Packing overview */}
-      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-          <h3 style={{ fontWeight: 400, fontSize: 20, margin: 0 }}>Packing overview</h3>
-          <div className="chip">{pack.total} items</div>
+      {pack.total > 0 && (
+        <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+            <h3 style={{ fontWeight: 400, fontSize: 20, margin: 0 }}>Packing overview</h3>
+            <div className="chip">{pack.total} items</div>
+          </div>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 12 }}>Every unique piece across the outfits you've planned.</div>
+          {["Clothing", "Shoes", "Accessories"].map(g => (
+            <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
+          ))}
+          <button className="btn btn-ghost" style={{ marginTop: 8, padding: "7px 13px" }} onClick={() => setShowPack(v => !v)}>{showPack ? "Hide packing list" : "View full packing list"}</button>
+          {showPack && (
+            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 10 }}>
+              {pack.pieces.map(p => (
+                <div key={p.id} title={p.name}>
+                  <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden" }}><Thumb src={p.img} alt={p.name} /></div>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {["Clothing", "Shoes", "Accessories"].map(g => (
-          <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
-        ))}
-        <button className="btn btn-ghost" style={{ marginTop: 8, padding: "7px 13px" }} onClick={() => setShowPack(v => !v)}>{showPack ? "Hide packing list" : "View full packing list"}</button>
-        {showPack && (
-          <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 10 }}>
-            {pack.pieces.map(p => (
-              <div key={p.id} title={p.name}>
-                <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden" }}><Thumb src={p.img} alt={p.name} /></div>
-                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Outfits at a glance */}
-      <h3 style={{ fontWeight: 400, fontSize: 20, margin: "0 0 14px" }}>Outfits at a glance</h3>
-      <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
-        {days.flatMap((d, di) => d.slots.filter(s => s.pieces.length).map((s, si) => {
-          const isSaved = savedKeys.has(slotKey(s));
-          return (
-          <div key={di + "-" + si} style={{ flex: "0 0 auto", width: 150, background: S.blushSoft, border: `1px solid ${S.aubergine}18`, borderRadius: 10, padding: 10 }}>
-            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginBottom: 6 }}>Day {di + 1} · {s.slot}</div>
-            {miniBoard(s.pieces, di + "-" + si)}
-            <button className="btn btn-ghost" style={{ marginTop: 8, padding: "5px 10px", width: "100%", fontSize: 11 }} disabled={isSaved} onClick={() => saveSlot(s, di)}>
-              {isSaved ? "Saved ✓" : "♥ Save"}
-            </button>
-          </div>
-          );
-        }))}
-      </div>
+      )}
     </div>
   );
 }

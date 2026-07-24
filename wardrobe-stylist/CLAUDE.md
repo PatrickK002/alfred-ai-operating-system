@@ -61,15 +61,20 @@ into modules is explicitly requested.
   `Meter` bars, a neutrals-vs-colour split, and a one-line summary. An optional
   "stylist's read" button posts to `/api/chat` for a written take (degrades without a
   key). All the visuals are deterministic and work offline.
-- **Travel** (`travel` view): plan a holiday. `trips` (key `wardrobe_trips_v1`, in
-  backup) each hold `{ destination, start, end, temp, vibe, notes, plan }`.
-  `generateTripPlan` builds a per-day, per-slot (Day/Afternoon/Evening/Night) outfit
-  plan from the closet via `composeForSlot` (snapshots pieces so it survives edits),
-  and `packingSummary` aggregates the unique pieces for the packing overview. The
-  dashboard mirrors the reference design: summary card, day tabs, slot cards, packing
-  bars, and "outfits at a glance". Each holiday outfit has a "♥ Save look" that goes
-  into Saved Looks via `onSaveLook` with a `note` ("Positano · Day 2 · Dinner") shown
-  on the saved-look card.
+- **Travel** (`travel` view): plan a holiday **manually from saved looks** (no
+  auto-generation). `trips` (key `wardrobe_trips_v1`, in backup) each hold
+  `{ destination, start, end, temp, vibe, notes, plan }`, where `plan` is an object
+  keyed by date-ISO → array of outfit entries `{ id, lookId, tag, occasion, note,
+  pieces:[snapshot] }`. The setup form keeps all trip fields; `tripDays(start,end)`
+  derives the day list. On the planner, a day selector shows each date with its outfit
+  count; the active day lists its entries (each a mini board + `TRAVEL_TAGS`
+  Day/Night/Other tag chips + remove), and "+ Add outfit" opens a modal picker of the
+  user's saved `looks` — tapping "+ Add" appends a snapshot entry to that day (reuse
+  across days allowed). `tripPlan(trip)` reads the plan (treating a legacy array plan
+  or missing plan as `{}`); `travelPacking(trip)` aggregates unique pieces across all
+  entries for the packing overview. All mutations go through `commitPlan` →
+  `saveTrip`. (Removed the old `generateTripPlan`/`composeForSlot`/`packingSummary`/
+  `TRIP_SLOTS`/`SLOT_ICON` auto-planner.)
 - **saveLookPieces(pieces, opts)**: the shared save-a-look helper takes optional
   `{ occasion, note, weather }` so Today, the stylist, and the travel planner can all
   save into the one Saved Looks collection with the right label.
