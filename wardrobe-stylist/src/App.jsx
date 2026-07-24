@@ -2916,10 +2916,15 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
             <h3 style={{ fontWeight: 400, fontSize: 20, margin: 0 }}>Packing overview</h3>
             <div className="chip">{packedCount}/{pack.total} packed</div>
           </div>
-          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 12 }}>Every unique piece across the outfits you've planned.</div>
-          {PACK_ORDER.map(g => (
-            <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
-          ))}
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 14 }}>Every unique piece across the outfits you've planned.</div>
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+            {PACK_ORDER.map(g => (
+              <div key={g}>
+                <div style={{ fontSize: 24, color: g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine }}>{pack.groups[g]}</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76" }}>{g}</div>
+              </div>
+            ))}
+          </div>
 
           {/* Packing list — toggle between a name-only checklist and a photo grid.
              Both mark what's packed and tick/untick on tap. Exportable as text. */}
