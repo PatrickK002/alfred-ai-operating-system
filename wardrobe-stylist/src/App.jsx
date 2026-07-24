@@ -3,13 +3,15 @@ import React, { useState, useEffect, useRef, useContext, createContext } from "r
 // ---------- Category system ----------
 const CATEGORIES = [
   "Tops", "Bottoms", "Dresses", "Jumpsuits", "Outerwear", "Shoes",
-  "Bags", "Belts", "Accessories",
-  "Necklaces", "Brooches", "Earrings", "Rings", "Bracelets",
+  "Bags", "Belts", "Accessories", "Jewellery",
 ];
 
 // Which categories are "core" garments vs accessories for outfit building
 const CORE = ["Tops", "Bottoms", "Dresses", "Jumpsuits", "Outerwear", "Shoes"];
-const JEWELRY = ["Necklaces", "Brooches", "Earrings", "Rings", "Bracelets"];
+const JEWELRY = ["Jewellery"];
+// Legacy jewellery categories now folded into "Jewellery"; migrated on load.
+const LEGACY_JEWELLERY = new Set(["Necklaces", "Brooches", "Earrings", "Rings", "Bracelets"]);
+const foldJewellery = (list) => (list || []).map(i => (i && LEGACY_JEWELLERY.has(i.category)) ? { ...i, category: "Jewellery" } : i);
 
 const WARMTH = ["Very light", "Light", "Medium", "Warm", "Very warm", "Not applicable"];
 const FORMALITY = ["Casual", "Work", "Going out"];
@@ -386,7 +388,7 @@ function parseMultiOutfits(text, items, occasion) {
 const PACK_GROUPS = {
   Clothing: ["Tops", "Bottoms", "Dresses", "Jumpsuits", "Outerwear"],
   Shoes: ["Shoes"],
-  Accessories: ["Bags", "Belts", "Accessories", "Necklaces", "Brooches", "Earrings", "Rings", "Bracelets"],
+  Accessories: ["Bags", "Belts", "Accessories", "Jewellery"],
 };
 function packGroup(cat) {
   for (const [g, cats] of Object.entries(PACK_GROUPS)) if (cats.includes(cat)) return g;
@@ -674,7 +676,7 @@ export default function App() {
         idbGet("location").catch(() => null), idbGet("prefs").catch(() => null), idbGet("memory").catch(() => null),
       ]);
       if (!alive) return;
-      setItems(it); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(dedupeBrands(br)); setTrips(tr); setReady(true);
+      setItems(foldJewellery(it)); setLooks(lk); setInspo(ip); setLiked(li); setDisliked(di); setBrands(dedupeBrands(br)); setTrips(tr); setReady(true);
       if (pf && typeof pf === "object") setPrefs({ removed: pf.removed || {} });
       if (me && typeof me === "object") setMemory({ notes: Array.isArray(me.notes) ? me.notes : [], styles: Array.isArray(me.styles) ? me.styles : [] });
       if (loc && loc.lat != null) { setLocation(loc); fetchWeather(loc); } // weather for the remembered place
@@ -783,7 +785,7 @@ export default function App() {
   async function importData(file) {
     try {
       const data = JSON.parse(await file.text());
-      if (Array.isArray(data.items)) setItems(data.items);
+      if (Array.isArray(data.items)) setItems(foldJewellery(data.items));
       if (Array.isArray(data.looks)) setLooks(data.looks);
       if (Array.isArray(data.inspo)) setInspo(data.inspo);
       if (Array.isArray(data.liked)) setLiked(data.liked);
