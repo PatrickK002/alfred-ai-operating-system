@@ -169,14 +169,12 @@ into modules is explicitly requested.
   to back-fill brands from pieces added before the feature.
 - **Saved brands de-dup**: the saved brands/shops list is kept unique. `sameBrand(a,b)`
   treats two stores as the same when names match (case-insensitive) OR `brandUrlKey`
-  matches. `brandUrlKey` reduces a URL to its registrable **domain** (drops
-  scheme/`www`/subdomain/path, via `registrableDomain` which handles `co.uk`-style
-  TLDs) — so `aritzia.com`, `www.aritzia.com/en` and `shop.aritzia.com/sale` collapse to
-  one — except for `MARKETPLACE_DOMAINS` (Etsy, Depop, eBay, Instagram, …) and
-  `*.myshopify.com`, where the seller's handle/shop path (or subdomain) is kept so
-  different sellers stay separate. `dedupeBrands(list)` collapses a list keeping the
+  matches. `brandUrlKey` reduces a URL to its **host only** — scheme, a leading `www`,
+  the path and any query/hash are dropped — so `aritzia.com`, `www.aritzia.com/en` and
+  `aritzia.com/sale` collapse to one, while a different host (`shop.aritzia.com`,
+  `us.aritzia.com`) stays separate. `dedupeBrands(list)` collapses a list keeping the
   first occurrence; it runs on load and import, and both `addBrand` and `autoSaveBrands`
-  guard inside the `setBrands` updater, so no store/domain is ever stored twice.
+  guard inside the `setBrands` updater, so no store/host is ever stored twice.
 - **Styling engine (two of them)**: the quick "Style me" carousel is the *rule-based*
   `composeOutfit()` — it filters by occasion + weather-appropriate warmth, builds a
   dress/jumpsuit or top+bottom silhouette, adds outerwear when cool/wet, then shoes and
