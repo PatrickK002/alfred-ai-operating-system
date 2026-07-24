@@ -2182,6 +2182,7 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
+  const [saleSel, setSaleSel] = useState(() => new Set()); // brand ids to check for sales; empty = all
   const [chat, setChat] = useState([]); // {role, content}
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2244,10 +2245,16 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
   const suggestPieces = () => ask(
     "Look at my closet and suggest 3–5 specific new pieces I should buy to fill gaps and get more outfits out of what I own. " +
     "Prefer my saved stores, name specific items with an approximate price, and include a link for each. Explain briefly how each works with pieces I already have.");
-  const findSales = () => ask(
-    "Check each of my saved stores for any sales, discounts, or promotions happening right now. " +
-    "For each store, tell me whether there's a sale on, what's discounted, and include a link. If a store has nothing on, say so briefly.",
-    { recordSale: true });
+  // Check sales for the selected stores (or all of them when none are picked).
+  const findSales = () => {
+    const chosen = saleSel.size ? brands.filter(b => saleSel.has(b.id)) : brands;
+    if (!chosen.length) return;
+    const list = chosen.map(b => `${b.name}${b.url ? ` (${b.url})` : ""}`).join("; ");
+    ask(
+      `Check ONLY these of my saved stores for any sales, discounts, or promotions happening right now: ${list}. ` +
+      "Do NOT check any other stores. For each one, tell me whether there's a sale on, what's discounted, and include a link. If a store has nothing on, say so briefly.",
+      { recordSale: true });
+  };
   const discoverBrands = () => ask(
     "Search the web for a few brands or shops I don't already have saved that fit my taste and closet. " +
     "Give each as a 'Brand:' line so I can save it, with a short reason it suits me.");
@@ -2348,8 +2355,29 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
             <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: S.clay, marginBottom: 2 }}>Sale watch</div>
             <div style={{ fontSize: 19 }}>Sales at your stores</div>
           </div>
-          <button className="btn btn-primary" onClick={findSales} disabled={busy || !brands.length}>Check for sales now</button>
+          <button className="btn btn-primary" onClick={findSales} disabled={busy || !brands.length}>
+            {saleSel.size ? `Check ${saleSel.size} selected` : "Check all stores"}
+          </button>
         </div>
+        {brands.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 6 }}>
+              Which stores? <span style={{ textTransform: "none", letterSpacing: 0 }}>{saleSel.size ? `${saleSel.size} selected` : "all stores"}</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="chip" style={{ cursor: "pointer", background: saleSel.size === 0 ? S.aubergine : "#fff", color: saleSel.size === 0 ? S.blush : S.ink }} onClick={() => setSaleSel(new Set())}>All stores</button>
+              {brands.map(b => {
+                const on = saleSel.has(b.id);
+                return (
+                  <button key={b.id} className="chip" aria-pressed={on} style={{ cursor: "pointer", background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink }}
+                    onClick={() => setSaleSel(prev => { const n = new Set(prev); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}>
+                    {on ? "✓ " : ""}{b.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {news && (
           <div style={{ marginTop: 14, background: S.blushSoft, borderLeft: `3px solid ${S.gold}`, padding: "12px 16px", fontFamily: "system-ui,sans-serif", fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
             <div style={{ fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>
