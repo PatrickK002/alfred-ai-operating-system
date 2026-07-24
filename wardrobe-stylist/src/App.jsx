@@ -2656,6 +2656,16 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   };
   const removeEntry = (entryId) => commitPlan({ ...plan, [dateISO]: dayEntries.filter(e => e.id !== entryId) });
   const retag = (entryId, tag) => commitPlan({ ...plan, [dateISO]: dayEntries.map(e => e.id === entryId ? { ...e, tag } : e) });
+  // Delete a trip (any trip, not just the active one) and land on a sensible next trip.
+  const removeTrip = (id) => {
+    const t = trips.find(x => x.id === id);
+    if (!confirm(`Delete “${t?.destination || "this trip"}”? This can't be undone.`)) return;
+    deleteTrip(id);
+    const rest = trips.filter(x => x.id !== id);
+    setActiveId(rest[0]?.id || null);
+    setDayIdx(0);
+    setEditing(!rest.length);
+  };
 
   const TAG_COLOR = { "Day look": S.gold, "Night look": S.aubergine, "Other": S.clay };
   const miniBoard = (pieces, key) => {
@@ -2686,13 +2696,19 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
         </div>
       </div>
 
-      {/* Trip switcher */}
+      {/* Trip switcher — tap to open, × to delete any trip */}
       {trips.length > 1 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {trips.map(t => (
-            <button key={t.id} className="chip" style={{ cursor: "pointer", background: t.id === active.id ? S.aubergine : "#fff", color: t.id === active.id ? S.blush : S.ink }}
-              onClick={() => { setActiveId(t.id); setDayIdx(0); }}>{t.destination}</button>
-          ))}
+          {trips.map(t => {
+            const on = t.id === active.id;
+            return (
+              <div key={t.id} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 6px 2px 10px", background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink }}>
+                <button onClick={() => { setActiveId(t.id); setDayIdx(0); }} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", font: "inherit", padding: 0 }}>{t.destination}</button>
+                <button onClick={() => removeTrip(t.id)} title={`Delete ${t.destination}`} aria-label={`Delete ${t.destination}`}
+                  style={{ background: "none", border: "none", color: on ? S.blush : "#8a6a76", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px" }}>×</button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -2712,7 +2728,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
             {active.notes && <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#7a5a66", margin: "16px 0 0", maxWidth: 460 }}>{active.notes}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
               <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={startEdit}>Edit trip details</button>
-              <button className="btn btn-ghost" style={{ padding: "8px 13px" }} onClick={() => { if (confirm("Delete this trip?")) { deleteTrip(active.id); const rest = trips.filter(t => t.id !== active.id); setActiveId(rest[0]?.id || null); setEditing(!rest.length); } }}>Delete</button>
+              <button className="btn btn-ghost" style={{ padding: "8px 13px", color: S.clay }} onClick={() => removeTrip(active.id)}>Delete trip</button>
             </div>
           </div>
           <div style={{ flex: "0 1 250px", background: S.blushSoft, borderRadius: 10, padding: 16 }}>
