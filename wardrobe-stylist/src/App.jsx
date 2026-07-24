@@ -2534,6 +2534,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const [picking, setPicking] = useState(false); // outfit picker open for the active day
   const [pickSource, setPickSource] = useState("looks"); // "looks" | "trip" — picker source
   const [pickTripId, setPickTripId] = useState(null); // which other trip to copy outfits from
+  const [confirmDel, setConfirmDel] = useState(null); // id of a trip pending delete confirmation
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
 
@@ -2656,15 +2657,17 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   };
   const removeEntry = (entryId) => commitPlan({ ...plan, [dateISO]: dayEntries.filter(e => e.id !== entryId) });
   const retag = (entryId, tag) => commitPlan({ ...plan, [dateISO]: dayEntries.map(e => e.id === entryId ? { ...e, tag } : e) });
-  // Delete a trip (any trip, not just the active one) and land on a sensible next trip.
-  const removeTrip = (id) => {
-    const t = trips.find(x => x.id === id);
-    if (!confirm(`Delete “${t?.destination || "this trip"}”? This can't be undone.`)) return;
+  // Deleting a trip goes through an in-app confirm dialog (native confirm() is
+  // unreliable inside an installed PWA). removeTrip just opens the dialog; doRemoveTrip
+  // performs the delete and lands on a sensible next trip.
+  const removeTrip = (id) => setConfirmDel(id);
+  const doRemoveTrip = (id) => {
     deleteTrip(id);
     const rest = trips.filter(x => x.id !== id);
     setActiveId(rest[0]?.id || null);
     setDayIdx(0);
     setEditing(!rest.length);
+    setConfirmDel(null);
   };
 
   const TAG_COLOR = { "Day look": S.gold, "Night look": S.aubergine, "Other": S.clay };
@@ -2923,6 +2926,25 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
           </div>
         </div>
       )}
+
+      {/* Confirm-before-delete dialog (reliable inside an installed PWA) */}
+      {confirmDel != null && (() => {
+        const t = trips.find(x => x.id === confirmDel);
+        return (
+          <div onClick={() => setConfirmDel(null)} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 58, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div onClick={ev => ev.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(420px, 100%)", boxShadow: "0 20px 60px #0007", padding: 22 }}>
+              <div style={{ fontSize: 19, marginBottom: 8 }}>Delete this trip?</div>
+              <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66", margin: "0 0 18px", lineHeight: 1.5 }}>
+                “{t?.destination || "This trip"}” and all the outfits you've planned for it will be removed. This can't be undone.
+              </p>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button className="btn btn-ghost" onClick={() => setConfirmDel(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ background: S.clay }} onClick={() => doRemoveTrip(confirmDel)}>Delete trip</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
