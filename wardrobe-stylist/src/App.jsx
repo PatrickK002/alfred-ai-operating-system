@@ -1302,7 +1302,6 @@ export default function App() {
             <button className={`navbtn ${view==="closet"?"active":""}`} onClick={()=>setView("closet")}>Closet ({items.length})</button>
             <button className={`navbtn ${view==="travel"?"active":""}`} onClick={()=>setView("travel")}>Travel</button>
             <button className={`navbtn ${view==="shop"?"active":""}`} onClick={()=>setView("shop")}>Personal Shopper</button>
-            <button className={`navbtn ${view==="add"?"active":""}`} onClick={()=>setView("add")}>Add Pieces</button>
             <button className={`navbtn ${view==="insights"?"active":""}`} onClick={()=>setView("insights")}>Insights</button>
           </nav>
         </div>
@@ -1330,7 +1329,9 @@ export default function App() {
         )}
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
-            exportData={exportData} importData={importData} />
+            exportData={exportData} importData={importData}
+            fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
+            updateQueueTag={updateQueueTag} removeQueue={removeQueue} commitQueue={commitQueue} seedExamples={seedExamples} />
         )}
         {view === "insights" && (
           <Insights items={items} inspo={inspo} liked={liked} looks={looks} setView={setView} />
@@ -1342,10 +1343,6 @@ export default function App() {
         {view === "shop" && (
           <Shopper items={items} brands={brands} addBrand={addBrand} removeBrand={removeBrand}
             inspo={inspo} liked={liked} setView={setView} onScanCloset={scanClosetBrands} scanning={scanning} />
-        )}
-        {view === "add" && (
-          <Add fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
-            updateQueueTag={updateQueueTag} removeQueue={removeQueue} commitQueue={commitQueue} seedExamples={seedExamples} />
         )}
       </main>
 
@@ -1526,7 +1523,7 @@ function Today({ weather, weatherErr, loadingW, styleWeather, tempOverride, setT
 
         {!items.length && (
           <Empty title="Your closet is empty" body="Add a few pieces and I'll start putting looks together for the weather outside."
-            action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />
+            action={<button className="btn btn-primary" onClick={()=>setView("closet")}>Add pieces</button>} />
         )}
 
         {items.length > 0 && recs.length === 0 && (
@@ -2527,7 +2524,7 @@ function Insights({ items, inspo, liked, looks, setView }) {
   if (!items.length) return (
     <Empty title="Nothing to analyse yet"
       body="Add and tag a few pieces and I'll map out your colour palette, the balance of your wardrobe, and what defines your style."
-      action={<button className="btn btn-primary" onClick={() => setView("add")}>Add pieces</button>} />
+      action={<button className="btn btn-primary" onClick={() => setView("closet")}>Add pieces</button>} />
   );
 
   const count = (arr, pred) => arr.filter(pred).length;
@@ -3343,7 +3340,8 @@ function Backup({ exportData, importData }) {
 }
 
 // ---------- Closet view ----------
-function Closet({ items, deleteItem, updateItem, setView, exportData, importData }) {
+function Closet({ items, deleteItem, updateItem, setView, exportData, importData, fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue, seedExamples }) {
+  const addProps = { fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue, seedExamples };
   // Both filters are multi-select: an empty set means "All"; otherwise show any match.
   const [catSel, setCatSel] = useState(() => new Set());
   const [warmthSel, setWarmthSel] = useState(() => new Set());
@@ -3379,8 +3377,7 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
 
   if (!items.length) return (
     <div>
-      <Empty title="Nothing here yet" body="Upload photos of your clothes and accessories to build your digital closet."
-        action={<button className="btn btn-primary" onClick={()=>setView("add")}>Add pieces</button>} />
+      <Add {...addProps} />
       <Backup exportData={exportData} importData={importData} />
     </div>
   );
@@ -3388,6 +3385,7 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
   const anyFilter = catSel.size > 0 || warmthSel.size > 0;
   return (
     <>
+    <Add {...addProps} />
     <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
       {/* Filters — pinned to the left; wraps above the grid on narrow screens. */}
       <aside style={{ flex: "1 1 170px", maxWidth: 220, minWidth: 150, position: "sticky", top: 12 }}>
