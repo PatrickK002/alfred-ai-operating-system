@@ -2530,7 +2530,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const [activeId, setActiveId] = useState(trips[0]?.id || null);
   const [editing, setEditing] = useState(!trips.length);
   const [dayIdx, setDayIdx] = useState(0);
-  const [showPack, setShowPack] = useState(false);
+  const [copied, setCopied] = useState(false); // brief "Copied ✓" state on the packing checklist
   const [picking, setPicking] = useState(false); // saved-looks picker open for the active day
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
@@ -2553,6 +2553,7 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
       start: form.start, end: form.end, temp: Number(form.temp) || 24, vibe: form.vibe, notes: form.notes.trim(),
       createdAt: (isEdit && active.createdAt) || new Date().toISOString(),
       plan: isEdit ? tripPlan(active) : {}, // keep outfits already added when editing details
+      packed: isEdit ? (active.packed || {}) : {}, // keep what's already ticked as packed
     };
     saveTrip(trip);
     setActiveId(trip.id);
@@ -2604,6 +2605,41 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const pack = travelPacking(active);
   const totalOutfits = dates.reduce((n, d) => n + (plan[d]?.length || 0), 0);
   const daysCovered = dates.filter(d => (plan[d]?.length || 0) > 0).length;
+
+  // Packing checklist: which pieces have been ticked as packed (stored per trip).
+  const packed = active.packed || {};
+  const packedCount = pack.pieces.filter(p => packed[p.id]).length;
+  const togglePacked = (id) => {
+    const next = { ...packed };
+    if (next[id]) delete next[id]; else next[id] = true;
+    saveTrip({ ...active, packed: next });
+  };
+  const PACK_ORDER = ["Clothing", "Shoes", "Accessories"];
+  // Build the checklist as plain text ([x]/[ ] per item, grouped) for export.
+  const packingText = () => {
+    const lines = [`Packing list — ${active.destination}`, `${fmtDate(active.start, { day: "numeric", month: "short" })} – ${fmtDate(active.end, { day: "numeric", month: "short", year: "numeric" })}`, ""];
+    for (const g of PACK_ORDER) {
+      const ps = pack.pieces.filter(p => packGroup(p.category) === g);
+      if (!ps.length) continue;
+      lines.push(g.toUpperCase());
+      ps.forEach(p => lines.push(`[${packed[p.id] ? "x" : " "}] ${p.name}`));
+      lines.push("");
+    }
+    lines.push(`Packed ${packedCount} of ${pack.total}.`);
+    return lines.join("\n");
+  };
+  const downloadPacking = () => {
+    const blob = new Blob([packingText()], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `packing-${(active.destination || "trip").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "trip"}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  };
+  const copyPacking = async () => {
+    try { await navigator.clipboard.writeText(packingText()); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+  };
 
   const commitPlan = (nextPlan) => saveTrip({ ...active, plan: nextPlan });
   const addLook = (look) => {
@@ -2777,23 +2813,45 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
         <div className="card" style={{ padding: 20, marginBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             <h3 style={{ fontWeight: 400, fontSize: 20, margin: 0 }}>Packing overview</h3>
-            <div className="chip">{pack.total} items</div>
+            <div className="chip">{packedCount}/{pack.total} packed</div>
           </div>
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 12 }}>Every unique piece across the outfits you've planned.</div>
-          {["Clothing", "Shoes", "Accessories"].map(g => (
+          {PACK_ORDER.map(g => (
             <Meter key={g} label={g} value={pack.groups[g]} max={pack.total || 1} count={`${pack.groups[g]} · ${pack.total ? Math.round(pack.groups[g] / pack.total * 100) : 0}%`} color={g === "Shoes" ? S.clay : g === "Accessories" ? S.gold : S.aubergine} />
           ))}
-          <button className="btn btn-ghost" style={{ marginTop: 8, padding: "7px 13px" }} onClick={() => setShowPack(v => !v)}>{showPack ? "Hide packing list" : "View full packing list"}</button>
-          {showPack && (
-            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(72px,1fr))", gap: 10 }}>
-              {pack.pieces.map(p => (
-                <div key={p.id} title={p.name}>
-                  <div style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden" }}><Thumb src={p.img} alt={p.name} /></div>
-                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, color: "#8a6a76", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                </div>
-              ))}
+
+          {/* Packing checklist — names only, tick as you pack, exportable */}
+          <div style={{ marginTop: 20, borderTop: `1px solid ${S.aubergine}18`, paddingTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay }}>Packing checklist</div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginTop: 2 }}>Tick each piece as it goes in the case.</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={downloadPacking}>⤓ Download list</button>
+                <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={copyPacking}>{copied ? "Copied ✓" : "Copy"}</button>
+              </div>
             </div>
-          )}
+            {PACK_ORDER.map(g => {
+              const ps = pack.pieces.filter(p => packGroup(p.category) === g);
+              if (!ps.length) return null;
+              return (
+                <div key={g} style={{ marginBottom: 14 }}>
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 4 }}>{g} ({ps.length})</div>
+                  {ps.map(p => {
+                    const on = !!packed[p.id];
+                    return (
+                      <button key={p.id} onClick={() => togglePacked(p.id)} aria-pressed={on}
+                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "7px 2px", borderBottom: `1px solid ${S.aubergine}10` }}>
+                        <span style={{ width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${on ? S.aubergine : S.aubergine + "55"}`, background: on ? S.aubergine : "#fff", color: S.blush, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1, flex: "0 0 auto" }}>{on ? "✓" : ""}</span>
+                        <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 14, color: on ? "#a58a94" : S.ink, textDecoration: on ? "line-through" : "none" }}>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
