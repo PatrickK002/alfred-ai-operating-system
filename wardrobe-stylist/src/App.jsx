@@ -2531,7 +2531,9 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const [editing, setEditing] = useState(!trips.length);
   const [dayIdx, setDayIdx] = useState(0);
   const [copied, setCopied] = useState(false); // brief "Copied ✓" state on the packing checklist
-  const [picking, setPicking] = useState(false); // saved-looks picker open for the active day
+  const [picking, setPicking] = useState(false); // outfit picker open for the active day
+  const [pickSource, setPickSource] = useState("looks"); // "looks" | "trip" — picker source
+  const [pickTripId, setPickTripId] = useState(null); // which other trip to copy outfits from
   const blank = { destination: "", start: "", end: "", temp: 24, vibe: "Relaxed", notes: "" };
   const [form, setForm] = useState(blank);
 
@@ -2644,6 +2646,12 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
   const commitPlan = (nextPlan) => saveTrip({ ...active, plan: nextPlan });
   const addLook = (look) => {
     const entry = { id: crypto.randomUUID(), lookId: look.id, tag: TRAVEL_TAGS[0], occasion: look.occasion || "", note: look.note || "", pieces: (look.pieces || []).map(snapshotPiece) };
+    commitPlan({ ...plan, [dateISO]: [...dayEntries, entry] });
+  };
+  // Copy an outfit that's already planned in another trip into this day (fresh id,
+  // same tag/pieces snapshot so it's self-contained).
+  const addEntryCopy = (e) => {
+    const entry = { id: crypto.randomUUID(), lookId: e.lookId, tag: e.tag || TRAVEL_TAGS[0], occasion: e.occasion || "", note: e.note || "", pieces: (e.pieces || []).map(snapshotPiece) };
     commitPlan({ ...plan, [dateISO]: [...dayEntries, entry] });
   };
   const removeEntry = (entryId) => commitPlan({ ...plan, [dateISO]: dayEntries.filter(e => e.id !== entryId) });
@@ -2780,33 +2788,78 @@ function Travel({ items, trips, saveTrip, deleteTrip, weather, setView, onSaveLo
         </div>
       )}
 
-      {/* Saved-looks picker */}
-      {picking && (
+      {/* Outfit picker — from saved looks OR copied from another trip */}
+      {picking && (() => {
+        const otherTrips = trips.filter(t => t.id !== active.id);
+        const srcTrip = otherTrips.find(t => t.id === pickTripId) || otherTrips[0] || null;
+        const srcPlan = srcTrip ? tripPlan(srcTrip) : {};
+        const srcDates = srcTrip ? tripDays(srcTrip.start, srcTrip.end).map(d => d.toISOString().slice(0, 10)) : [];
+        const srcOutfits = srcDates.flatMap((d, di) => (srcPlan[d] || []).map(e => ({ e, dayNo: di + 1 })));
+        const source = pickSource === "trip" && otherTrips.length ? "trip" : "looks";
+        const tabBtn = (id, label, active2) => (
+          <button onClick={() => setPickSource(id)} style={{ background: active2 ? "#ffffff22" : "transparent", color: S.blush, border: `1px solid ${active2 ? S.blush + "66" : "transparent"}`, borderRadius: 20, padding: "5px 12px", cursor: "pointer", fontFamily: "system-ui,sans-serif", fontSize: 12.5 }}>{label}</button>
+        );
+        return (
         <div onClick={() => setPicking(false)} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 56, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
           <div onClick={ev => ev.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(760px, 100%)", margin: "auto", boxShadow: "0 20px 60px #0007", overflow: "hidden" }}>
-            <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontSize: 18 }}>Add a saved look to Day {Math.min(dayIdx, dates.length - 1) + 1}</div>
-              <button onClick={() => setPicking(false)} title="Done" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+            <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 18 }}>Add an outfit to Day {Math.min(dayIdx, dates.length - 1) + 1}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {otherTrips.length > 0 && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {tabBtn("looks", "Saved looks", source === "looks")}
+                    {tabBtn("trip", "From a trip", source === "trip")}
+                  </div>
+                )}
+                <button onClick={() => setPicking(false)} title="Done" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
             </div>
             <div style={{ padding: 18 }}>
-              {!looks.length ? (
-                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66" }}>You have no saved looks yet. Save some outfits first, then come back to add them.</div>
+              {source === "looks" ? (
+                !looks.length ? (
+                  <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66" }}>You have no saved looks yet. Save some outfits first, then come back to add them.</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
+                    {looks.map(l => (
+                      <div key={l.id} className="card" style={{ padding: 12 }}>
+                        {miniBoard(l.pieces || [], "pick-" + l.id)}
+                        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0 6px" }}>{l.occasion || "Look"}{l.season ? ` · ${l.season}` : ""}</div>
+                        <button className="btn btn-primary" style={{ padding: "6px 12px", width: "100%" }} onClick={() => addLook(l)}>+ Add</button>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
-                  {looks.map(l => (
-                    <div key={l.id} className="card" style={{ padding: 12 }}>
-                      {miniBoard(l.pieces || [], "pick-" + l.id)}
-                      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0 6px" }}>{l.occasion || "Look"}{l.season ? ` · ${l.season}` : ""}</div>
-                      <button className="btn btn-primary" style={{ padding: "6px 12px", width: "100%" }} onClick={() => addLook(l)}>+ Add</button>
+                <div>
+                  {otherTrips.length > 1 && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                      {otherTrips.map(t => {
+                        const on = srcTrip && t.id === srcTrip.id;
+                        return <button key={t.id} className="chip" style={{ cursor: "pointer", background: on ? S.aubergine : "#fff", color: on ? S.blush : S.ink }} onClick={() => setPickTripId(t.id)}>{t.destination}</button>;
+                      })}
                     </div>
-                  ))}
+                  )}
+                  {!srcOutfits.length ? (
+                    <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13.5, color: "#7a5a66" }}>{srcTrip ? `“${srcTrip.destination}” has no outfits planned yet.` : "No other trips to copy from."}</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 14 }}>
+                      {srcOutfits.map(({ e, dayNo }) => (
+                        <div key={e.id} className="card" style={{ padding: 12 }}>
+                          {miniBoard(e.pieces || [], "src-" + e.id)}
+                          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", margin: "8px 0 6px" }}>Day {dayNo} · {e.tag}{e.occasion ? ` · ${e.occasion}` : ""}</div>
+                          <button className="btn btn-primary" style={{ padding: "6px 12px", width: "100%" }} onClick={() => addEntryCopy(e)}>+ Add</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 14 }}>Add as many as you like — you can reuse a look across days, then tag each one on the day.</div>
+              <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 14 }}>Add as many as you like — reuse across days, then tag each one on the day.{otherTrips.length ? " Use “From a trip” to copy outfits you planned for another trip." : ""}</div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Packing overview */}
       {pack.total > 0 && (
