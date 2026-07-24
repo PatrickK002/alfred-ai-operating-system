@@ -439,43 +439,17 @@ const BRANDS_KEY = "wardrobe_brands_v1"; // stores/brands the user likes (for th
 
 // ---- Saved brands / shops de-duplication ----
 // Two saved stores are "the same" when their names match (case-insensitive) OR their
-// URLs point at the same store. For a normal brand site that means the same registrable
-// DOMAIN, ignoring scheme/www/subdomain/path — so aritzia.com, www.aritzia.com/en and
-// shop.aritzia.com/sale all collapse to one. For marketplaces (many sellers on one
-// domain) the seller's handle/shop path is kept, so different sellers stay separate.
+// URLs share the same HOST. brandUrlKey reduces a URL to its host only — scheme, a
+// leading www, the path and any query/hash are all ignored — so aritzia.com,
+// www.aritzia.com/en and aritzia.com/sale collapse to one, while a different host
+// (e.g. shop.aritzia.com) stays separate.
 const brandNameKey = (b) => (b?.name || "").trim().toLowerCase();
-// Marketplaces where the domain alone doesn't identify the store (keyed by registrable
-// domain). For these we keep the first path segment(s) that name the seller.
-const MARKETPLACE_DOMAINS = new Set([
-  "etsy.com", "depop.com", "ebay.com", "ebay.co.uk", "amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr",
-  "vinted.com", "vinted.co.uk", "poshmark.com", "grailed.com", "vestiairecollective.com", "stockx.com", "goat.com",
-  "instagram.com", "tiktok.com", "facebook.com", "pinterest.com",
-  "redbubble.com", "society6.com", "bigcartel.com", "storenvy.com", "gumroad.com", "aliexpress.com", "threadless.com",
-]);
-// Reduce a host to its registrable domain (drop subdomains), handling common
-// second-level TLDs like co.uk / com.au so brand.co.uk isn't cut to co.uk.
-function registrableDomain(host) {
-  const parts = host.split(".").filter(Boolean);
-  if (parts.length <= 2) return parts.join(".");
-  const sld = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
-  const last = parts[parts.length - 1], secondLast = parts[parts.length - 2];
-  return parts.slice(last.length === 2 && sld.has(secondLast) ? -3 : -2).join(".");
-}
 const brandUrlKey = (b) => {
   let raw = (b?.url || "").trim().toLowerCase();
   if (!raw) return "";
   raw = raw.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[?#].*$/, "");
   const slash = raw.indexOf("/");
-  const host = slash === -1 ? raw : raw.slice(0, slash);
-  const path = slash === -1 ? "" : raw.slice(slash + 1).replace(/\/+$/, "");
-  if (!host) return raw;
-  if (host.endsWith(".myshopify.com")) return host; // subdomain identifies the shop
-  const dom = registrableDomain(host);
-  if (MARKETPLACE_DOMAINS.has(dom)) {
-    const segs = path.split("/").filter(Boolean).slice(0, 2).join("/");
-    return dom + (segs ? "/" + segs : "");
-  }
-  return dom; // normal brand site: domain only
+  return slash === -1 ? raw : raw.slice(0, slash); // host only, path dropped
 };
 function sameBrand(a, b) {
   const ua = brandUrlKey(a), ub = brandUrlKey(b), na = brandNameKey(a), nb = brandNameKey(b);
