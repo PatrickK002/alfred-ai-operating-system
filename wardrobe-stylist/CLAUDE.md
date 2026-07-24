@@ -185,24 +185,26 @@ into modules is explicitly requested.
   fashion reasoning — that lives in the **AI Stylist chat** (`/api/chat`), which reasons
   over the closet, weather, taste signals and My Style photos and gives per-piece
   rationale.
-- **Liked-outfit taste in the free engine**: My Style "liked" photos are turned into a
-  lightweight taste signal the *rule* engine can use. Each liked photo is read once by
-  `/api/palette` (outfit-level vision → `{colors:[…up to 3], tone}`), tagged onto the
-  liked item — automatically on add (`addLiked` → `analyzeTaste`) and retroactively via
-  **Learn my taste** on My Style (`scanLikedTaste`, reuses the `scanning` progress
-  state). `styleTasteFromLiked(liked)` tallies those into `{colors:Set, tone, text}`;
-  `styleTaste` threads into `recommendOutfits`/`composeOutfit`/`pickAlternative` as a
-  `stylePref` arg, which biases `pick()` toward candidates whose colour is in the liked
-  palette (~55%) and, before any bold is placed, toward the liked tone (~40%). The digest
-  `text` is also injected into the AI carousel prompt. All best-effort: no key/offline →
-  photos stay untagged and the bias is simply absent (Style me still works offline/free).
+- **My Style taste in the free engine**: BOTH worn (`inspo`) and liked (`liked`) My Style
+  photos are turned into a lightweight taste signal the *rule* engine can use. Each photo
+  is read once by `/api/palette` (outfit-level vision → `{colors:[…up to 3], tone}`),
+  tagged onto the item — automatically on add (`addInspo`/`addLiked` → `analyzeTaste`) and
+  retroactively via **Learn my taste** on My Style (`scanLikedTaste`, scans unanalysed
+  worn AND liked, reuses the `scanning` progress state). `styleTasteFromPhotos(inspo,
+  liked)` tallies both into `{colors:Set, tone, text}`; `styleTaste` threads into
+  `recommendOutfits`/`composeOutfit`/`pickAlternative` as a `stylePref` arg, which biases
+  `pick()` toward candidates whose colour is in the palette (~55%) and, before any bold is
+  placed, toward the tone (~40%). The digest `text` is also injected into the AI carousel
+  prompt. All best-effort: no key/offline → photos stay untagged and the bias is simply
+  absent (Style me still works offline/free).
 - **AI carousel (`✨ AI looks`)**: an opt-in *second* engine for the Today carousel that
   fills the same `recs` array with model-reasoned looks instead of rule-based ones.
   `buildAiOutfit()` (in `App`) makes ONE `/api/chat` call whose `system` is an **array
   of blocks** — a stable persona block + a `cache_control: {type:"ephemeral"}` closet
   block, so the big repeat-stable prefix (persona + inventory) is prompt-cached and
   repeat taps re-read it cheaply; occasion/weather/taste/avoid/disliked ride in the user
-  message. The model returns `AI_LOOK_COUNT` (4) outfits separated by `===`, each a
+  message, which also **attaches up to 2 worn + 2 liked My Style photos** as image blocks
+  so the carousel *sees* the user's taste (a vision call — a little pricier). The model returns `AI_LOOK_COUNT` (4) outfits separated by `===`, each a
   `Look:`/`Why:`/`Pieces:` block; `parseMultiOutfits()` splits them and reuses
   `parseOutfitReply()` per block, producing looks in composeOutfit's shape
   (`{pieces, notes, key, title}`) with per-piece `role`/`reason`. `recsSource`
