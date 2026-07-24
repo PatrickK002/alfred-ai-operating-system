@@ -167,6 +167,12 @@ into modules is explicitly requested.
   brands** button on the Personal Shopper runs `scanClosetBrands`, which POSTs each
   existing piece's photo to the lightweight `/api/brand` endpoint (brand-only vision)
   to back-fill brands from pieces added before the feature.
+- **Saved brands de-dup**: the saved brands/shops list is kept unique. `sameBrand(a,b)`
+  treats two stores as the same when names match (case-insensitive) OR URLs match once
+  normalised (scheme/`www`/trailing-slash stripped); `dedupeBrands(list)` collapses a
+  list keeping the first occurrence. It runs on load and import, and both `addBrand`
+  (manual "Add store" / "+ Save brand") and `autoSaveBrands` guard inside the
+  `setBrands` updater against the latest state, so no store or URL is ever stored twice.
 - **Styling engine (two of them)**: the quick "Style me" carousel is the *rule-based*
   `composeOutfit()` — it filters by occasion + weather-appropriate warmth, builds a
   dress/jumpsuit or top+bottom silhouette, adds outerwear when cool/wet, then shoes and
