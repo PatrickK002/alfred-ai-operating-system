@@ -1089,21 +1089,6 @@ export default function App() {
 
   // Correctly-tagged example set based on the pieces in your screenshot,
   // so you can see the app working end to end before tagging your own.
-  function seedExamples() {
-    const ex = [
-      { name: "Green off-shoulder dress", category: "Dresses", color: "Green", tone: "Bold", warmth: "Light", formality: ["Casual","Going out"] },
-      { name: "Red floral off-shoulder dress", category: "Dresses", color: "Floral", tone: "Bold", warmth: "Light", formality: ["Casual","Going out"] },
-      { name: "Heart beanie", category: "Accessories", color: "Beige", tone: "Muted", warmth: "Warm", formality: ["Casual"] },
-      { name: "Black loafers", category: "Shoes", color: "Black", tone: "Classic", warmth: "Very light", formality: ["Casual","Work"] },
-      { name: "Blue loafers", category: "Shoes", color: "Blue", tone: "Classic", warmth: "Very light", formality: ["Casual","Work"] },
-      { name: "Woven flats", category: "Shoes", color: "Cream", tone: "Muted", warmth: "Very light", formality: ["Casual"] },
-      { name: "Grey check coat", category: "Outerwear", color: "Grey", tone: "Muted", warmth: "Very warm", formality: ["Casual","Work"] },
-      { name: "Cream check coat", category: "Outerwear", color: "Cream", tone: "Muted", warmth: "Very warm", formality: ["Casual","Work"] },
-      { name: "Striped bikini top", category: "Tops", color: "Navy", tone: "Classic", warmth: "Very light", formality: ["Casual"] },
-    ].map(e => ({ id: crypto.randomUUID(), img: "", ...e }));
-    setItems(prev => [...ex, ...prev]);
-    setView("closet");
-  }
   function updateItem(id, field, value) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   }
@@ -1331,7 +1316,7 @@ export default function App() {
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
             exportData={exportData} importData={importData}
             fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
-            updateQueueTag={updateQueueTag} removeQueue={removeQueue} commitQueue={commitQueue} seedExamples={seedExamples} />
+            updateQueueTag={updateQueueTag} removeQueue={removeQueue} commitQueue={commitQueue} />
         )}
         {view === "insights" && (
           <Insights items={items} inspo={inspo} liked={liked} looks={looks} setView={setView} />
@@ -3340,8 +3325,8 @@ function Backup({ exportData, importData }) {
 }
 
 // ---------- Closet view ----------
-function Closet({ items, deleteItem, updateItem, setView, exportData, importData, fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue, seedExamples }) {
-  const addProps = { fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue, seedExamples };
+function Closet({ items, deleteItem, updateItem, setView, exportData, importData, fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue }) {
+  const addProps = { fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue };
   // Both filters are multi-select: an empty set means "All"; otherwise show any match.
   const [catSel, setCatSel] = useState(() => new Set());
   const [warmthSel, setWarmthSel] = useState(() => new Set());
@@ -3542,7 +3527,7 @@ function FieldLabel({ children, required, done }) {
 }
 
 // ---------- Add view ----------
-function Add({ fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue, seedExamples }) {
+function Add({ fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue }) {
   const untagged = queue.filter(q => !q.tags?.category).length;
   return (
     <div>
@@ -3554,7 +3539,6 @@ function Add({ fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQ
         <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
         <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
           <button className="btn btn-primary" onClick={()=>fileRef.current?.click()}>Choose photos</button>
-          <button className="btn btn-ghost" onClick={seedExamples}>Load example closet</button>
         </div>
         {autoTagging && <div style={{ fontFamily:"system-ui,sans-serif", fontSize:12, color:"#8a6a76", marginTop:12 }}>Reading your photos…</div>}
       </div>
