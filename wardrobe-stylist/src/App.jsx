@@ -1285,10 +1285,10 @@ export default function App() {
             <button className={`navbtn ${view==="looks"?"active":""}`} onClick={()=>setView("looks")}>Saved Looks ({looks.length})</button>
             <button className={`navbtn ${view==="mystyle"?"active":""}`} onClick={()=>setView("mystyle")}>My Style ({inspo.length + liked.length})</button>
             <button className={`navbtn ${view==="closet"?"active":""}`} onClick={()=>setView("closet")}>Closet ({items.length})</button>
-            <button className={`navbtn ${view==="insights"?"active":""}`} onClick={()=>setView("insights")}>Insights</button>
             <button className={`navbtn ${view==="travel"?"active":""}`} onClick={()=>setView("travel")}>Travel</button>
             <button className={`navbtn ${view==="shop"?"active":""}`} onClick={()=>setView("shop")}>Personal Shopper</button>
             <button className={`navbtn ${view==="add"?"active":""}`} onClick={()=>setView("add")}>Add Pieces</button>
+            <button className={`navbtn ${view==="insights"?"active":""}`} onClick={()=>setView("insights")}>Insights</button>
           </nav>
         </div>
       </header>
