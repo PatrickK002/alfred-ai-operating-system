@@ -999,26 +999,36 @@ export default function App() {
     if (toAdd.length) setBrands(prev => [...toAdd, ...prev]);
     return toAdd.length;
   }
-  // Scan the photos of pieces already in the closet for brands (retroactive).
+  // A piece is scannable for brands if it has a photo, no brand yet, and hasn't been
+  // scanned before. Once scanned (successfully), we mark it so it's never rescanned.
+  const unscannedForBrands = (list) => list.filter(i => typeof i.img === "string" && i.img.startsWith("data:") && !i.brand && !i.brandScanned);
+  // Scan only previously unscanned closet photos for brands (retroactive, incremental).
   async function scanClosetBrands() {
-    const withImg = items.filter(i => typeof i.img === "string" && i.img.startsWith("data:"));
-    if (!withImg.length) { flash("No piece photos to scan yet"); return; }
-    setScanning({ done: 0, total: withImg.length });
+    const todo = unscannedForBrands(items);
+    if (!todo.length) { flash("No new photos to scan — all caught up"); return; }
+    setScanning({ done: 0, total: todo.length });
     const found = [];
-    for (let k = 0; k < withImg.length; k++) {
-      const it = withImg[k];
+    const scannedIds = [];
+    const markScanned = () => {
+      if (!scannedIds.length) return;
+      const s = new Set(scannedIds);
+      setItems(prev => prev.map(i => s.has(i.id) ? { ...i, brandScanned: true } : i));
+    };
+    for (let k = 0; k < todo.length; k++) {
+      const it = todo[k];
       try {
         const comma = it.img.indexOf(",");
         const mediaType = (it.img.slice(0, comma).match(/data:(.*?);/) || [])[1] || "image/jpeg";
         const res = await fetch("/api/brand", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64: it.img.slice(comma + 1), mediaType }) });
-        if (res.status === 503) { setScanning(null); flash("Brand scanning needs your hosted app (Render)"); return; }
-        if (res.ok) { const d = await res.json(); if (d.brand) found.push({ name: d.brand, url: d.brandUrl }); }
+        if (res.status === 503) { setScanning(null); markScanned(); flash("Brand scanning needs your hosted app (Render)"); return; }
+        if (res.ok) { scannedIds.push(it.id); const d = await res.json(); if (d.brand) found.push({ name: d.brand, url: d.brandUrl }); }
       } catch {}
-      setScanning({ done: k + 1, total: withImg.length });
+      setScanning({ done: k + 1, total: todo.length });
     }
     setScanning(null);
+    markScanned(); // don't rescan these photos next time, even if no brand was found
     const added = autoSaveBrands(found);
-    flash(added ? `Added ${added} brand${added > 1 ? "s" : ""} to your shops` : (found.length ? "Those brands are already saved" : "No brands recognised in your closet photos"));
+    flash(added ? `Added ${added} brand${added > 1 ? "s" : ""} to your shops` : (found.length ? "Those brands are already saved" : "No new brands recognised"));
   }
 
   function commitQueue() {
@@ -2148,7 +2158,8 @@ function splitBrandLines(text) {
 }
 
 function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, onScanCloset, scanning }) {
-  const scannable = items.filter(i => typeof i.img === "string" && i.img.startsWith("data:")).length;
+  // Only pieces with a photo, no brand yet, and not previously scanned.
+  const scannable = items.filter(i => typeof i.img === "string" && i.img.startsWith("data:") && !i.brand && !i.brandScanned).length;
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
@@ -2291,7 +2302,7 @@ function Shopper({ items, brands, addBrand, removeBrand, inspo, liked, setView, 
           )}
         </div>
         <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 8 }}>
-          New pieces you add have their brand saved automatically. Use <em>Scan closet for brands</em> to find brands in pieces you've already added.
+          New pieces you add have their brand saved automatically. <em>Scan closet for brands</em> checks pieces you've already added — and only scans photos it hasn't scanned before, so re-running it just covers anything new.
         </div>
 
         {brands.length > 0 && (
