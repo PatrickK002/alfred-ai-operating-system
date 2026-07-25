@@ -1366,7 +1366,7 @@ export default function App() {
         )}
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
-            exportData={exportData} importData={importData}
+            exportData={exportData} importData={importData} onSaveLook={saveLookPieces}
             fileRef={fileRef} handleFiles={handleFiles} queue={queue} autoTagging={autoTagging}
             updateQueueTag={updateQueueTag} removeQueue={removeQueue} commitQueue={commitQueue} />
         )}
@@ -3377,8 +3377,23 @@ function Backup({ exportData, importData }) {
 }
 
 // ---------- Closet view ----------
-function Closet({ items, deleteItem, updateItem, setView, exportData, importData, fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue }) {
+function Closet({ items, deleteItem, updateItem, setView, exportData, importData, onSaveLook, fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue }) {
   const addProps = { fileRef, handleFiles, queue, autoTagging, updateQueueTag, removeQueue, commitQueue };
+  // ----- Build a saved look by hand from the closet -----
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState(() => new Set());
+  const [lookOcc, setLookOcc] = useState("Casual");
+  const [justSaved, setJustSaved] = useState(false);
+  const togglePick = (id) => setPicked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const startSelecting = () => { setSelecting(true); setPicked(new Set()); setJustSaved(false); };
+  const cancelSelecting = () => { setSelecting(false); setPicked(new Set()); };
+  const saveLook = () => {
+    const pieces = items.filter(i => picked.has(i.id))
+      .map(p => ({ id: p.id, name: p.name, category: p.category, color: p.color, tone: p.tone, warmth: p.warmth, img: p.img }));
+    if (pieces.length < 2) return;
+    onSaveLook(pieces, { occasion: lookOcc, weather: null, note: "Created in closet" });
+    setSelecting(false); setPicked(new Set()); setJustSaved(true);
+  };
   // Both filters are multi-select: an empty set means "All"; otherwise show any match.
   const [catSel, setCatSel] = useState(() => new Set());
   const [warmthSel, setWarmthSel] = useState(() => new Set());
@@ -3436,34 +3451,63 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
 
       {/* Grid */}
       <div style={{ flex: "999 1 320px", minWidth: 0 }}>
-        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", marginBottom: 14 }}>
-          Showing {shown.length} of {items.length} piece{items.length === 1 ? "" : "s"}.
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76" }}>
+            {selecting ? "Tap pieces to add them to your look." : `Showing ${shown.length} of ${items.length} piece${items.length === 1 ? "" : "s"}.`}
+          </div>
+          {!selecting && <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={startSelecting}>♥ Create a look</button>}
         </div>
+        {justSaved && !selecting && (
+          <div style={{ background: S.blushSoft, borderLeft: `3px solid ${S.gold}`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: S.ink, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span>Saved to your looks.</span>
+            <button className="btn btn-ghost" style={{ padding: "5px 12px" }} onClick={() => setView("looks")}>View saved looks →</button>
+          </div>
+        )}
+        {/* Sticky bar while building a look */}
+        {selecting && (
+          <div style={{ position: "sticky", top: 0, zIndex: 3, background: S.aubergine, color: S.blush, borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13 }}>{picked.size} piece{picked.size === 1 ? "" : "s"} selected</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontFamily: "system-ui,sans-serif", fontSize: 12.5 }}>For:&nbsp;
+                <select value={lookOcc} onChange={e => setLookOcc(e.target.value)}>{FORMALITY.map(f => <option key={f}>{f}</option>)}</select>
+              </label>
+              <button className="btn" style={{ background: S.gold, color: S.ink, padding: "8px 14px" }} onClick={saveLook} disabled={picked.size < 2}>♥ Save look</button>
+              <button className="btn btn-ghost" style={{ padding: "8px 12px", color: S.blush, borderColor: `${S.blush}66` }} onClick={cancelSelecting}>Cancel</button>
+            </div>
+          </div>
+        )}
         {shown.length === 0 && (
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 13, color: "#8a6a76", background: S.blushSoft, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
             No pieces match the selected filters. <button onClick={() => { setCatSel(new Set()); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", font:"inherit", padding:0 }}>Clear filters</button>
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
-          {shown.map(i => (
-          <div key={i.id} className="card">
+          {shown.map(i => {
+          const on = picked.has(i.id);
+          return (
+          <div key={i.id} className="card" onClick={selecting ? () => togglePick(i.id) : undefined}
+            style={{ cursor: selecting ? "pointer" : "default", outline: selecting && on ? `2px solid ${S.gold}` : "none", outlineOffset: -2 }}>
             <div style={{ aspectRatio: "1", background: S.blushSoft, position: "relative" }}>
               <Thumb src={i.img} alt={i.name} />
-              <button onClick={()=>deleteItem(i.id)} title="Remove" style={{ position:"absolute", top:6, right:6, border:"none", background:"#00000088", color:"#fff", width:24, height:24, borderRadius:"50%", cursor:"pointer" }}>×</button>
+              {selecting ? (
+                <div style={{ position:"absolute", top:6, right:6, width:26, height:26, borderRadius:"50%", background: on ? S.gold : "#00000066", color: on ? S.ink : "#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, lineHeight:1 }}>{on ? "✓" : ""}</div>
+              ) : (
+                <button onClick={()=>deleteItem(i.id)} title="Remove" style={{ position:"absolute", top:6, right:6, border:"none", background:"#00000088", color:"#fff", width:24, height:24, borderRadius:"50%", cursor:"pointer" }}>×</button>
+              )}
             </div>
             <div style={{ padding: "10px 12px" }}>
-              {/* Tapping the details (or the button) opens the full edit panel. */}
-              <div onClick={()=>setEditId(i.id)} style={{ cursor: "pointer" }}>
+              <div onClick={selecting ? undefined : ()=>setEditId(i.id)} style={{ cursor: selecting ? "pointer" : "pointer" }}>
                 <div style={{ fontSize: 15 }}>{i.name}</div>
                 <div style={{ fontFamily:"system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>{i.category} · {i.color}{i.tone?` · ${i.tone}`:""} · {i.warmth}</div>
                 <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom: 8 }}>
                   {i.formality?.map(f => <span key={f} className="chip">{f}</span>)}
                 </div>
-                <button className="btn btn-ghost" style={{ padding:"6px 12px" }} onClick={(e)=>{ e.stopPropagation(); setEditId(i.id); }}>Edit tags</button>
+                {!selecting && <button className="btn btn-ghost" style={{ padding:"6px 12px" }} onClick={(e)=>{ e.stopPropagation(); setEditId(i.id); }}>Edit tags</button>}
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
         </div>
       </div>
     </div>
