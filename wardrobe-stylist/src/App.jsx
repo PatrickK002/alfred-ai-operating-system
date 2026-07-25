@@ -3192,6 +3192,7 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
   const [filter, setFilter] = useState("All");    // by occasion
   const [season, setSeason] = useState("All");    // by season tag
   const [wornFilter, setWornFilter] = useState("All"); // All | Worn | Not worn
+  const [expanded, setExpanded] = useState(null); // id of the look shown in the big view
   if (!looks.length) return (
     <div>
       <Empty title="No saved looks yet"
@@ -3238,6 +3239,7 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
         <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Worn</span>
         {wornCats.map(v => chip(`${v === "Worn" ? "✓ " : ""}${v} (${wornCount(v)})`, wornFilter === v, () => setWornFilter(v)))}
       </div>
+      <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 8 }}>Tap any piece photo to zoom it, or <strong>⤢ Expand</strong> to see the whole look bigger.</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
         {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
@@ -3277,10 +3279,49 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
                 </div>
               ))}
             </div>
-            <button className="btn btn-ghost" style={{ marginTop: 12, padding: "6px 12px" }} onClick={()=>deleteLook(l.id)}>Remove look</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={()=>setExpanded(l.id)}>⤢ Expand</button>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px" }} onClick={()=>deleteLook(l.id)}>Remove look</button>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Expanded look — a bigger read-only view; sits just below the lightbox (z50) so
+          tapping a piece photo still zooms it above this modal. */}
+      {expanded != null && (() => {
+        const l = tagged.find(x => x.id === expanded);
+        if (!l) return null;
+        return (
+          <div onClick={() => setExpanded(null)} style={{ position: "fixed", inset: 0, background: "#1a0e15cc", zIndex: 48, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: S.paper, borderRadius: 14, width: "min(680px, 100%)", margin: "auto", boxShadow: "0 20px 60px #0007", overflow: "hidden" }}>
+              <div style={{ position: "sticky", top: 0, background: S.aubergine, color: S.blush, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontSize: 19 }}>{l.occasion}{l.seasonTag ? ` · ${SEASON_EMOJI[l.seasonTag]} ${l.seasonTag}` : ""}</div>
+                <button onClick={() => setExpanded(null)} title="Close" style={{ border: "none", background: "#ffffff22", color: S.blush, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ padding: 18 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", fontFamily: "system-ui,sans-serif", fontSize: 12.5, color: "#8a6a76", marginBottom: 14 }}>
+                  <span>{l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : l.climate.range}</span>
+                  {l.worn && <span className="chip" style={{ background: S.gold, color: S.ink, borderColor: S.gold }}>✓ Worn</span>}
+                  {l.note && <span style={{ color: S.clay }}>✈ {l.note}</span>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 16 }}>
+                  {(l.pieces || []).map(p => (
+                    <div key={p.id} style={{ background: "#fff", border: `1px solid ${S.aubergine}14`, borderRadius: 10, overflow: "hidden" }}>
+                      <div style={{ aspectRatio: "1", background: S.blushSoft }}><Thumb src={p.img} alt={p.name} /></div>
+                      <div style={{ padding: "10px 12px" }}>
+                        <div style={{ fontSize: 14 }}>{p.name}</div>
+                        <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76" }}>{p.category}{p.color ? ` · ${p.color}` : ""}{p.tone ? ` · ${p.tone}` : ""}{p.warmth ? ` · ${p.warmth}` : ""}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11.5, color: "#8a6a76", marginTop: 14 }}>Tap any photo to zoom it full-screen.</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {hasDisliked && <DislikedList disliked={disliked} removeDislike={removeDislike} items={items} />}
     </div>
   );
