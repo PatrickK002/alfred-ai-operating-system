@@ -287,16 +287,20 @@ function recommendOutfits(items, weather, occasion, count = 6, avoidIds, favorId
 function savedTaste(looks) {
   if (!looks || !looks.length) return { favorIds: new Set(), text: "" };
   const counts = {};
+  // Looks the user has WORN are the strongest "what suits me" signal — weight them more.
   looks.forEach(l => (l.pieces || []).forEach(p => {
     counts[p.id] = counts[p.id] || { name: p.name, n: 0 };
-    counts[p.id].n++;
+    counts[p.id].n += l.worn ? 2 : 1;
   }));
   const favorIds = new Set(Object.keys(counts));
   const topPieces = Object.values(counts).sort((a, b) => b.n - a.n).slice(0, 6).map(c => c.name);
   const recent = looks.slice(0, 3).map(l => `${l.occasion}: ${(l.pieces || []).map(p => p.name).join(" + ")}`);
+  const worn = looks.filter(l => l.worn);
+  const wornRecent = worn.slice(0, 4).map(l => `${l.occasion}: ${(l.pieces || []).map(p => p.name).join(" + ")}`);
   const text = `Looks they've SAVED because they love them (lean into these pieces and pairings when it fits):` +
     (topPieces.length ? `\n- Pieces they save most: ${topPieces.join(", ")}.` : "") +
-    (recent.length ? `\n- Recent saved looks:\n${recent.map(c => `  · ${c}`).join("\n")}` : "");
+    (recent.length ? `\n- Recent saved looks:\n${recent.map(c => `  · ${c}`).join("\n")}` : "") +
+    (worn.length ? `\n\nOutfits they've actually WORN (a strong "what suits them" signal — favour these pieces and pairings):\n${wornRecent.map(c => `  · ${c}`).join("\n")}` : "");
   return { favorIds, text };
 }
 
@@ -861,6 +865,7 @@ export default function App() {
   function deleteLook(id) { setLooks(prev => prev.filter(l => l.id !== id)); }
   // Change a saved look's season tag.
   function setLookSeason(id, season) { setLooks(prev => prev.map(l => l.id === id ? { ...l, season } : l)); }
+  function setLookWorn(id, worn) { setLooks(prev => prev.map(l => l.id === id ? { ...l, worn } : l)); }
 
   // Save an arbitrary set of pieces (e.g. the AI stylist's suggestion, a Today
   // recommendation, or a holiday-plan outfit) as a look. `opts` lets callers
@@ -1357,12 +1362,13 @@ export default function App() {
         )}
         {view === "looks" && (
           <Looks looks={looks} deleteLook={deleteLook} setView={setView}
-            disliked={disliked} removeDislike={removeDislike} items={items} setLookSeason={setLookSeason} />
+            disliked={disliked} removeDislike={removeDislike} items={items} setLookSeason={setLookSeason} setLookWorn={setLookWorn} />
         )}
         {view === "mystyle" && (
           <MyStyle inspo={inspo} addInspo={addInspo} deleteInspo={deleteInspo}
             liked={liked} addLiked={addLiked} deleteLiked={deleteLiked} setView={setView}
-            styleTaste={styleTaste} onScanTaste={scanLikedTaste} scanning={scanning} />
+            styleTaste={styleTaste} onScanTaste={scanLikedTaste} scanning={scanning}
+            wornLooks={looks.filter(l => l.worn)} />
         )}
         {view === "closet" && (
           <Closet items={items} deleteItem={deleteItem} updateItem={updateItem} setView={setView}
@@ -3181,10 +3187,11 @@ function DislikedList({ disliked, removeDislike, items }) {
 }
 
 // ---------- Saved looks view (kept looks + blocked combinations) ----------
-function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, setLookSeason }) {
+function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, setLookSeason, setLookWorn }) {
   const hasDisliked = disliked && disliked.length > 0;
   const [filter, setFilter] = useState("All");    // by occasion
   const [season, setSeason] = useState("All");    // by season tag
+  const [wornFilter, setWornFilter] = useState("All"); // All | Worn | Not worn
   if (!looks.length) return (
     <div>
       <Empty title="No saved looks yet"
@@ -3202,9 +3209,12 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
   const occCats = ["All", ...occasions];
   const seasonCats = ["All", ...SEASONS.filter(s => tagged.some(l => l.seasonTag === s))];
 
-  const matches = (l) => (filter === "All" || l.occasion === filter) && (season === "All" || l.seasonTag === season);
-  const occCount = (c) => tagged.filter(l => (c === "All" || l.occasion === c) && (season === "All" || l.seasonTag === season)).length;
-  const seasonCount = (s) => tagged.filter(l => (s === "All" || l.seasonTag === s) && (filter === "All" || l.occasion === filter)).length;
+  const wornOk = (l, v = wornFilter) => v === "All" || (v === "Worn" ? !!l.worn : !l.worn);
+  const wornCats = ["All", "Worn", "Not worn"];
+  const matches = (l) => (filter === "All" || l.occasion === filter) && (season === "All" || l.seasonTag === season) && wornOk(l);
+  const occCount = (c) => tagged.filter(l => (c === "All" || l.occasion === c) && (season === "All" || l.seasonTag === season) && wornOk(l)).length;
+  const seasonCount = (s) => tagged.filter(l => (s === "All" || l.seasonTag === s) && (filter === "All" || l.occasion === filter) && wornOk(l)).length;
+  const wornCount = (v) => tagged.filter(l => (filter === "All" || l.occasion === filter) && (season === "All" || l.seasonTag === season) && wornOk(l, v)).length;
   const shown = tagged.filter(matches);
 
   const chip = (label, active, onClick) => (
@@ -3224,6 +3234,10 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
         <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Season</span>
         {seasonCats.map(s => chip(s === "All" ? `All (${seasonCount("All")})` : `${SEASON_EMOJI[s]} ${s} (${seasonCount(s)})`, season === s, () => setSeason(s)))}
       </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "4px 0" }}>
+        <span style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#8a6a76", marginRight: 2 }}>Worn</span>
+        {wornCats.map(v => chip(`${v === "Worn" ? "✓ " : ""}${v} (${wornCount(v)})`, wornFilter === v, () => setWornFilter(v)))}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 18, marginTop: 18 }}>
         {shown.map(l => (
           <div key={l.id} className="card" style={{ padding: 14 }}>
@@ -3233,6 +3247,10 @@ function Looks({ looks, deleteLook, setView, disliked, removeDislike, items, set
                 {l.weather ? `${l.weather.temp}°C · ${weatherLabel(l.weather.code)}` : l.climate.range}
               </div>
             </div>
+            <button className="chip" onClick={() => setLookWorn(l.id, !l.worn)} title={l.worn ? "You've worn this — tap to unflag" : "Mark as worn"}
+              style={{ cursor: "pointer", marginBottom: 10, background: l.worn ? S.gold : "#fff", color: S.ink, borderColor: l.worn ? S.gold : `${S.aubergine}33` }}>
+              {l.worn ? "✓ Worn" : "Mark worn"}
+            </button>
             {/* Season tag — tap a season to set it */}
             <div style={{ marginBottom: l.note ? 8 : 12 }}>
               <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#8a6a76", marginBottom: 5 }}>Season</div>
@@ -3295,7 +3313,7 @@ function PhotoSection({ title, blurb, cta, photos, onAdd, onRemove }) {
 }
 
 // ---------- My Style view (worn outfits + liked/inspiration outfits) ----------
-function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, setView, styleTaste, onScanTaste, scanning }) {
+function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, setView, styleTaste, onScanTaste, scanning, wornLooks }) {
   const learned = styleTaste?.colors ? [...styleTaste.colors] : [];
   const unscanned = [...inspo, ...liked].filter(p => !(p.colors && p.colors.length)).length;
   return (
@@ -3308,6 +3326,28 @@ function MyStyle({ inspo, addInspo, deleteInspo, liked, addLiked, deleteLiked, s
         blurb="Pictures of yourself in outfits you've worn and loved — so the stylist knows what suits you and what you actually reach for. Their colours and vibe also feed your recommendations."
         cta="Add worn outfits"
         photos={inspo} onAdd={addInspo} onRemove={deleteInspo} />
+
+      {/* Saved looks flagged as worn (from Saved Looks) — real worn outfits, feed 'what suits me'. */}
+      {wornLooks && wornLooks.length > 0 && (
+        <div style={{ marginTop: -10, marginBottom: 28 }}>
+          <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 4 }}>Saved looks you've worn ({wornLooks.length})</div>
+          <p style={{ fontFamily: "system-ui,sans-serif", fontSize: 12, color: "#8a6a76", margin: "0 0 12px", maxWidth: 560 }}>
+            Looks you flagged as worn in <button onClick={() => setView("looks")} style={{ background: "none", border: "none", color: S.clay, cursor: "pointer", textDecoration: "underline", font: "inherit", padding: 0 }}>Saved Looks</button>. The stylist favours these pieces and pairings as what suits you.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>
+            {wornLooks.map(l => (
+              <div key={l.id} className="card" style={{ padding: 10 }}>
+                <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, color: "#8a6a76", marginBottom: 6 }}>{l.occasion}{l.season ? ` · ${l.season}` : ""}</div>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, (l.pieces || []).length))},minmax(0,1fr))`, gap: 5 }}>
+                  {(l.pieces || []).slice(0, 6).map(p => (
+                    <div key={p.id} style={{ aspectRatio: "1", background: S.blushSoft, borderRadius: 4, overflow: "hidden" }}><Thumb src={p.img} alt={p.name} /></div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <PhotoSection
         title="Outfits you like"
         blurb="Looks you're drawn to and want to lean toward — screenshots, pins, anyone's outfits. Both the AI stylist and the free “Style me” recommendations lean toward the colours and vibe of these outfits."
