@@ -3439,6 +3439,9 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
   const [warmthSel, setWarmthSel] = useState(() => new Set());
   const cats = CATEGORIES.filter(c => items.some(i => i.category === c));
   const warmths = WARMTH.filter(w => items.some(i => i.warmth === w));
+  // How many pieces sit in each category / warmth (shown on the filter chips).
+  const catCounts = {}, warmthCounts = {};
+  items.forEach(i => { catCounts[i.category] = (catCounts[i.category] || 0) + 1; warmthCounts[i.warmth] = (warmthCounts[i.warmth] || 0) + 1; });
   const toggle = (setter) => (v) => setter(prev => {
     const next = new Set(prev);
     next.has(v) ? next.delete(v) : next.add(v);
@@ -3451,17 +3454,18 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
     (warmthSel.size === 0 || warmthSel.has(i.warmth)));
   const [editId, setEditId] = useState(null);
 
-  // One multi-select filter group (an "All" chip + a toggle chip per value).
-  const filterGroup = (label, values, sel, setSel, onToggle) => (
+  // One multi-select filter group (an "All" chip + a toggle chip per value, each with
+  // a count of how many pieces it holds).
+  const filterGroup = (label, values, sel, setSel, onToggle, countFor) => (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: S.clay, marginBottom: 8 }}>
         {label}{sel.size > 0 ? ` · ${sel.size}` : ""} <span style={{ textTransform: "none", letterSpacing: 0, color: "#a58a94" }}>(pick any)</span>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="chip" style={{ cursor:"pointer", background: sel.size===0?S.aubergine:"#fff", color: sel.size===0?S.blush:S.ink }} onClick={()=>setSel(new Set())}>All</button>
+        <button className="chip" style={{ cursor:"pointer", background: sel.size===0?S.aubergine:"#fff", color: sel.size===0?S.blush:S.ink }} onClick={()=>setSel(new Set())}>All ({items.length})</button>
         {values.map(v => {
           const on = sel.has(v);
-          return <button key={v} className="chip" aria-pressed={on} style={{ cursor:"pointer", background: on?S.aubergine:"#fff", color: on?S.blush:S.ink }} onClick={()=>onToggle(v)}>{on ? "✓ " : ""}{v}</button>;
+          return <button key={v} className="chip" aria-pressed={on} style={{ cursor:"pointer", background: on?S.aubergine:"#fff", color: on?S.blush:S.ink }} onClick={()=>onToggle(v)}>{on ? "✓ " : ""}{v} ({countFor(v)})</button>;
         })}
       </div>
     </div>
@@ -3485,8 +3489,8 @@ function Closet({ items, deleteItem, updateItem, setView, exportData, importData
           <div style={{ fontFamily: "system-ui,sans-serif", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase", color: S.aubergine }}>Filter</div>
           {anyFilter && <button onClick={() => { setCatSel(new Set()); setWarmthSel(new Set()); }} style={{ background:"none", border:"none", color:S.clay, cursor:"pointer", textDecoration:"underline", fontFamily:"system-ui,sans-serif", fontSize:12, padding:0 }}>Clear</button>}
         </div>
-        {filterGroup("Category", cats, catSel, setCatSel, toggleCat)}
-        {warmths.length > 0 && filterGroup("Warmth", warmths, warmthSel, setWarmthSel, toggleWarmth)}
+        {filterGroup("Category", cats, catSel, setCatSel, toggleCat, c => catCounts[c] || 0)}
+        {warmths.length > 0 && filterGroup("Warmth", warmths, warmthSel, setWarmthSel, toggleWarmth, w => warmthCounts[w] || 0)}
       </aside>
 
       {/* Grid */}
